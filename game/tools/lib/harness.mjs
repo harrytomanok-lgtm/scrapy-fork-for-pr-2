@@ -19,6 +19,8 @@ export const GLOBAL_PLAYWRIGHT = '/opt/node-tools/node_modules/playwright/index.
 const GLOBAL_BROWSERS = '/opt/pw-browsers';
 /** Query of every harness page; `launch({ query })` overrides single keys. */
 export const BASE_QUERY = 'test=1&quality=low&res=0.5&noaudio=1&seed=123&lang=en';
+/** The only external hosts the page may reach: the Google Fonts stylesheet and its font files. */
+const FONT_HOSTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 /** Boot timeout (SwiftShader is slow). */
 const READY_TIMEOUT = 180000;
 /** Output folders. */
@@ -98,7 +100,7 @@ export function mergeQuery(query = '') {
 
 /**
  * Launch the game in headless Chromium.
- * @param {{ width?:number, height?:number, query?:string, build?:boolean }} [opts]
+ * @param {{ width?:number, height?:number, query?:string, build?:boolean, touch?:boolean }} [opts]  touch: emulate a touch screen
  * @returns {Promise<Harness>}
  */
 export async function launch(opts = {}) {
@@ -111,14 +113,24 @@ export async function launch(opts = {}) {
     headless: true,
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'],
   });
-  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, hasTouch: opts.touch === true });
   const page = await context.newPage();
   const origin = new URL(srv.url).origin;
   /** @type {string[]} */
   const errs = [];
   // Tests never depend on the network: external requests (the fonts stylesheet) are refused, which also
-  // exercises the fallback font stacks.
+  // exercises the fallback font stacks. Any request other than the page's own files, the Google Fonts
+  // stylesheet and its font files is recorded as an error (7.2 rule 10).
   await page.route('**/*', (route) => (route.request().url().startsWith(origin) ? route.continue() : route.abort()));
+  page.on('request', (rq) => {
+    const u = rq.url();
+    if (u.startsWith(origin) || /^(data:|blob:|about:)/.test(u) || FONT_HOSTS.test(u)) return;
+    errs.push('[network] unexpected request ' + u);
+  });
+  page.on('dialog', (d) => {
+    errs.push('[dialog] ' + d.type() + ' ' + d.message());
+    d.dismiss().catch(() => {});
+  });
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
     const loc = msg.location && msg.location();
@@ -176,7 +188,7 @@ export async function launch(opts = {}) {
 /**
  * @typedef {object} Scenario
  * @property {string} name
- * @property {number} [width] @property {number} [height] @property {string} [query]
+ * @property {number} [width] @property {number} [height] @property {string} [query] @property {boolean} [touch]
  * @property {(h:{ page:any, game:Harness['game'], shot:Harness['shot'], assert:typeof assert, harness:Harness }) => Promise<void>} run
  */
 
@@ -198,7 +210,7 @@ export async function runScenarios(list, opts = {}) {
     let h = null;
     let error = null;
     try {
-      h = await launch({ width: sc.width, height: sc.height, query: sc.query });
+      h = await launch({ width: sc.width, height: sc.height, query: sc.query, touch: sc.touch });
       await sc.run({ page: h.page, game: h.game, shot: h.shot, assert, harness: h });
       const gameErrors = await h.game((g) => g.errors.slice());
       const all = gameErrors.concat(h.errors());

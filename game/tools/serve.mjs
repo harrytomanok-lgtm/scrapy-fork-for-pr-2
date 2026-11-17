@@ -75,6 +75,8 @@ export function startServer(opts = {}) {
       'Content-Type': MIME[extname(file).toLowerCase()] || 'application/octet-stream',
       'Content-Length': st.size,
       'Cache-Control': 'no-store',
+      // The module script must load when the page runs in a sandboxed iframe with an opaque origin.
+      'Access-Control-Allow-Origin': '*',
     });
     if (req.method === 'HEAD') {
       res.end();

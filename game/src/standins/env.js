@@ -378,9 +378,9 @@ function createEnv(ctx) {
         setGlow(v) {
           const k = Math.max(0, Math.min(1, v));
           glow.visible = k > 0.01;
-          glow.scale.setScalar(0.4 + k * 1.2);
+          glow.scale.setScalar(0.4 + k * 0.6);
           const u = glowMat.uniforms && glowMat.uniforms.uOpacity;
-          if (u) u.value = k;
+          if (u) u.value = k * 0.4;
         },
         /** @param {boolean} b */
         setVisible(b) {
