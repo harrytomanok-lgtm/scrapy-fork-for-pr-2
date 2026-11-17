@@ -85,7 +85,12 @@ export function createAi(ctx) {
   let bossEnded = false;
   let addsCalled = false;
   let phaseDirty = false;
+  /** Add groups called by a phase, spawned in the post phase (never inside a damage callback). @type {string[]} */
+  const addQueue = [];
   let fleeT = 0;
+  let bossEngaged = false;
+  /** The intro shot is playing (it ends with the sim-time intro, or when the boss goes). */
+  let introPlaying = false;
   /** @type {number[]} */
   const addIds = [];
 
@@ -749,6 +754,7 @@ export function createAi(ctx) {
     bossEnded = false;
     addsCalled = false;
     fleeT = 0;
+    bossEngaged = false;
     phaseDirty = false;
     pending.start(bd.id);
     pBossStart.bossId = bd.id; pBossStart.entId = ent.id;
@@ -778,6 +784,7 @@ export function createAi(ctx) {
     ];
     try {
       const pr = cam.play('boss.intro.' + bd.id, shots, { skippable: true, freeze: false });
+      introPlaying = true;
       if (pr && pr.catch) pr.catch(() => {});
     } catch (e) {
       ctx.log.warn('ai', 'boss intro shot failed', String(e));
@@ -822,12 +829,12 @@ export function createAi(ctx) {
         c.vfx.shockwave(ent.pos.x, ent.pos.y + 0.2, ent.pos.z, SHOCK);
       }
       const ph = bd.phases[bossPhase];
-      if (ph.summon) callAdds(c, ent, ph.summon);
+      if (ph.summon) addQueue.push(ph.summon);
       if (ph.onEnter && ph.onEnter.length && c.quests && c.quests.runActions) c.quests.runActions(ph.onEnter);
     }
     if (bd.adds && !addsCalled && frac < bd.adds.hpBelow && ent.stats.hp > 0) {
       addsCalled = true;
-      callAdds(c, ent, bd.adds.group);
+      addQueue.push(bd.adds.group);
     }
     if (bd.fleeAtZero && !bossEnded && ent.stats.hp > 0 && frac <= 0.06) {
       // Durn yields and runs: the fight is won; he is gone a moment later.
@@ -869,6 +876,7 @@ export function createAi(ctx) {
       else despawn(e.id);
     }
     addIds.length = 0;
+    addQueue.length = 0;
   }
 
   /** Arena rules: reset on leaving, restart on re-entry. */
@@ -883,7 +891,9 @@ export function createAi(ctx) {
         const dx = p.pos.x - lm.x;
         const dz = p.pos.z - lm.z;
         const r = bossDef.arena.radius + BALANCE.bossRules.resetExtra;
-        if (dx * dx + dz * dz > r * r) ai.resetBoss();
+        // Only a player who has been at the fight can leave it (a boss started from afar waits).
+        if (dx * dx + dz * dz <= r * r) bossEngaged = true;
+        else if (bossEngaged) ai.resetBoss();
       }
       return;
     }
@@ -1039,7 +1049,10 @@ export function createAi(ctx) {
     bossDef = null;
     bossPhase = 0;
     bossEnded = false;
+    introPlaying = false;
+    bossEngaged = false;
     addIds.length = 0;
+    addQueue.length = 0;
     hzN = 0;
     pending.end();
     director.reset();
@@ -1059,6 +1072,19 @@ export function createAi(ctx) {
       if (phaseDirty) {
         phaseDirty = false;
         processBoss(c);
+      }
+      if (introPlaying) {
+        // The camera shot runs on frame time; it ends with the sim-time intro (or when the boss is gone).
+        const be = bossEnt();
+        if (!be || bossEnded || !be.brain || be.brain.introT <= 0) {
+          introPlaying = false;
+          if (c.cam && c.cam.busy && typeof c.cam.skip === 'function') c.cam.skip();
+        }
+      }
+      if (addQueue.length) {
+        const e = bossEnt();
+        for (let i = 0; i < addQueue.length; i++) if (e) callAdds(c, e, addQueue[i]);
+        addQueue.length = 0;
       }
       if (fleeT > 0) {
         fleeT -= dt;
@@ -1128,7 +1154,7 @@ export function createAi(ctx) {
     },
     /** @param {any} e actor:damaged */
     damaged(e) {
-      if (bossId && e.targetId === bossId) phaseDirty = true;
+      if (bossId && e.targetId === bossId) processBoss(ctx);
       const t = ctx.ents.get(e.targetId);
       const b = t ? t.brain : null;
       if (!b || !b.aiBrain || b.passive || b.targetId || b.ignoreT > 1e8) return;
