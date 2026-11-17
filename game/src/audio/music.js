@@ -19,6 +19,8 @@ const MUSIC_VOICES = { low: 10, high: 16 };
 /** Layer gains: music -9 dB exploring, -6 dB in combat (ART_UX 9.1). */
 const EXPLORE_GAIN = 0.355;
 const COMBAT_GAIN = 0.5;
+/** Make-up gain of the instrument parts: sustained notes against transient SFX normalised to the same peak. */
+const MUSIC_TRIM = 2.2;
 /** Crossfade time constant (2 s fades). */
 const XFADE_TC = 0.6;
 /** Combat tail before returning to exploration (s). */
@@ -123,7 +125,7 @@ export function createMusic(ctx, engine) {
     const ins = INSTRUMENTS[p.inst];
     const rate = pick.rate;
     const natural = buf.duration / rate;
-    const vel = p.vel * ins.gain;
+    const vel = p.vel * ins.gain * MUSIC_TRIM;
     const g = v.gain.gain;
     g.cancelScheduledValues(t);
     g.setValueAtTime(vel, t);

@@ -254,7 +254,7 @@ export function createMusicGen(seed) {
     }
 
     // lute arpeggio (warm day, settlements)
-    const luteOn = (pal === 'warm' && !st.night && (inPhrase ? rng.next() < 0.7 : rng.next() < d * 0.35)) || (st.settlement && !st.night);
+    const luteOn = (pal === 'warm' && !st.night && inPhrase && rng.next() < 0.75) || (st.settlement && !st.night && (inPhrase || rng.next() < d * 0.5));
     if (luteOn && parts < st.parts) {
       const pat = rng.next() < 0.5 ? 0 : 1;
       for (let i = 0; i < 8; i++) {

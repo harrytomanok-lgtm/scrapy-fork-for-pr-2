@@ -119,6 +119,36 @@ export const scenarios = [
     },
   },
   {
+    name: 'audio-gameplay',
+    query: QUERY,
+    async run({ page, game, assert, shot }) {
+      await unlock(page, game, assert);
+      // walk (footsteps), jump, take off (wind loop), fly, land: the real event flow with audio on
+      const r = await game((g) => {
+        g.move(0, 1);
+        g.step(90);
+        g.render();
+        g.press('jump');
+        g.step(12);
+        g.press('jump');
+        g.step(6);
+        g.hold('jump', true);
+        g.step(60);
+        g.hold('jump', false);
+        g.move(0, 1);
+        g.step(60);
+        g.render();
+        const flying = g.player().mode;
+        const d = g.ctx.audio.debug();
+        return { flying, voices: g.ctx.audio.voices(), nodes: d.nodes };
+      });
+      assert.equal(r.flying, 'fly');
+      assert.ok(r.voices > 0, 'flight is audible (' + r.voices + ' voices)');
+      assert.ok(r.nodes <= 120);
+      await shot('audio-gameplay');
+    },
+  },
+  {
     name: 'audio-barrage',
     query: QUERY,
     async run({ page, game, assert }) {
