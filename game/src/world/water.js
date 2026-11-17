@@ -69,8 +69,7 @@ void main() {
   // Shoreline foam band (0 to 1.5 m) with animated breakup.
   float edge = 1.5 * (0.45 + 0.75 * n) + 0.18 * sin(t * 1.4 - depth * 2.6);
   float foam = (1.0 - smoothstep(edge - 0.12, edge + 0.04, depth)) * step(-0.6, depth);
-  float lace = step(0.62, wn(vPosW.xz * 0.45 + vec2(t * 0.4, 0.0))) * (1.0 - smoothstep(1.5, 3.2, depth)) * 0.55;
-  c = mix(c, uFoam * (uSunColor * 0.5 + uAmbSky * 0.5), max(foam, lace));
+  c = mix(c, uFoam * (uSunColor * 0.5 + uAmbSky * 0.5), foam);
   c = applyFog(c, vPosW);
   gl_FragColor = vec4(c, 1.0);
   #include <colorspace_fragment>

@@ -191,7 +191,7 @@ export function createField(seed) {
       }
       case R_RUSTDUNE: {
         const base = 32 + 22 * (0.5 + 0.5 * fbm(x / 720, z / 720, 3, 40));
-        const dune = 13 * duneShape(x, z) * (0.55 + 0.45 * vn(x / 400, z / 400, 42));
+        const dune = 19 * duneShape(x, z) * (0.6 + 0.4 * vn(x / 400, z / 400, 42));
         const m = fbm(x / 560 + 11, z / 560 + 5, 3, 43);
         const mask = sstep(0.2, 0.27, m);
         let top = 92 + 26 * sstep(0.3, 0.5, m);
@@ -413,7 +413,10 @@ export function createField(seed) {
       let extra = 0;
       let salt = 0;
       let crack = 0;
-      if (i === R_RUSTDUNE) extra = (1 - duneShape(x, z)) * 0.45 + sstep(80, 95, h) * 0.25;
+      if (i === R_RUSTDUNE) {
+        const ds = 1 - duneShape(x, z);
+        extra = ds * ds * 0.8 + sstep(80, 95, h) * 0.25;
+      }
       else if (i === R_FROSTSPINE) extra = (1 - sstep(380, 500, h)) * 0.55;
       else if (i === R_COAST) {
         salt = sstep(0.05, 0.45, vn(x / 95, z / 95, 23)) * 0.75;
@@ -475,7 +478,7 @@ export function createField(seed) {
     for (let i = 0; i < NR; i++) if (weights[i] > 0) base += weights[i] * FOREST[i];
     const fs = weights[R_FROSTSPINE];
     if (fs > 0) base *= 1 - fs * sstep(430, 540, h);
-    const clump = fbm(x / 240, z / 240, 3, 120) + (base - 0.5) * 0.9;
+    const clump = fbm(x / 240, z / 240, 3, 120) + (base - 0.5) * 0.55;
     let d = base * sstep(-0.18, 0.3, clump);
     d *= 1 - sstep(0.42, 0.58, slope);
     d *= sstep(4, 14, path);

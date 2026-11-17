@@ -79,7 +79,7 @@ void main() {
   float dist = length(uCamPos - vPosW);
   float bump = tn(vPosW.xz * 0.085) * 0.65 + tn(vPosW.xz * 0.031 + 17.0) * 0.35;
   float amt = clamp(vCanopyAmt * 1.5 - (1.0 - bump) * 0.55, 0.0, 1.0);
-  vec3 canopy = vCanopy * (0.7 + 0.55 * bump);
+  vec3 canopy = vCanopy * (0.55 + 0.8 * bump);
   vec3 base = mix(vGround, canopy, amt);
   float grain = tn(vPosW.xz * 0.33) - 0.5;
   base *= 1.0 + grain * 0.14 * (1.0 - smoothstep(40.0, 180.0, dist));

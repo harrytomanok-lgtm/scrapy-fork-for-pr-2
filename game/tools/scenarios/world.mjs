@@ -98,6 +98,47 @@ export const scenarios = [
     },
   },
   {
+    name: 'world-props',
+    async run({ game, assert }) {
+      const r = await game((g) => {
+        const w = g.ctx.world;
+        const p = g.player();
+        const out = [];
+        w.queryColliders(p.x, p.z, 400, out);
+        const rock = out.find((c) => (c.flags & 4) !== 0);
+        if (!rock) return { found: false };
+        const id = rock.id;
+        const key = rock.propKey;
+        const pos = { x: rock.x, y: rock.y, z: rock.z };
+        const n = w.damageProps(pos.x, pos.y, pos.z, 0.5, 50, 0);
+        const after = [];
+        w.queryColliders(pos.x, pos.z, 5, after);
+        const ev = g.events(['world:propDestroyed']).map((e) => e.payload || e);
+        g.step(2);
+        return { found: true, n, gone: !after.some((c) => c.id === id), key, ev: ev.map((e) => ({ key: e.key, kind: e.kind })) };
+      });
+      assert.ok(r.found, 'a destructible prop collider is active near the player');
+      assert.ok(r.n >= 1, 'damageProps destroyed it');
+      assert.ok(r.gone, 'its collider is gone');
+      assert.ok(r.ev.some((e) => e.key === r.key), 'world:propDestroyed recorded with its key');
+    },
+  },
+  {
+    name: 'world-map',
+    async run({ game, assert }) {
+      const r = await game((g) => {
+        const c = g.ctx.world.mapCanvas(256);
+        const d = c.getContext('2d').getImageData(0, 0, 256, 256).data;
+        const seen = new Set();
+        for (let i = 0; i < d.length; i += 4 * 7) seen.add((d[i] >> 3) * 1024 + (d[i + 1] >> 3) * 32 + (d[i + 2] >> 3));
+        return { w: c.width, distinct: seen.size, cached: g.ctx.world.mapCanvas(256) === c };
+      });
+      assert.equal(r.w, 256);
+      assert.ok(r.distinct > 60, `map has ${r.distinct} distinct colours`);
+      assert.ok(r.cached, 'the canvas is cached per size');
+    },
+  },
+  {
     name: 'world-worker-fallback',
     width: 400,
     height: 800,
