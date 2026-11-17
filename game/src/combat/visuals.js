@@ -90,7 +90,11 @@ export function createVisuals(ctx, engine) {
           let az = r.beamAZ;
           if (c.actors && c.actors.socket) {
             c.actors.socket(e, 'handR', HAND);
-            ax = HAND.x; ay = HAND.y; az = HAND.z;
+            // Trust the socket only when it is on the body (a hidden or culled actor can report stale data).
+            const dx = HAND.x - e.pos.x;
+            const dy = HAND.y - e.pos.y;
+            const dz = HAND.z - e.pos.z;
+            if (dx * dx + dy * dy + dz * dz < 9) { ax = HAND.x; ay = HAND.y; az = HAND.z; }
           }
           const flick = 0.85 + 0.15 * Math.sin(c.time.real * 40 + r.id);
           s.beam.set(ax, ay, az, r.beamBX, r.beamBY, r.beamBZ, r.beamRadius * (0.9 + 0.1 * flick), 1.1 * flick);

@@ -360,4 +360,62 @@ export const scenarios = [
       await shot('combat-zenith');
     },
   },
+  {
+    name: 'combat-lock',
+    async run({ game, assert }) {
+      const p = await opening(game, assert);
+      const r = await game((g, pp) => {
+        g.ai(false);
+        const a = g.spawn('tusk_boar', { x: pp.x + Math.sin(pp.yaw) * 10, z: pp.z + Math.cos(pp.yaw) * 10, level: 5, passive: true });
+        const b = g.spawn('tusk_boar', { x: pp.x + Math.sin(pp.yaw + 0.6) * 12, z: pp.z + Math.cos(pp.yaw + 0.6) * 12, level: 5, passive: true });
+        const c = g.spawn('tusk_boar', { x: pp.x + Math.sin(pp.yaw - 0.6) * 12, z: pp.z + Math.cos(pp.yaw - 0.6) * 12, level: 5, passive: true });
+        g.step(2);
+        const soft = g.ctx.combat.softTarget();
+        g.press('lock');
+        g.step(1);
+        const locked = g.player().targetId;
+        g.press('lockNext');
+        g.step(3);
+        const n1 = g.player().targetId;
+        g.press('lockNext');
+        g.step(3);
+        const n2 = g.player().targetId;
+        g.teleport(pp.x + 400, pp.z + 400, {});
+        g.step(2);
+        const broken = g.player().targetId;
+        return { ids: [a, b, c], soft, locked, n1, n2, broken };
+      }, p);
+      assert.equal(r.soft, r.ids[0], 'the soft lock is the enemy straight ahead');
+      assert.equal(r.locked, r.ids[0], 'Lock locks the soft target');
+      assert.ok(r.ids.includes(r.n1) && r.n1 !== r.locked, 'lockNext switches');
+      assert.ok(r.ids.includes(r.n2) && r.n2 !== r.n1 && r.n2 !== r.locked, 'lockNext cycles through all three ' + JSON.stringify(r));
+      assert.equal(r.broken, 0, 'the lock breaks beyond 150 m');
+    },
+  },
+  {
+    name: 'combat-death',
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        g.ai(false);
+        const e = g.spawn('choir_acolyte', { dist: 3, level: 5, passive: true });
+        g.step(2);
+        g.damage(g.player().id, 99999, { kind: 'true', sourceId: e });
+        g.step(30);
+        const died = g.events(['player:died']).length;
+        const order = g.events(['actor:died', 'player:died']).slice(-2).map((x) => x.type);
+        const state = g.ctx.player.combat.state;
+        g.ctx.rpg.respawn({});
+        g.step(10);
+        const p = g.player();
+        return { died, order, state, hp: p.hp, hpMax: p.hpMax, after: p.state };
+      });
+      assert.equal(r.died, 1, 'player:died');
+      assert.deepEqual(r.order, ['actor:died', 'player:died'], 'actor:died then player:died');
+      assert.equal(r.state, 'dead');
+      assert.equal(r.hp, r.hpMax, 'rpg.respawn restores full HP');
+      assert.notEqual(r.after, 'dead', 'alive again');
+      await shot('combat-respawn');
+    },
+  },
 ];
