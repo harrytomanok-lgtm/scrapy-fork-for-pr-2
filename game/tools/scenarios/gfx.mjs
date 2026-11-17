@@ -220,4 +220,32 @@ export const scenarios = [
       assert.equal(s.errors, 0);
     },
   },
+  {
+    name: 'gfx-combat-auto',
+    query: 'res=1',
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        g.setHour(12);
+        g.god(true);
+        const id = g.spawn('tusk_boar', { dist: 40, passive: true });
+        g.setCamera({ pitch: -0.12, dist: 4 });
+        g.step(2);
+        g.press('bolt');
+        g.step(6);
+        g.press('bolt');
+        g.step(3);
+        return { id, st: g.cmd.gfxVfxState() };
+      });
+      await shot('gfx-combat-bolts');
+      assert.ok(r.st.projectiles >= 1, 'projectile visuals tracked');
+      const k = await game((g) => {
+        g.killAll();
+        g.step(8);
+        return g.cmd.gfxVfxState();
+      });
+      await shot('gfx-combat-death');
+      assert.ok(k.orbs >= 1 || k.particles > 0, 'death particles and XP orbs');
+    },
+  },
 ];
