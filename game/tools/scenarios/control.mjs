@@ -286,6 +286,7 @@ export const scenarios = [
       assert.ok(ex.d > 4 && ex.d < 8, `explore distance ${ex.d.toFixed(2)}`);
       assert.ok(Math.abs(ex.fov - 60) < 1.5, `explore fov ${ex.fov.toFixed(1)}`);
       assert.ok(ex.visible && Math.abs(ex.px - 0.5) < 0.08, 'the player is centred horizontally');
+      assert.ok(ex.py > 0.36 && ex.py < 0.56, `landscape framing near 55% of the height (${ex.py.toFixed(2)})`);
       assert.ok(ex.above >= 0.45, 'the camera stays above the terrain');
       await shot('control-cam-explore');
       await game((g) => {
@@ -333,7 +334,7 @@ export const scenarios = [
       const po = await camState();
       assert.equal(po.mode, 'explore');
       assert.ok(Math.abs(po.fov - 72) < 1.5, `portrait fov ${po.fov.toFixed(1)}`);
-      assert.ok(po.py < 0.6 && po.py > 0.25, `portrait: the player sits above the control deck (${po.py.toFixed(2)})`);
+      assert.ok(po.py < 0.47 && po.py > 0.28, `portrait: the player sits above the control deck (${po.py.toFixed(2)})`);
       await shot('control-cam-portrait');
     },
   },
@@ -391,6 +392,82 @@ export const scenarios = [
       assert.equal(r.slam.surface, 'terrain');
       assert.notEqual(r.after, 'hurtle');
       await shot('control-knock');
+    },
+  },
+  {
+    name: 'control-edge',
+    width: 640,
+    height: 360,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        const w = g.ctx.world;
+        const a = 0.7;
+        const r0 = w.edgeStart - 150;
+        g.teleport(Math.sin(a) * r0, Math.cos(a) * r0, { alt: 120, yaw: a });
+        g.setCamera({ yaw: a, pitch: -0.1 });
+        const before = g.events(['world:edge']).length;
+        g.move(0, 1);
+        g.hold('dash', true);
+        let maxR = 0;
+        for (let i = 0; i < 40; i++) {
+          g.step(15);
+          const p = g.ctx.player.pos;
+          maxR = Math.max(maxR, Math.hypot(p.x, p.z));
+        }
+        g.hold('dash', false);
+        g.move(0, 0);
+        g.step(240);
+        const p = g.ctx.player.pos;
+        const evs = g.events(['world:edge']).slice(before).map((e) => (e.payload || e).factor);
+        return { maxR, end: Math.hypot(p.x, p.z), hard: w.edgeHard, evs, mode: g.player().mode };
+      });
+      assert.ok(r.maxR <= r.hard + 8.5, `the Veilstorm holds (max radius ${r.maxR.toFixed(0)}, wall ${r.hard})`);
+      assert.ok(r.maxR > r.hard - 60, 'the flight reached the wall');
+      assert.ok(r.evs.some((f) => f >= 0.9), 'world:edge reports the storm');
+      assert.ok(r.end < r.hard, 'turned back inside the wall');
+      await shot('control-edge');
+    },
+  },
+  {
+    name: 'control-cinematic',
+    width: 640,
+    height: 360,
+    async run({ game, assert }) {
+      const p = await opening(game, assert);
+      const r = await game(async (g, pl) => {
+        const y = pl.y;
+        const shots = [
+          { seconds: 0.5, from: { x: pl.x + 10, y: y + 6, z: pl.z }, to: { x: pl.x + 6, y: y + 4, z: pl.z + 6 }, lookAt: { entId: pl.id }, fov: 50, ease: 'inOut' },
+          { seconds: 0.5, orbit: { entId: pl.id, dist: 4, height: 2, yawFrom: 0, yawTo: 1 }, fov: 45 },
+          { seconds: 0.5, to: { x: pl.x, y: y + 20, z: pl.z - 20 }, lookAt: { x: pl.x, y, z: pl.z }, ease: 'out' },
+        ];
+        const before = g.events(['cine:start', 'cine:end']).length;
+        let done = null;
+        g.ctx.cam.play('test_three', shots, { skippable: true }).then((v) => { done = v; });
+        const busy = g.ctx.cam.busy;
+        const mode = g.ctx.cam.mode;
+        for (let i = 0; i < 12; i++) g.step(10);
+        await Promise.resolve();
+        const first = done;
+        // A second run is skipped with the skip action.
+        let done2 = null;
+        g.ctx.cam.play('test_skip', shots, { skippable: true }).then((v) => { done2 = v; });
+        g.step(5);
+        g.press('skip');
+        g.step(2);
+        await Promise.resolve();
+        await Promise.resolve();
+        const evs = g.events(['cine:start', 'cine:end']).slice(before).map((e) => e.type);
+        return { busy, mode, first, second: done2, after: g.ctx.cam.busy, evs, ctxAfter: g.ctx.input.context };
+      }, p);
+      assert.equal(r.busy, true);
+      assert.equal(r.mode, 'cinematic');
+      assert.deepEqual(r.first, { skipped: false }, 'the three-shot path completes');
+      assert.deepEqual(r.second, { skipped: true }, 'the skip action skips');
+      assert.equal(r.after, false);
+      assert.equal(r.ctxAfter, 'game', 'input context restored');
+      assert.deepEqual(r.evs, ['cine:start', 'cine:end', 'cine:start', 'cine:end']);
     },
   },
 ];

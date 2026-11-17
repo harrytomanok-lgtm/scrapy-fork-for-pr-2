@@ -512,7 +512,9 @@ export function createCam(ctx, shared) {
       const upZ = -sp * Math.cos(yaw);
       const fov = sFov.x;
       const dist = sDist.x;
-      const shift = frameShift(sFrame.x, dist, fov);
+      // Frame the body (not the pivot, which sits above it): the body's centre lands at the framing height.
+      const bodyY = p.y + (target.height > 0 ? target.height : 1.8) * 0.5;
+      const shift = frameShift(sFrame.x, dist, fov) - (sPy.x - bodyY) * cp;
       let cx = sPx.x - dirX * dist + upX * shift;
       let cy = sPy.x - dirY * dist + upY * shift;
       let cz = sPz.x - dirZ * dist + upZ * shift;
