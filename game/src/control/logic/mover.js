@@ -62,6 +62,7 @@ export const MOVER = Object.freeze({
   sprintMult: BALANCE.derived.run.sprintMult,
   sonicMult: BALANCE.derived.boost.sonicMult,
   colliderReach: 2.5,
+  hangMaxFall: 3,
 });
 
 /** Movement modes in the MoveState union. */
@@ -88,14 +89,14 @@ export function createIntent() {
 /**
  * Private per-entity mover record.
  * @typedef {{ boostT:number, dashT:number, dashVx:number, dashVy:number, dashVz:number, lockSlow:number, faceYaw:number,
- *   coyoteT:number, bufT:number, jumped:boolean, spin:number, cols:any[], contact:any, nrm:any }} MoveRec
+ *   coyoteT:number, bufT:number, jumped:boolean, spin:number, hangT:number, hangScale:number, cols:any[], contact:any, nrm:any }} MoveRec
  */
 
 /** @returns {MoveRec} */
 export function createRec() {
   return {
     boostT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashVz: 0, lockSlow: 1, faceYaw: NaN,
-    coyoteT: 0, bufT: 0, jumped: false, spin: 0,
+    coyoteT: 0, bufT: 0, jumped: false, spin: 0, hangT: 0, hangScale: 1,
     cols: [], contact: createContact(),
     nrm: { x: 0, y: 1, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } },
   };
@@ -104,7 +105,7 @@ export function createRec() {
 /** Reset the transient parts of a record (teleport, init). @param {MoveRec} r */
 export function resetRec(r) {
   r.boostT = 0; r.dashT = 0; r.dashVx = 0; r.dashVy = 0; r.dashVz = 0; r.lockSlow = 1; r.faceYaw = NaN;
-  r.coyoteT = 0; r.bufT = 0; r.jumped = false; r.spin = 0;
+  r.coyoteT = 0; r.bufT = 0; r.jumped = false; r.spin = 0; r.hangT = 0; r.hangScale = 1;
 }
 
 /* ------------------------------------------------------------------ helpers -- */
@@ -553,7 +554,7 @@ function impact(ent, r, sink, speed, surface) {
  * Scripted straight move (dashTo): ignores intent, stops at terrain and solids.
  * @param {any} ent @param {MoveRec} r @param {number} dt @param {any} world
  */
-function stepDash(ent, r, dt, world) {
+function stepDash(ent, r, dt, world, sink) {
   const m = ent.move;
   const p = ent.pos;
   const step = dt < r.dashT ? dt : r.dashT;
@@ -571,11 +572,19 @@ function stepDash(ent, r, dt, world) {
   }
   ent.vel.x = r.dashVx; ent.vel.y = r.dashVy; ent.vel.z = r.dashVz;
   m.groundY = gy;
+  if (m.mode === 'ground' && p.y - gy > MOVER.groundSnap) {
+    // A dash that leaves the ground (Pursuit, air string lunges) is airborne from that tick on.
+    m.grounded = false;
+    setMode(ent, sink, 'air');
+  }
   if (r.dashT <= 0) {
     ent.vel.x = 0; ent.vel.y = 0; ent.vel.z = 0;
     if (m.mode !== 'fly' && m.mode !== 'scripted') {
       m.grounded = p.y - gy < MOVER.groundSnap;
-      if (m.grounded) p.y = gy;
+      if (m.grounded) {
+        p.y = gy;
+        if (m.mode === 'air') setMode(ent, sink, 'ground');
+      }
     }
   }
 }
@@ -664,8 +673,9 @@ export function stepActor(ent, r, dt, world, sink) {
     if (Math.abs(angleDelta(ent.yaw, r.faceYaw)) < 1e-3) r.faceYaw = NaN;
   }
 
+  if (r.hangT > 0) stepHang(ent, r, dt);
   if (r.dashT > 0) {
-    stepDash(ent, r, dt, world);
+    stepDash(ent, r, dt, world, sink);
     if (collide(ent, r, world, sink) && r.contact.total > 0.05) {
       r.dashT = 0;
     }
@@ -690,7 +700,40 @@ export function stepActor(ent, r, dt, world, sink) {
   return f;
 }
 
+/**
+ * Air hang (air strings): while it lasts an airborne body falls with the reduced gravity scale and never faster
+ * than MOVER.hangMaxFall, so an attacker stays level with a juggled target. Ends early on landing or a mode change.
+ * @param {any} ent @param {MoveRec} r @param {number} dt
+ */
+function stepHang(ent, r, dt) {
+  const m = ent.move;
+  r.hangT -= dt;
+  const air = m.mode === 'air' && !m.grounded;
+  if (!air && r.dashT > 0 && r.hangT > 0 && m.mode !== 'fly') return; // a dash into the air: the hang starts on arrival
+  if (r.hangT <= 0 || !air) {
+    if (r.hangT <= 0 && air && m.gravityScale === r.hangScale) m.gravityScale = 1;
+    r.hangT = 0;
+    return;
+  }
+  m.gravityScale = r.hangScale;
+  if (ent.vel.y < -MOVER.hangMaxFall) ent.vel.y = -MOVER.hangMaxFall;
+}
+
 /* ------------------------------------------------------------------ commands -- */
+
+/**
+ * Hang in the air for a while (air strings, Pursuit). Bodies in the air, or dashing, hang; on the ground it does nothing.
+ * @param {any} ent @param {MoveRec} r @param {number} seconds @param {number} gravityScale @param {number} vy vertical speed to take now (NaN keeps it)
+ */
+export function hang(ent, r, seconds, gravityScale, vy) {
+  const m = ent.move;
+  if (!(seconds > 0) || m.mode === 'fly' || m.mode === 'swim' || m.mode === 'hurtle' || m.mode === 'scripted') return;
+  if (m.grounded && r.dashT <= 0) return;
+  r.hangT = seconds;
+  r.hangScale = gravityScale >= 0 && gravityScale <= 1 ? gravityScale : 0.3;
+  if (m.mode === 'air' && !m.grounded) m.gravityScale = r.hangScale;
+  if (vy === vy && r.dashT <= 0) ent.vel.y = vy;
+}
 
 /**
  * Knockback; hurtle makes the body ballistic until it stops or hits something.

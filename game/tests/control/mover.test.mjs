@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MOVER, createMoveState, createIntent, createRec, stepActor, knock, setBoostAllowed, dashTo, separatePair,
+  MOVER, createMoveState, createIntent, createRec, stepActor, knock, setBoostAllowed, dashTo, hang, separatePair,
 } from '../../src/control/logic/mover.js';
 import { pushOut, createContact, CFLAG } from '../../src/control/logic/colliders.js';
 
@@ -315,4 +315,37 @@ test('dashTo moves straight and stops at a solid; separation pushes overlapping 
   const a2 = makeEnt({ id: 2, x: 0.3 });
   for (let i = 0; i < 60; i++) separatePair(a1, a2, DT);
   assert.ok(Math.abs(a2.pos.x - a1.pos.x) > 0.79, `separated ${a2.pos.x - a1.pos.x}`);
+});
+
+test('a dash into the air turns the body airborne, and hang keeps it level with a juggled target', () => {
+  const w = mockWorld();
+  const s = makeSink();
+  // Pursuit-like dash from the ground to 6 m: mode 'air' from the tick it leaves the ground.
+  const e = makeEnt();
+  const r = createRec();
+  e.__rec = r;
+  dashTo(e, r, 4, 6, 0, 0.12);
+  hang(e, r, 0.12 + 0.9, 0.3, NaN);
+  run(e, w, s, 8);
+  assert.equal(e.move.mode, 'air');
+  assert.ok(Math.abs(e.pos.y - 6) < 1e-6, `arrived at 6 m (${e.pos.y})`);
+  // 0.9 s of hang: reduced gravity and a capped fall, so the body is still well above 4 m.
+  run(e, w, s, 50);
+  assert.ok(e.pos.y > 3.5, `hanging (${e.pos.y.toFixed(2)})`);
+  assert.ok(e.vel.y >= -MOVER.hangMaxFall - 0.5, 'the fall is capped while hanging');
+  // Without the hang, the same body falls to the ground in that time.
+  const f = makeEnt();
+  const rf = createRec();
+  f.__rec = rf;
+  dashTo(f, rf, 4, 6, 0, 0.12);
+  run(f, w, s, 58);
+  assert.ok(f.pos.y < e.pos.y - 2, `normal gravity falls further (${f.pos.y.toFixed(2)} vs ${e.pos.y.toFixed(2)})`);
+  // The hang ends: gravity returns to 1 and the body lands.
+  run(e, w, s, 300);
+  assert.equal(e.move.mode, 'ground');
+  assert.equal(e.move.gravityScale, 1);
+  // On the ground hang does nothing.
+  hang(e, r, 1, 0.3, 5);
+  assert.equal(e.vel.y, 0);
+  assert.equal(r.hangT, 0);
 });

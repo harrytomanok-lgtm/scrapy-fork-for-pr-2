@@ -178,9 +178,131 @@ function touchScenario(name, w, h) {
   };
 }
 
+/**
+ * Touch flight (the player's phone path): take off, boost and climb 200 m with synthetic pointer events only.
+ * Two taps on Jump take off; the stick pushes forward; a double tap on Dash latches the boost; Jump held climbs
+ * and a camera drag pitches the view up. No injected axes or actions.
+ * @param {string} name @param {number} w @param {number} h
+ */
+function touchFlightScenario(name, w, h) {
+  return {
+    name,
+    width: w,
+    height: h,
+    touch: true,
+    query: 'autoplay=1',
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await game((g) => {
+        g.pause();
+        g.unlockAll();
+        g.setHour(10);
+        g.ai(false);
+        g.setDevice('touch');
+        g.ctx.loop.stepSim(2);
+        g.render();
+      });
+      await game((g) => g.screenshotReady());
+      const r = await game((g) => {
+        /** @param {string} a */
+        const el = (a) => document.querySelector('.ctl-touch [data-action="' + a + '"]');
+        const centre = (e) => { const b = e.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; };
+        const fire = (e, type, id, x, y) => e.dispatchEvent(new PointerEvent(type, {
+          pointerId: id, pointerType: 'touch', isPrimary: id === 31, clientX: x, clientY: y, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1,
+        }));
+        const tap = (a, id) => { const e = el(a); const c = centre(e); fire(e, 'pointerdown', id, c.x, c.y); g.ctx.loop.stepSim(2); fire(e, 'pointerup', id, c.x, c.y); };
+        const out = { log: [] };
+        const p0 = g.player();
+        const y0 = p0.y;
+        // 1. Take off: two taps on Jump.
+        tap('jump', 41);
+        g.ctx.loop.stepSim(8);
+        tap('jump', 42);
+        g.ctx.loop.stepSim(30);
+        out.mode1 = g.player().mode;
+        // 2. The stick forward, held for the whole climb.
+        const zone = el('move');
+        const zr = zone.getBoundingClientRect();
+        const sx = zr.left + Math.min(110, zr.width / 2);
+        const sy = zr.bottom - 120;
+        fire(zone, 'pointerdown', 31, sx, sy);
+        fire(zone, 'pointermove', 31, sx + 2, sy - 30);
+        fire(zone, 'pointermove', 31, sx + 2, sy - 70);
+        g.ctx.loop.stepSim(10);
+        // 3. Double tap on Dash: the boost latch.
+        tap('dash', 43);
+        g.ctx.loop.stepSim(6);
+        tap('dash', 44);
+        g.ctx.loop.stepSim(20);
+        out.latched = el('dash').classList.contains('ctl-latched');
+        out.boost1 = g.ctx.player.move.boost;
+        // 4. Pitch the camera up with a drag down the camera zone.
+        const look = el('look');
+        const lr = look.getBoundingClientRect();
+        const lx = lr.left + lr.width * 0.7;
+        const ly = lr.top + lr.height * 0.35;
+        fire(look, 'pointerdown', 51, lx, ly);
+        for (let i = 1; i <= 8; i++) { fire(look, 'pointermove', 51, lx, ly + i * 12); g.ctx.loop.stepSim(1); }
+        fire(look, 'pointerup', 51, lx, ly + 96);
+        // 5. Hold Jump (climb) and keep flying until 200 m above the start, or 25 s.
+        const j = el('jump');
+        const jc = centre(j);
+        fire(j, 'pointerdown', 45, jc.x, jc.y);
+        let t = 0;
+        let maxBoost = out.boost1;
+        for (; t < 25 * 60; t += 30) {
+          g.ctx.loop.stepSim(30);
+          const pl = g.player();
+          maxBoost = Math.max(maxBoost, g.ctx.player.move.boost);
+          if (t % 120 === 0) out.log.push([Math.round(pl.y - y0), pl.mode, g.ctx.player.move.boost, Math.round(g.ctx.player.move.speed)]);
+          if (pl.y - y0 >= 200) break;
+        }
+        out.secs = t / 60;
+        const p1 = g.player();
+        out.climb = p1.y - y0;
+        out.mode2 = p1.mode;
+        out.maxBoost = maxBoost;
+        out.dist = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+        out.stickOn = document.querySelector('.ctl-touch.ctl-stick-on') !== null;
+        out.device = g.ctx.input.device;
+        g.render();
+        return out;
+      });
+      console.log('    ' + name + ': ' + JSON.stringify(r));
+      assert.equal(r.mode1, 'fly', 'two taps on Jump take off');
+      assert.equal(r.device, 'touch');
+      assert.ok(r.stickOn, 'the stick is held');
+      assert.ok(r.latched, 'the Dash double tap lights the latch');
+      assert.ok(r.maxBoost >= 1, 'the latch boosts');
+      assert.ok(r.climb >= 200, `climbed 200 m with touch only (${r.climb.toFixed(0)} m in ${r.secs.toFixed(1)} s)`);
+      assert.equal(r.mode2, 'fly', 'still flying');
+      await shot(name);
+      // Release the stick and Jump: the latch drops with the stick centred, the player hovers.
+      const end = await game((g) => {
+        const fire = (a, type, id) => {
+          const e = document.querySelector('.ctl-touch [data-action="' + a + '"]');
+          const b = e.getBoundingClientRect();
+          e.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, bubbles: true, cancelable: true }));
+        };
+        fire('jump', 'pointerup', 45);
+        fire('move', 'pointerup', 31);
+        g.ctx.loop.stepSim(40);
+        const out = { boost: g.ctx.player.move.boost, mode: g.player().mode, axis: g.ctx.input.axis('moveY') };
+        g.resume();
+        return out;
+      });
+      assert.equal(end.axis, 0, 'releasing the stick centres it');
+      assert.equal(end.boost, 0, 'the boost stops with the stick released');
+      assert.equal(end.mode, 'fly', 'hovering after the release');
+    },
+  };
+}
+
 export const scenarios = [
   touchScenario('control-touch-landscape', 844, 390),
   touchScenario('control-touch-portrait', 400, 860),
+  touchFlightScenario('control-touch-flight', 844, 390),
+  touchFlightScenario('control-touch-flight-portrait', 400, 860),
   {
     name: 'control-walk-fly',
     width: 640,
