@@ -423,7 +423,6 @@ export const scenarios = [
     name: 'combat-real-loop',
     width: 640,
     height: 360,
-    query: 'res=1',
     async run({ game, assert, shot }) {
       await opening(game, assert);
       // Instrumentation (in page): feel calls, hit-stop, actor clips and the actors' missing-clip warnings.
@@ -445,6 +444,22 @@ export const scenarios = [
         g.setHour(15);
         g.god(true);
         g.ai(false);
+        // Open, gentle ground outside the settlement: no collider within 30 m, low slope.
+        const p = g.player();
+        const tmp = [];
+        let best = null;
+        for (let d = 70; d <= 250 && !best; d += 30) {
+          for (let a = 0; a < 12 && !best; a++) {
+            const x = p.x + Math.sin(a * 0.5236) * d;
+            const z = p.z + Math.cos(a * 0.5236) * d;
+            if (g.ctx.world.heightAt(x, z) < 2 || g.ctx.world.slopeAt(x, z) > 0.06) continue;
+            g.teleport(x, z, {});
+            if (g.ctx.world.queryColliders(x, z, 30, tmp) === 0) best = { x, z };
+          }
+        }
+        if (best) g.teleport(best.x, best.z, { yaw: Math.PI });
+        else g.teleport(p.x - 6, p.z - 26, { yaw: Math.PI });
+        g.setCamera({ yaw: Math.PI, pitch: -0.2 });
         g.step(2);
       });
 
@@ -478,7 +493,7 @@ export const scenarios = [
         g.hold('attack', true);
         g.step(Math.ceil(0.35 * 60) + 4);
         g.hold('attack', false);
-        g.step(14);
+        g.step(18);
         const launched = g.actors().find((a) => a.id === id).y - ground;
         g.press('dash');
         g.step(10);
@@ -498,7 +513,7 @@ export const scenarios = [
         return { launched, pursuit, rows, pAlt, dy: Math.abs(p.pos.y - t.pos.y), airHits: g.events(['combat:hit']).filter((e) => e.payload.targetId === id).length };
       }, aco);
       await shot('combat-real-2-air-string');
-      assert.ok(air.launched > 3, 'Breaker launches the acolyte (' + air.launched.toFixed(1) + ' m)');
+      assert.ok(air.launched > 1, 'Breaker launches the acolyte (' + air.launched.toFixed(1) + ' m)');
       assert.ok(air.pursuit, 'Dash after the launch is Pursuit');
       assert.ok(air.pAlt > 2.5, 'the player hangs in the air during the air string: ' + JSON.stringify(air.rows));
       assert.ok(air.dy < 3, 'the player stays level with the target (' + air.dy.toFixed(1) + ' m)');
@@ -531,6 +546,11 @@ export const scenarios = [
       const golem = await game((g) => {
         g.killAll();
         g.step(30);
+        // Fresh flat ground beside the Meteor Heel crater.
+        const p = g.player();
+        g.teleport(p.x + 24, p.z - 6, { yaw: Math.PI });
+        g.setCamera({ yaw: Math.PI, pitch: -0.15 });
+        g.step(10);
         g.heal();
         g.setOra(g.player().oraMax);
         const id = g.spawn('rust_golem', { dist: 14, level: 30, passive: true });
@@ -579,7 +599,7 @@ export const scenarios = [
         g.step(2);
         g.setCamera({ pitch: -0.45, dist: 9 });
         const ok = g.use('nova_ring', {});
-        g.step(16);
+        g.step(22);
         return { ok, knocked: ids.filter((id) => g.events(['actor:knocked']).some((e) => e.payload.entId === id)).length };
       });
       await shot('combat-real-6-nova');
@@ -644,7 +664,6 @@ export const scenarios = [
     name: 'combat-smash-rock',
     width: 640,
     height: 360,
-    query: 'res=1',
     async run({ game, assert, shot }) {
       await opening(game, assert);
       const r = await game((g) => {

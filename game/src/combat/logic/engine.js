@@ -553,8 +553,12 @@ export function createCombatEngine(ctx) {
     if (c.state === 'windup' && m.kind === 'toTarget' && m.t + seconds > tl.windup) r.windupExtra = Math.min(0.4, m.t + seconds - tl.windup);
     mv.dashTo(ent, x, y, z, Math.max(1 / 60, seconds));
     // Pursuit and air lunges arrive beside a juggled target: hang there so the air string can follow (GDD 6.2).
-    if (isPlayer(ent) && t && t.alive && y === y && airborne(t) && typeof mv.hang === 'function' && (r.def.id === 'pursuit' || airborne(ent))) {
-      mv.hang(ent, seconds + AIR_HANG_SECONDS, STRING.juggle.gravityScale, NaN);
+    if (isPlayer(ent) && typeof mv.hang === 'function') {
+      if (m.kind === 'toTarget' && t && t.alive && y === y && airborne(t) && (r.def.id === 'pursuit' || airborne(ent))) {
+        mv.hang(ent, seconds + AIR_HANG_SECONDS, STRING.juggle.gravityScale, NaN);
+      } else if (m.kind === 'dive') {
+        mv.hang(ent, 0, 1, NaN); // Meteor Heel: the dive ends the air hang
+      }
     }
   }
 

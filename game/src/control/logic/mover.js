@@ -727,7 +727,13 @@ function stepHang(ent, r, dt) {
  */
 export function hang(ent, r, seconds, gravityScale, vy) {
   const m = ent.move;
-  if (!(seconds > 0) || m.mode === 'fly' || m.mode === 'swim' || m.mode === 'hurtle' || m.mode === 'scripted') return;
+  if (!(seconds > 0)) {
+    // hang(ent, 0) ends a hang early.
+    if (r.hangT > 0 && m.gravityScale === r.hangScale) m.gravityScale = 1;
+    r.hangT = 0;
+    return;
+  }
+  if (m.mode === 'fly' || m.mode === 'swim' || m.mode === 'hurtle' || m.mode === 'scripted') return;
   if (m.grounded && r.dashT <= 0) return;
   r.hangT = seconds;
   r.hangScale = gravityScale >= 0 && gravityScale <= 1 ? gravityScale : 0.3;
