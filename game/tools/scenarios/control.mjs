@@ -234,16 +234,18 @@ function touchFlightScenario(name, w, h) {
         g.ctx.loop.stepSim(6);
         tap('dash', 44);
         g.ctx.loop.stepSim(20);
+        g.render();
         out.latched = el('dash').classList.contains('ctl-latched');
         out.boost1 = g.ctx.player.move.boost;
-        // 4. Pitch the camera up with a drag down the camera zone.
+        // 4. Pitch the camera up with a drag up the camera zone (one drag up climbs, ART_UX 6.1).
         const look = el('look');
         const lr = look.getBoundingClientRect();
         const lx = lr.left + lr.width * 0.7;
-        const ly = lr.top + lr.height * 0.35;
+        const ly = lr.top + lr.height * 0.8;
         fire(look, 'pointerdown', 51, lx, ly);
-        for (let i = 1; i <= 8; i++) { fire(look, 'pointermove', 51, lx, ly + i * 12); g.ctx.loop.stepSim(1); }
-        fire(look, 'pointerup', 51, lx, ly + 96);
+        for (let i = 1; i <= 8; i++) { fire(look, 'pointermove', 51, lx, ly - i * 12); g.ctx.loop.stepSim(1); }
+        fire(look, 'pointerup', 51, lx, ly - 96);
+        out.up = g.ctx.player.intent.up;
         // 5. Hold Jump (climb) and keep flying until 200 m above the start, or 25 s.
         const j = el('jump');
         const jc = centre(j);
