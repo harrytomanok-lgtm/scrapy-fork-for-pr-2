@@ -822,7 +822,7 @@ export function createHud(ctx, kit, ui) {
       if (warn.hidden === mo) warn.hidden = !mo;
       if (trackerDirty && !(mode === 'portrait' && !target.hidden)) renderTracker();
       // Quick-item chip for keyboard and gamepad.
-      const wantChip = !touch && !!rpg;
+      const wantChip = !touch && mode !== 'portrait' && !!rpg;
       if (wantChip) {
         const id = rpg.quickItem;
         if (id !== chipItem) {
