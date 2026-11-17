@@ -119,6 +119,48 @@ export const scenarios = [
     },
   },
   {
+    // the phone: portrait at full resolution, standing at the spawn in Sparkstead
+    name: 'perf-portrait',
+    query: 'hour=15&res=1',
+    width: 412,
+    height: 915,
+    async run({ game, assert, shot }) {
+      const s = await game((g) => {
+        g.step(30);
+        g.render();
+        const st = g.stats();
+        const b = g.cmd.drawBreakdown({ top: 12 });
+        return { drawCalls: st.drawCalls, triangles: st.triangles, programs: st.programs, groups: b.groups };
+      });
+      console.log(`  portrait spawn: ${s.drawCalls} calls, ${s.triangles} tris: ${fmt(s)}`);
+      check(assert, s, REST, 'portrait spawn');
+      await shot('perf-portrait-spawn');
+    },
+  },
+  {
+    // look checks: Sparkstead from the air, a region vista, the village at night
+    name: 'perf-shots',
+    query: 'hour=16',
+    width: 640,
+    height: 360,
+    async run({ game, assert, shot }) {
+      const lm = await game((g) => {
+        const l = g.ctx.world.landmark('sparkstead');
+        return { x: l.x, z: l.z };
+      });
+      const air = await game(viewAt, { x: lm.x - 70, z: lm.z + 95, alt: 30, yaw: Math.atan2(70, -95), pitch: -0.22, dist: 10 });
+      check(assert, air, REST, 'sparkstead air');
+      await shot('perf-sparkstead-air');
+      const vista = await game(viewAt, { x: -2300, z: -300, alt: 60, yaw: Math.atan2(2300, 300), pitch: -0.12 });
+      check(assert, vista, REST, 'thornwood vista');
+      await shot('perf-vista');
+      await game((g) => g.setHour(22));
+      const night = await game(viewAt, { x: lm.x + 22, z: lm.z + 34, yaw: Math.atan2(-30, -34), pitch: 0.02, dist: 7 });
+      check(assert, night, REST, 'sparkstead night');
+      await shot('perf-night');
+    },
+  },
+  {
     name: 'perf-probe',
     query: 'hour=15',
     width: 640,
