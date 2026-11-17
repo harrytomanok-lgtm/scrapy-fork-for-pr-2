@@ -13,7 +13,7 @@ import { CLIP_DEFS } from './logic/clips.js';
 /** @param {any} ctx */
 function registerDebug(ctx) {
   /** Stage camera for scenarios: overrides the camera after the camera phase while set. */
-  const stage = { on: false, fx: 0, fy: 0, fz: 0, tx: 0, ty: 0, tz: 0 };
+  const stage = { on: false, fx: 0, fy: 0, fz: 0, tx: 0, ty: 0, tz: 0, follow: 0, angle: 0, height: 1 };
   /** @type {number[]} display entities */
   const shown = [];
   ctx.systems.add({
@@ -23,6 +23,13 @@ function registerDebug(ctx) {
     frame(c) {
       if (!stage.on || !c.three || !c.three.camera) return;
       const cam = c.three.camera;
+      const p = c.player;
+      if (stage.follow > 0 && p) {
+        const a = p.yaw + stage.angle;
+        const h = p.height * 0.55;
+        stage.tx = p.pos.x; stage.ty = p.pos.y + h; stage.tz = p.pos.z;
+        stage.fx = p.pos.x + Math.sin(a) * stage.follow; stage.fy = p.pos.y + h + stage.height; stage.fz = p.pos.z + Math.cos(a) * stage.follow;
+      }
       cam.position.set(stage.fx, stage.fy, stage.fz);
       cam.lookAt(stage.tx, stage.ty, stage.tz);
       cam.updateMatrixWorld();
@@ -40,8 +47,19 @@ function registerDebug(ctx) {
   }
 
   const cmd = {
+    /**
+     * Follow the player with the stage camera.
+     * @param {number} dist 0 stops @param {number} [angle] around the player from its facing @param {number} [height] above the chest
+     */
+    actorsFollow(dist, angle = 1.2, height = 0.6) {
+      stage.follow = dist > 0 ? dist : 0;
+      stage.on = stage.follow > 0;
+      stage.angle = angle;
+      stage.height = height;
+    },
     /** @param {[number,number,number]|null} from @param {[number,number,number]} [to] */
     actorsStage(from, to) {
+      stage.follow = 0;
       if (!from) { stage.on = false; return; }
       stage.on = true;
       stage.fx = from[0]; stage.fy = from[1]; stage.fz = from[2];

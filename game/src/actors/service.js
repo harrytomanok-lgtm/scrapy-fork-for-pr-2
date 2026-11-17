@@ -839,7 +839,7 @@ export function createActors(ctx) {
   /** Rank of a record by camera distance (no allocation; n <= 64). @param {number} i @param {Float32Array} d2 */
   function rankOf(i, d2) {
     let k = 0;
-    for (let j = 0; j < records.length; j++) if (d2[j] < d2[i]) k++;
+    for (let j = 0; j < records.length && j < d2.length; j++) if (d2[j] < d2[i] || (d2[j] === d2[i] && j < i)) k++;
     return k;
   }
   const dist2 = new Float32Array(128);

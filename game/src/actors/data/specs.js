@@ -178,7 +178,7 @@ function hero(v) {
     parts.push(P(bone, 'box', [0.02, len, 0.015], [0.012, -len * 0.5, -0.002], null, 'sashStripe'));
   }
   const seam = (thick) => {
-    const t = thick ? 1.8 : 1;
+    const t = thick ? 2.2 : 1.4;
     const out = [];
     for (const s of [1, -1]) {
       const L = side(s);
@@ -190,15 +190,15 @@ function hero(v) {
   };
   const mantle = [];
   for (const s of [1, -1]) {
-    mantle.push(P('extra1', 'box', [0.075, 0.55 * k, 0.012], [s * 0.07, -0.26 * k, -0.02], [0.28, 0, s * 0.12], 'ora'));
-    mantle.push(P('extra1', 'box', [0.06, 0.48 * k, 0.012], [s * 0.17, -0.22 * k, 0.0], [0.24, 0, s * 0.38], 'ora'));
-    mantle.push(P('head', 'blade', [0.04, 0.2 * k, 0.012], [s * 0.105 * k, 0.17 * k, 0.0], [-1.15, s * 0.1, s * -0.35], 'ora'));
+    mantle.push(P('extra1', 'box', [0.08, 0.62 * k, 0.012], [s * 0.1, -0.27 * k, -0.04], [0.42, 0, s * 0.3], 'ora'));
+    mantle.push(P('extra1', 'box', [0.065, 0.55 * k, 0.012], [s * 0.24, -0.2 * k, -0.02], [0.36, 0, s * 0.62], 'ora'));
+    mantle.push(P('head', 'blade', [0.065, 0.3 * k, 0.014], [s * 0.115 * k, 0.19 * k, -0.03], [-1.05, s * 0.15, s * -0.5], 'ora'));
   }
   const blades = [];
-  for (const a of [0.38, 0.85, 1.32]) {
+  for (const a of [0.7, 1.12, 1.55]) {
     for (const s of [1, -1]) {
       const ang = a * s;
-      blades.push(P('extra1', 'blade', [0.075, 0.46 * k, 0.025], [Math.sin(ang) * 0.26, Math.cos(ang) * 0.26 - 0.06, -0.12], [0.22, 0, -ang], 'ora', { glossy: true }));
+      blades.push(P('extra1', 'blade', [0.08, (0.5 - (a - 0.7) * 0.12) * k, 0.025], [Math.sin(ang) * 0.3, Math.cos(ang) * 0.3 - 0.12, -0.2], [0.25, 0, -ang], 'ora', { glossy: true }));
     }
   }
   return {
@@ -213,7 +213,7 @@ function hero(v) {
     forms: {
       ember: {
         palette: { seam: PALETTE.ember, ora: PALETTE.ember, sash: PALETTE.ember, sashStripe: CHAR.emberCore, eye: PALETTE.ember },
-        emissive: { seam: 2.2, ora: 1.6, sash: 1.1, sashStripe: 1.4, eye: 0.7, glint: 0.6 },
+        emissive: { seam: 2.4, ora: 1.8, sash: 1.5, sashStripe: 1.8, eye: 0.8, glint: 0.6 },
         partsAdd: [...seam(false), P('sash3', 'blade', [0.07, 0.36 * k, 0.012], [0, -0.38 * k, 0], [PI, 0, 0], 'sash')],
       },
       tempest: {

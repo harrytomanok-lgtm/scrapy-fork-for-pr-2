@@ -85,12 +85,12 @@ const FLY_HOVER = {
 const FLY_CRUISE = {
   hips: [1.2, 0, 0], spine: [-0.08, 0, 0], chest: [-0.1, 0, 0], neck: [-0.4, 0, 0], head: [-0.5, 0, 0],
   thighL: [0.0, 0, 0.06], shinL: [0.45, 0, 0], footL: [0.7, 0, 0], thighR: [0.15, 0, -0.06], shinR: [0.7, 0, 0], footR: [0.7, 0, 0],
-  armL: [0.55, 0, 0.42], foreL: [-0.25, 0, 0], armR: [0.55, 0, -0.42], foreR: [-0.25, 0, 0], _off: [0, 0.1, 0],
+  armL: [0.22, 0, 0.5], foreL: [-0.3, 0, 0], armR: [0.22, 0, -0.5], foreR: [-0.3, 0, 0], _off: [0, 0.1, 0],
 };
 const FLY_BOOST = {
   hips: [1.42, 0, 0], spine: [-0.05, 0, 0], chest: [-0.08, 0, 0], neck: [-0.45, 0, 0], head: [-0.75, 0, 0],
   thighL: [0.02, 0, 0.05], shinL: [0.12, 0, 0], footL: [0.85, 0, 0], thighR: [0.1, 0, -0.05], shinR: [0.2, 0, 0], footR: [0.85, 0, 0],
-  armL: [1.25, 0, 0.22], foreL: [-0.05, 0, 0], armR: [1.25, 0, -0.22], foreR: [-0.05, 0, 0], _off: [0, 0.12, 0],
+  armL: [0.12, 0, 0.24], foreL: [-0.05, 0, 0], armR: [0.12, 0, -0.24], foreR: [-0.05, 0, 0], _off: [0, 0.12, 0],
 };
 const SWIM_A = {
   hips: [1.15, 0, 0], neck: [-0.5, 0, 0], head: [-0.6, 0, 0], armL: [-2.8, 0, 0.25], foreL: [-0.2, 0, 0], armR: [0.5, 0, -0.25], foreR: [-0.4, 0, 0],
@@ -155,7 +155,7 @@ const HUMANOID = {
   fly_hover: FLY_HOVER,
   fly_hover_b: mix(FLY_HOVER, { thighL: [-0.3, 0, 0.06], shinL: [0.6, 0, 0], thighR: [-0.16, 0, -0.06], shinR: [0.5, 0, 0], armL: [0.1, 0, 0.5], armR: [0.1, 0, -0.5], _off: [0, 0.03, 0] }),
   fly_cruise: FLY_CRUISE,
-  fly_cruise_b: mix(FLY_CRUISE, { thighL: [0.12, 0, 0.06], shinL: [0.7, 0, 0], thighR: [0.02, 0, -0.06], shinR: [0.45, 0, 0], armL: [0.6, 0, 0.45], armR: [0.5, 0, -0.4] }),
+  fly_cruise_b: mix(FLY_CRUISE, { thighL: [0.12, 0, 0.06], shinL: [0.7, 0, 0], thighR: [0.02, 0, -0.06], shinR: [0.45, 0, 0], armL: [0.28, 0, 0.55], armR: [0.18, 0, -0.45] }),
   fly_boost: FLY_BOOST,
   fly_boost_b: mix(FLY_BOOST, { thighL: [0.08, 0, 0.05], thighR: [0.04, 0, -0.05], head: [-0.72, 0.04, 0] }),
   swim_a: SWIM_A, swim_b: mirror(SWIM_A),

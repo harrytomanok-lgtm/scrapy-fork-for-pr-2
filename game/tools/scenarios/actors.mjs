@@ -78,6 +78,7 @@ export const scenarios = [
         const forms = [null, 'ember', 'tempest', 'zenith'];
         ids.forEach((id, i) => g.cmd.actorsForm(id, forms[i]));
         g.step(20);
+        window.__formIds = ids;
         return ids.map((id) => g.cmd.actorsPalette(id));
       }, '');
       const keep = ['coat', 'coatLining', 'trousers', 'boots', 'wraps', 'bronze', 'skin', 'hair', 'ink'];
@@ -87,7 +88,7 @@ export const scenarios = [
       assert.ok(res[1].seam !== res[0].seam || res[1].sash !== res[0].sash, 'Ember changes seams or sash');
       assert.notEqual(res[1].eye, res[0].eye, 'Ember irises take the Form colour');
       assert.notEqual(res[2].eye, res[0].eye, 'Tempest irises take the Form colour');
-      const tris = await game((g) => g.cmd.actorsInfo().actors.map((a) => a.tris));
+      const tris = await game((g) => window.__formIds.map((id) => g.cmd.actorsInfo().actors.find((a) => a.id === id).tris));
       assert.ok(tris[2] > tris[0] && tris[3] > tris[0], 'Tempest and Zenith add parts (mantle and vanes, blades)');
       assert.ok(Math.max(...tris) <= 1800, `hero Forms stay within 1,800 triangles (max ${Math.max(...tris)})`);
       await shot('actors-forms');
@@ -128,7 +129,7 @@ export const scenarios = [
           g.step(30);
           g.cmd.actorsPlay(i, c, { blend: 0.04, loop: c === 'fly_boost' || c === 'guard' || c === 'gather' || c === 'beam_loop' });
           g.step(Math.round(sec * 60));
-          return g.cmd.actorsInfo().actors[0].clip;
+          return g.cmd.actorsInfo().actors.find((a) => a.id === i).clip;
         }, id, clip, t);
         assert.equal(playing, clip, `${clip} is playing mid-clip`);
         await shot('actors-clip-' + clip);
@@ -151,7 +152,7 @@ export const scenarios = [
         modes.add(r.mode);
         assert.equal(r.nan, 0, 'no NaN in bone matrices (' + r.mode + ')');
       };
-      await game((g) => { g.setCamera({ pitch: 0.15, dist: 6 }); g.move(0, 1); g.step(30); });
+      await game((g) => { g.cmd.actorsFollow(4.2, 1.3, 0.5); g.move(0, 1); g.step(30); });
       await sample();
       await shot('actors-loco-run');
       await game((g) => { g.hold('sprint', true); g.step(40); });
