@@ -25,6 +25,19 @@ const BASE_HEX = [
 const SOLID = 1;
 const PILLAR_H = 520;
 
+/**
+ * Detail draw distance per kind in metres (3D distance from the camera) on the low tier; high multiplies by
+ * CULL_HIGH. Beyond it the prop's meshes and glow are not drawn (its pillar, if any, still is: pillars read from
+ * anywhere). Small props are a few pixels at these distances on a phone, the 40 m Siphon thorn reads much further.
+ */
+const CULL_LOW = Object.freeze({
+  ringstone: 260, shrine: 220, chest: 150, siphon: 650, ringGate: 520, trainingPost: 150, bell: 180, fallenBlade: 200,
+  saltPillar: 220, crate: 140, lightPillar: 0, campfire: 160, tent: 180, signpost: 150,
+});
+const CULL_HIGH = 2.6;
+/** Hysteresis band (fraction of the radius) so a prop at the edge does not flicker. */
+const CULL_HYST = 0.06;
+
 // ---------------------------------------------------------------- geometry per kind (built once)
 /** @type {Record<string, any>} */
 const GEO = {};
@@ -403,6 +416,11 @@ export function createProps(ctx) {
     object.position.set(x, y, z);
     object.rotation.y = yaw;
     object.scale.setScalar(sc);
+    // every mesh but the pillar lives in `detail`, which is hidden beyond the kind's draw distance
+    const detail = new Group();
+    detail.name = 'env.prop.' + k;
+    object.add(detail);
+    const cullBase = (CULL_LOW[k] || 150) * Math.max(1, Math.sqrt(sc));
     const color = typeof o.color === 'number' ? o.color : def.color;
 
     // toon material with this prop's palette
@@ -420,18 +438,18 @@ export function createProps(ctx) {
     let part = null;
     if (G.body) {
       body = new Mesh(G.body, mat0);
-      object.add(body);
+      detail.add(body);
     }
     if (G.alt) {
       alt = new Mesh(G.alt, mat0);
       alt.visible = false;
-      object.add(alt);
+      detail.add(alt);
     }
     if (G.part) {
       part = new Mesh(G.part, mat0);
       if (G.partPos) part.position.set(G.partPos[0], G.partPos[1], G.partPos[2]);
       else part.position.y = G.partY || 0;
-      object.add(part);
+      detail.add(part);
     }
     /** @type {any} */
     let light = null;
@@ -439,7 +457,7 @@ export function createProps(ctx) {
     if (G.light || G.flame) {
       lightMat = render.materials.unlit({ color: color, additive: true });
       light = new Mesh(G.light || G.flame, lightMat);
-      object.add(light);
+      detail.add(light);
     }
     // pillar (lightPillar always; ringstone when active; siphon while standing)
     /** @type {any} */
@@ -465,13 +483,13 @@ export function createProps(ctx) {
       gp[PS.IRON].setHex(PALETTE.corruption);
       ground = new Mesh(deadGround(x, y, z, G.ground / sc), groundMat);
       ground.rotation.y = -yaw;
-      object.add(ground);
+      detail.add(ground);
     }
     // glow billboard (lazily shown)
     const glowMat = render.materials.unlit({ color: def.glow, additive: true });
     const glow = new Mesh(sharedGlow(), glowMat);
+    glow.name = 'env.prop.glow';
     glow.visible = false;
-    glow.frustumCulled = false;
     render.layers.props.add(object);
     render.layers.vfx.add(glow);
     object.updateMatrixWorld(true);
@@ -497,6 +515,7 @@ export function createProps(ctx) {
     let current = typeof o.state === 'string' && states.indexOf(o.state) >= 0 ? o.state : states[0];
     let glowK = 0;
     let visible = true;
+    let near = true;
     let anim = 0; // state transition clock (seconds since the last state change)
     let swing = 0;
     const lightCol = new Color(color);
@@ -518,13 +537,13 @@ export function createProps(ctx) {
       setGlow(v) {
         const n = Number(v);
         glowK = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
-        glow.visible = visible && glowK > 0.01;
+        glow.visible = visible && near && glowK > 0.01;
       },
       /** @param {boolean} b */
       setVisible(b) {
         visible = !!b;
         object.visible = visible;
-        glow.visible = visible && glowK > 0.01;
+        glow.visible = visible && near && glowK > 0.01;
       },
       dispose() {
         if (object.parent) object.parent.remove(object);
@@ -546,6 +565,7 @@ export function createProps(ctx) {
       /** per-frame animation @param {number} dt */
       tick(dt) {
         anim += dt;
+        cull();
         animate(dt);
       },
     };
@@ -631,6 +651,24 @@ export function createProps(ctx) {
           break;
       }
       if (lightMat) lightMat.uniforms.uColor.value.copy(lightCol);
+    }
+
+    /** Distance culling of the detail meshes and the glow (hysteresis), tier-aware. */
+    function cull() {
+      const r = ctx.render;
+      const radius = cullBase * (r && r.tier === 'high' ? CULL_HIGH : 1);
+      if (radius <= 0) return;
+      const p = object.position;
+      const dx = p.x - camPos.x;
+      const dy = p.y - camPos.y;
+      const dz = p.z - camPos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      const lim = radius * (near ? 1 + CULL_HYST : 1 - CULL_HYST);
+      const n = d2 < lim * lim;
+      if (n === near) return;
+      near = n;
+      detail.visible = n;
+      glow.visible = visible && n && glowK > 0.01;
     }
 
     /** @param {number} dt */
