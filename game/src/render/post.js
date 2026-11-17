@@ -282,6 +282,10 @@ export function createPost(internal) {
 
   const api = {
     fxUniforms,
+    /** @returns {any[]} every pass material */
+    materials() {
+      return [bright, down, up, composite, fxaa, overlay];
+    },
     /** True while the high chain resources exist. */
     enabled: false,
     /** @returns {any} the scene target (high) */

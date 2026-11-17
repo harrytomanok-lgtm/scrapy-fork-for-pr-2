@@ -99,4 +99,125 @@ export const scenarios = [
       await shot('gfx-beam-aura-night');
     },
   },
+  {
+    name: 'gfx-telegraphs',
+    query: 'res=1',
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await game((g) => {
+        g.setHour(12);
+        g.ai(false);
+        g.setCamera({ pitch: -0.55, dist: 9 });
+        g.step(2);
+        g.cmd.gfxTelegraphs({ dist: 13, seconds: 1.5 });
+        for (let i = 0; i < 9; i++) g.step(5);
+      });
+      await shot('gfx-telegraphs');
+      const st = await game((g) => g.cmd.gfxVfxState());
+      assert.ok(st.decals >= 6, `rings and ground shapes are live (${st.decals})`);
+      assert.ok(st.beams >= 1, 'the violet tether line is live');
+    },
+  },
+  {
+    name: 'gfx-tiers',
+    query: 'res=1',
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const view = (g) => {
+        g.setHour(17.5);
+        g.ai(false);
+        g.setCamera({ pitch: -0.15, dist: 5 });
+        g.step(4);
+      };
+      await game(view);
+      const low0 = await game((g) => g.stats());
+      assert.equal(low0.tier, 'low');
+      assert.ok(low0.programs <= 24, `programs on low <= 24 (${low0.programs})`);
+      await game((g) => {
+        g.cmd.gfxBeamAura({ dist: 9 });
+        g.step(6);
+      });
+      await shot('gfx-tiers-low');
+      const low1 = await game((g) => g.stats());
+      assert.ok(low1.drawCalls <= 120, `low draw calls <= 120 (${low1.drawCalls})`);
+      await game((g) => {
+        g.setTier('high');
+        g.step(6);
+      });
+      await shot('gfx-tiers-high');
+      const high0 = await game((g) => g.stats());
+      assert.equal(high0.tier, 'high');
+      assert.ok(high0.programs <= 32, `programs on high <= 32 (${high0.programs})`);
+      // a scripted mix of materials, recipes, auras, telegraphs and screen effects: no new program
+      await game((g) => {
+        const c = g.ctx;
+        g.cmd.gfxTestRow({});
+        g.cmd.gfxGallery({ dist: 18 });
+        g.cmd.gfxTelegraphs({ dist: 14 });
+        c.render.flash(0xffffff, 0.3, 0.2);
+        c.render.vignette(0x1b1626, 0.6, 1);
+        c.render.desaturate(0.5, 1);
+        for (let i = 0; i < 40; i++) {
+          c.render.speedLines(0.8);
+          g.step(3);
+        }
+      });
+      const high1 = await game((g) => g.stats());
+      assert.equal(high1.programs, high0.programs, `programs constant on high (${high0.programs} -> ${high1.programs})`);
+      assert.ok(high1.drawCalls <= 350, `high draw calls <= 350 (${high1.drawCalls})`);
+      assert.ok(high1.particles <= 3500);
+      console.log(`    low: programs ${low1.programs}, draws ${low1.drawCalls}; high: programs ${high1.programs}, draws ${high1.drawCalls}`);
+    },
+  },
+  {
+    name: 'gfx-flash-settings',
+    async run({ game, assert }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        const c = g.ctx;
+        let shown = 0;
+        let maxA = 0;
+        for (let i = 0; i < 10; i++) {
+          if (c.render.flash(0xffffff, 0.9, 0.1)) shown++;
+          maxA = Math.max(maxA, c.render.screenFx().flash);
+        }
+        g.step(120);
+        c.save.setSetting('photosensitive', true);
+        let shownP = 0;
+        let maxP = 0;
+        for (let i = 0; i < 10; i++) {
+          if (c.render.flash(0xffffff, 0.9, 0.1)) shownP++;
+          maxP = Math.max(maxP, c.render.screenFx().flash);
+        }
+        c.save.setSetting('photosensitive', false);
+        return { shown, maxA, shownP, maxP };
+      });
+      assert.ok(r.shown <= 3 && r.shown > 0, `normal: at most 3 flashes (${r.shown})`);
+      assert.ok(r.maxA <= 0.4 + 1e-6, `normal: alpha <= 0.4 (${r.maxA})`);
+      assert.ok(r.shownP <= 2 && r.shownP > 0, `photosensitive: at most 2 (${r.shownP})`);
+      assert.ok(r.maxP <= 0.25 + 1e-6, `photosensitive: alpha <= 0.25 (${r.maxP})`);
+    },
+  },
+  {
+    name: 'gfx-resize',
+    async run({ page, game, assert, shot }) {
+      await opening(game, assert);
+      await game((g) => g.step(4));
+      await page.setViewportSize({ width: 400, height: 800 });
+      await page.waitForTimeout(300);
+      await game((g) => {
+        g.step(4);
+        g.cmd.gfxBeamAura({ dist: 8 });
+        g.step(6);
+      });
+      await shot('gfx-resize-portrait');
+      const s = await game((g) => {
+        const cv = g.ctx.three.renderer.domElement;
+        return { w: cv.width, h: cv.height, cam: g.ctx.three.camera.aspect, errors: g.errors.length };
+      });
+      assert.ok(s.h > s.w, `portrait drawing buffer (${s.w}x${s.h})`);
+      assert.ok(Math.abs(s.cam - 0.5) < 0.02, `camera aspect follows (${s.cam})`);
+      assert.equal(s.errors, 0);
+    },
+  },
 ];

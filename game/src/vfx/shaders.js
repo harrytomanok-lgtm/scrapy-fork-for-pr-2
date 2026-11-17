@@ -104,6 +104,7 @@ uniform float uLen;
 uniform float uGrow;
 uniform float uPulse;
 uniform float uSpeed;
+uniform float uCore;
 varying vec2 vUv;
 varying vec3 vPosW;
 varying vec3 vNrmW;
@@ -119,7 +120,7 @@ void main() {
   float pulse = smoothstep(0.86, 0.97, p) * (1.0 - smoothstep(0.97, 1.0, p)) * uPulse;
   vec3 c = mix(uFringe, uColor, body);
   c *= uIntensity * (1.0 + pulse * 1.5);
-  c = mix(c, vec3(max(1.0, uIntensity)), core * 0.9);
+  c = mix(c, vec3(max(1.0, uIntensity)), core * uCore);
   float a = (body * (0.4 + 0.4 * n) + core * 0.6) * uAlpha;
   float ends = smoothstep(0.0, 0.6, along) * (1.0 - smoothstep(uGrow * uLen - 0.6, uGrow * uLen, along));
   a *= ends * (1.0 - fogAmount(vPosW));

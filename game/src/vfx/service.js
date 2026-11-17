@@ -279,6 +279,7 @@ export function createVfx(ctx) {
     fringeOf(b.mat.uniforms.uColor.value, b.mat.uniforms.uFringe.value);
     b.mat.uniforms.uPulse.value = kind === 2 ? 1 : kind === 1 ? 0 : 0.35;
     b.mat.uniforms.uSpeed.value = kind === 1 ? 3 : kind === 2 ? 6 : 16;
+    b.mat.uniforms.uCore.value = kind === 2 ? 0.25 : 0.9;
     b.handle = beamHandle(b);
     return b;
   }

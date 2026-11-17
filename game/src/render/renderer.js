@@ -273,6 +273,23 @@ export function createRender(ctx) {
     }
   }
 
+  /**
+   * Release the programs of the previous tier: a material's `dispose` event only drops the renderer's GPU state for
+   * it (uniforms and textures stay), so every material relinks the variant of the new tier and stale programs go.
+   */
+  function releasePrograms() {
+    /** @type {Set<any>} */
+    const seen = new Set();
+    scene.traverse((o) => {
+      const m = o.material;
+      if (!m) return;
+      if (Array.isArray(m)) for (const x of m) seen.add(x);
+      else seen.add(m);
+    });
+    for (const m of post.materials()) seen.add(m);
+    for (const m of seen) m.dispose();
+  }
+
   // ------------------------------------------------------------------ the service
   const render = {
     tier: /** @type {'low'|'high'} */ ('low'),
@@ -358,6 +375,7 @@ export function createRender(ctx) {
       if (tier === render.tier) return;
       applyTier(tier);
       if (renderer) {
+        releasePrograms();
         resize();
         linkAll(true).catch((err) => ctx.log.warn('render', 'tier compile failed', err));
       }

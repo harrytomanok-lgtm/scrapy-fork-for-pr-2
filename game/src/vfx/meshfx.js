@@ -65,7 +65,7 @@ export function createMeshFx(ctx) {
         const mat = new ShaderMaterial({
           uniforms: Object.assign(globalUniforms(gU), {
             uColor: { value: new Color(PALETTE.ora) }, uFringe: { value: new Color(PALETTE.ora) }, uIntensity: { value: 1.6 },
-            uAlpha: { value: 1 }, uLen: { value: 1 }, uGrow: { value: 1 }, uPulse: { value: 1 }, uSpeed: { value: 14 },
+            uAlpha: { value: 1 }, uLen: { value: 1 }, uGrow: { value: 1 }, uPulse: { value: 1 }, uSpeed: { value: 14 }, uCore: { value: 0.9 },
           }),
           vertexShader: bsh.vert, fragmentShader: bsh.frag, transparent: true, depthWrite: false, blending: AdditiveBlending,
         });
