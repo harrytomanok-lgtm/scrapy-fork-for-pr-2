@@ -5,6 +5,7 @@
 import { createRender } from './renderer.js';
 import { STRINGS } from './strings.js';
 import { registerTestbed } from './testbed.js';
+import { registerBreakdown } from './breakdown.js';
 
 export const pkg = {
   id: 'render',
@@ -19,5 +20,6 @@ export const pkg = {
     ctx.bus.on('cine:end', r.onCineEnd);
     ctx.bus.on('player:spawned', r.onSpawn);
     registerTestbed(ctx);
+    registerBreakdown(ctx, () => ctx.render);
   },
 };
