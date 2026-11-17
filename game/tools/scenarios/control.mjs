@@ -91,4 +91,136 @@ export const scenarios = [
       assert.ok(Math.abs(landed.alt) < 0.05, 'feet on the ground');
     },
   },
+  {
+    name: 'control-camera-modes',
+    width: 640,
+    height: 360,
+    async run({ page, game, assert, shot }) {
+      await opening(game, assert);
+      /** Settle the camera with frame passes, then read its state. */
+      const camState = () => game((g) => {
+        for (let i = 0; i < 40; i++) g.step(1);
+        const c = g.ctx.three.camera;
+        const p = g.ctx.player;
+        const pt = { x: 0, y: 0, visible: false, depth: 0 };
+        g.ctx.render.project(p.pos.x, p.pos.y + p.height * 0.6, p.pos.z, pt);
+        return {
+          mode: g.ctx.cam.mode, fov: c.fov, d: Math.hypot(c.position.x - p.pos.x, c.position.y - p.pos.y, c.position.z - p.pos.z),
+          px: pt.x / innerWidth, py: pt.y / innerHeight, visible: pt.visible,
+          above: c.position.y - g.ctx.world.heightAt(c.position.x, c.position.z),
+        };
+      });
+      await game((g) => { g.move(0, 1); g.step(60); g.move(0, 0); g.step(30); });
+      const ex = await camState();
+      assert.equal(ex.mode, 'explore');
+      assert.ok(ex.d > 4 && ex.d < 8, `explore distance ${ex.d.toFixed(2)}`);
+      assert.ok(Math.abs(ex.fov - 60) < 1.5, `explore fov ${ex.fov.toFixed(1)}`);
+      assert.ok(ex.visible && Math.abs(ex.px - 0.5) < 0.08, 'the player is centred horizontally');
+      assert.ok(ex.above >= 0.45, 'the camera stays above the terrain');
+      await shot('control-cam-explore');
+      await game((g) => {
+        g.press('jump'); g.step(8); g.press('jump'); g.step(4);
+        g.hold('jump', true); g.step(120); g.hold('jump', false);
+        g.move(0, 1); g.step(60);
+      });
+      const fl = await camState();
+      assert.equal(fl.mode, 'flight');
+      assert.ok(fl.d > 6 && fl.d < 11, `flight distance ${fl.d.toFixed(2)}`);
+      assert.ok(fl.fov > 63 && fl.fov < 70, `flight fov ${fl.fov.toFixed(1)}`);
+      await shot('control-cam-flight');
+      await game((g) => { g.hold('dash', true); g.step(30); });
+      const bo = await camState();
+      assert.equal(bo.mode, 'boost');
+      assert.ok(bo.fov > 72, `boost fov ${bo.fov.toFixed(1)}`);
+      assert.ok(bo.visible, 'the player stays on screen while boosting');
+      await shot('control-cam-boost');
+      // Lock on a spawned enemy on the ground.
+      const lock = await game((g) => {
+        g.hold('dash', false);
+        g.move(0, 0);
+        g.ai(false);
+        const p = g.player();
+        g.teleport(p.x, p.z, { yaw: 0 });
+        g.step(5);
+        const id = g.spawn('tusk_boar', { dist: 9, passive: true });
+        g.lock(id);
+        for (let i = 0; i < 50; i++) g.step(1);
+        const e = g.ctx.ents.get(id);
+        const pt = { x: 0, y: 0, visible: false, depth: 0 };
+        g.ctx.render.project(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z, pt);
+        const pp = { x: 0, y: 0, visible: false, depth: 0 };
+        const pl = g.ctx.player;
+        g.ctx.render.project(pl.pos.x, pl.pos.y + pl.height * 0.5, pl.pos.z, pp);
+        return { id, mode: g.ctx.cam.mode, target: pt, player: pp, W: innerWidth };
+      });
+      assert.equal(lock.mode, 'lock', 'locking switches the camera to lock framing');
+      assert.ok(lock.target.visible && lock.player.visible, 'player and target are both on screen');
+      assert.ok(Math.abs(lock.target.x - lock.player.x) > lock.W * 0.08, 'player and target on different thirds');
+      await shot('control-cam-lock');
+      await game((g) => { g.lock(0); g.killAll(); g.step(30); });
+      await page.setViewportSize({ width: 400, height: 800 });
+      await game((g) => g.screenshotReady());
+      const po = await camState();
+      assert.equal(po.mode, 'explore');
+      assert.ok(Math.abs(po.fov - 72) < 1.5, `portrait fov ${po.fov.toFixed(1)}`);
+      assert.ok(po.py < 0.6 && po.py > 0.25, `portrait: the player sits above the control deck (${po.py.toFixed(2)})`);
+      await shot('control-cam-portrait');
+    },
+  },
+  {
+    name: 'control-knock',
+    width: 640,
+    height: 360,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        g.ai(false);
+        const w = g.ctx.world;
+        const p = g.player();
+        // Find a steep hillside near the start: the largest rise over 6 m within 600 m.
+        let best = null;
+        for (let x = p.x - 600; x <= p.x + 600; x += 12) {
+          for (let z = p.z - 600; z <= p.z + 600; z += 12) {
+            const h0 = w.heightAt(x, z);
+            if (h0 < 2) continue;
+            for (let k = 0; k < 8; k++) {
+              const a = (k / 8) * Math.PI * 2;
+              const dx = Math.sin(a);
+              const dz = Math.cos(a);
+              const rise = w.heightAt(x + dx * 6, z + dz * 6) - h0;
+              const flat = Math.abs(w.heightAt(x - dx * 8, z - dz * 8) - h0);
+              if (flat < 1.5 && (!best || rise > best.rise)) best = { x, z, dx, dz, rise };
+            }
+          }
+        }
+        if (!best) return { err: 'no hillside' };
+        // Stand 12 m back from the foot of the slope; the enemy 3 m in front.
+        const px = best.x - best.dx * 12;
+        const pz = best.z - best.dz * 12;
+        g.teleport(px, pz, { yaw: Math.atan2(best.dx, best.dz) });
+        g.setCamera({ yaw: Math.atan2(best.dx, best.dz) + 0.6, pitch: -0.15 });
+        g.step(5);
+        const id = g.spawn('tusk_boar', { x: px + best.dx * 4, z: pz + best.dz * 4, passive: true });
+        g.step(2);
+        const e = g.ctx.ents.get(id);
+        const before = g.events(['actor:slam']).length;
+        const pl = g.ctx.player;
+        g.ctx.move.knock(e, best.dx * 30, 3, best.dz * 30, { hurtle: true, sourceId: pl.id, slamDamage: 20 });
+        const mode = e.move.mode;
+        g.step(45);
+        const evs = g.events(['actor:slam']).slice(before);
+        const slam = evs.map((x) => x.payload || x).find((x) => x.entId === id) || null;
+        g.step(20);
+        return { rise: best.rise, mode, slam, after: e.move.mode };
+      });
+      assert.ok(!r.err, r.err);
+      assert.equal(r.mode, 'hurtle', 'a hurtle knock makes the body ballistic');
+      assert.ok(r.slam, `slammed into the hillside (rise ${r.rise.toFixed(1)} m over 6 m)`);
+      assert.ok(r.slam.speed >= 14, 'slam speed over the threshold');
+      assert.equal(r.slam.damage, 20, 'the slam carries slamDamage');
+      assert.equal(r.slam.surface, 'terrain');
+      assert.notEqual(r.after, 'hurtle');
+      await shot('control-knock');
+    },
+  },
 ];

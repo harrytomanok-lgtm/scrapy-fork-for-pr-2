@@ -5,6 +5,7 @@
  */
 
 import { createMove } from './move.js';
+import { createCam } from './cam.js';
 import { createLatch } from './logic/intent.js';
 
 export const pkg = {
@@ -18,5 +19,18 @@ export const pkg = {
     ctx.systems.add(mv.playerSystem);
     ctx.systems.add(mv.runSystem);
     ctx.bus.on('game:ended', mv.reset);
+
+    const cm = createCam(ctx);
+    const unsub = ctx.input.onPress(cm.onPress);
+    const camDispose = cm.cam.dispose;
+    cm.cam.dispose = () => {
+      camDispose();
+      unsub();
+    };
+    ctx.provide('cam', cm.cam, 'control');
+    ctx.systems.add(cm.lookSystem);
+    ctx.systems.add(cm.rigSystem);
+    ctx.bus.on('combat:lock', cm.onLock);
+    ctx.bus.on('game:ended', cm.onEnded);
   },
 };
