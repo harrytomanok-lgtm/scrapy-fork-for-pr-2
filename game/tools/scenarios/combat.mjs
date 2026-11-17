@@ -718,12 +718,12 @@ export const scenarios = [
         g.hold('attack', true);
         g.step(Math.ceil(0.35 * 60) + 4);
         g.hold('attack', false);
-        const knock = g.events(['actor:knocked']).filter((e) => e.payload.entId === id).slice(-1)[0];
         let slamTick = -1;
         for (let i = 0; i < 40; i++) {
           g.step(1);
           if (slamTick < 0 && g.events(['actor:slam']).length > s0) slamTick = i;
         }
+        const knock = g.events(['actor:knocked']).filter((e) => e.payload.entId === id && e.payload.hurtle)[0];
         const slams = g.events(['actor:slam']).slice(s0).filter((e) => e.payload.entId === id).map((e) => e.payload);
         const hits = g.events(['combat:hit']).slice(h0).filter((e) => e.payload.targetId === id).map((e) => ({ tech: e.payload.techId, amount: Math.round(e.payload.amount), cls: e.payload.class }));
         const props = g.events(['world:propDestroyed']).slice(p0).map((e) => e.payload);
