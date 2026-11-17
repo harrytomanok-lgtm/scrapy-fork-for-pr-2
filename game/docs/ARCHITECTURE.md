@@ -1739,3 +1739,78 @@ The foundation is built and `npm run check` passes (lint, 268 unit tests, build,
 - **Scenarios**: `node tools/scenarios.mjs <packageId>` runs `tools/scenarios/<packageId>.mjs`; `npm run smoke` runs the foundation list and must stay green with your package installed.
 - **Stand-in strings** live in `src/standins/strings.js`; your package registers its own strings with `ctx.i18n.addStrings` and may reuse keys.
 - **Start position**: the player must never start inside the Ringstone prop; keep the prop and its interactable a few metres from the POI point.
+
+## 12. Amendments from the feature packages (binding; newer than section 11)
+
+Each package reported where its code differs from, or adds to, the contract above. Read the entries for the services you call. The code is the truth.
+
+### world
+
+- LOD2 is drawn as 512 m super-chunks (2x2 chunks at 16 m, 32x32 cells) instead of 256 m chunks. This keeps the terrain at about 20-30 draw calls inside the low tier's 120. LOD0 and LOD1 are 256 m chunks as specified.
+- A crater updates the water-depth texels in the CPU copy and then sets texture.needsUpdate, which re-uploads the whole 512x512 R16F texture (0.5 MB) rather than calling texSubImage2D. three 0.170 has no update-range API for textures.
+- Skirts drop max(8 m, the LOD's vertex spacing) instead of exactly 8 m, so coarse LOD2 tiles in mountains do not show cracks.
+- RegionDef.height values were retuned and the actual recipes are coded per region id: gorge, dunes and mesas, lagoons and sea stacks, ridged range, terraced plateau. The data shape is unchanged.
+- Siphons 2-5 got 30 m flatten stamps. The GDD lists no stamp for them; the stamp seats the Siphon structure and its camp on flat ground.
+- Destructible props are rocks and pillars only. Trees get SOLID capsule colliders and are not destructible. Pillars are also PLATFORM.
+- Additions: world.info() and world.bakeMode for diagnostics, and the debug commands __GAME__.cmd.flushBuilds and __GAME__.cmd.worldInfo. The world-worker-fallback scenario forces the failure by replacing window.Worker with page.addInitScript and reloading, because there is no flag for it.
+- Low-memory devices (navigator.deviceMemory <= 2) bake at 8 m on the main thread unless ?grid=4 is set. The task asks for a Worker bake at 4 m, and 4.1's 8 m path is only the main-thread fallback.
+
+### gfx (render, vfx)
+
+- Bloom extracts only values above 1.0 (soft knee) rather than the ART_UX threshold of 0.85. Non-emissive toon output is capped at 1.0, so only HDR emissive and additive Ora effects glow and lit paper never blooms ('Ora energy is the only thing that glows').
+- Every material uses a CustomBlending that matches normal blending instead of NormalBlending. This keeps three from adding an 'opaque' program variant, so toggling `transparent` (ghosting) never links a new program after compile.
+- When the tier changes, every scene material is disposed (only its GPU state is dropped; uniforms and textures stay) so the previous tier's programs are released and high stays within 32. Other than on a tier switch or context restore, no program is created after compile.
+- Rim light is multiplied by (1 - n.y^2), as the stand-in did, so terrain and other upward-facing surfaces are not washed out. ART_UX 1.7's formula does not have this factor.
+- Additions beyond the contract, all harmless: - `render.stats()` also returns `outlines` and `blobs`. - `render.screenFx()`, `vfx.preview()` and `vfx.debugState()` exist for tests. - Decal kinds 'shock' and 'glyph' are used internally. - Internal recipe ids 'debris' and 'trail' exist. - Debug commands `__GAME__.cmd.gfxTestRow`, `gfxGallery`, `gfxBeamAura`, `gfxTelegraphs`, `gfxVfxState` and others are registered.
+- Flashes for feel classes (finisher, burst, ultimate, transform, bossDeath, craterBig, perfectGuard, levelUp) come only from `fx:impact`, so a recipe and its feel row never double-flash. Only explosion_l and siphon_break carry their own flash.
+- The 'line' telegraph shape takes length = the event's radius and a half-width derived from the entity radius; 'cone' uses a default half-angle of 0.52 rad. The event payload has no width or angle field.
+
+### control (move, cam, touch, gamepad)
+
+- Camera-pitch flight: only the stick's forward component is scaled by cos(pitch); strafing (the stick's x) stays at full speed. 4.6 says the whole horizontal part is scaled; scaling strafe made sideways steering weak at steep pitch.
+- The touch boost latch applies only when input.device is 'touch' (ART_UX 6.2 calls it a touch feature). With keyboard or pad, a double press of Dash does not latch.
+- Auto-land: the flyer lands when within 1.2 m of the ground and either descending faster than 2 m/s without boost, or with intent.up < -0.5 (Descend held). The literal 'descending' trigger would land on the slight sink at the -6 degree rest pitch and while boosting along the terrain.
+- Hurtle impacts below 14 m/s return the body to mode 'ground' with a 0.4 s lock. MoveState has no 'down' mode; the down state belongs to combat, which can react to actor:landed and actor:knocked.
+- Camera framing heights are read as measured from the bottom of the screen and applied to the body centre: 55% in landscape, 62% in portrait. Only this reading keeps the player above the portrait control deck, which is the reason ART_UX gives. The stand-in read them from the top.
+- Boost lag: the pivot follows on a spring with a 0.12 s time constant, but the lag is capped at 2 m. A literal 0.12 s lag at sonic speed (about 14 m) made the player a speck on screen.
+- The touch root also carries the class 'sti-root' and pressed buttons also get 'sti-down', because the foundation smoke (foundation-touch) selects those stand-in class names. The package's own classes use the ctl- prefix.
+- ctl-touch layout uses window.innerWidth/innerHeight, not the layer size, because the renderer resizes #app later in the same frame.
+- Extra members and ids: move.spin(ent) (hurtle spin for visuals), and the camera system ids control.camLook (sim phase 'input', order 50) and control.camRig (frame phase 'camera'). The run system id is 'move.run' as in the 3.4 table.
+
+### combat
+
+- Commit attribution: common.md asks for 'Co-Authored-By: Claude Fable 5.2'. I used 'Claude Opus 5.5' and the session line from the harness attribution reminder, which takes precedence over script-computed task text.
+- TechniqueDef extensions beyond 5.1, all optional: - `chainSteps`: Strike String has 6 authored chain steps, 5 in use at rank 1. The rank 2 mod `chainSteps: 6` adds the spin kick. - HitDef `edgePower`: Ringfall falloff. - HitDef `burn {power, every, seconds}`: Nova Ring rank 3 sets 'hits.0.burn.seconds'. - HitDef `juggle`. - ProjectileDef `count: 0` means disabled: the Flare Barrage rank 2 final bolt sets it to 1.
+- Breaker rank 2 'guardBreak' is the path override 'hits.0.unblockable': 1. TechNodeDef rank nodes with a BALANCE mods block also carry it as `passive`: gather_r2 has both techId+rank and passive {gatherDmgTakenMult: 0.75}, so rpg applies it. 5.1 says a node is either a rank or a passive.
+- Registered script functions are called as fn(ctx, ent, def, combatState, runtimeRecord). The fifth argument is an addition.
+- Who-applies-what (4.9): a hit's feel class comes through combat:hit. Ringfall hits use 'heavyHit' per target, and the script calls fx.impact('ultimate') once at impact, so the 1 s ultimate slow motion is not restarted once per target.
+- Perfect Flicker: besides 'a hit lands on the invulnerable player within the window', an enemy hit that fires within the window at the spot where the player started the Flicker also counts. Players dodge out of reach, so the invulnerability rule alone almost never triggers.
+- The perfect-Flicker slow motion is left to core fx through combat:perfect; combat does not call time.slowMo itself, unlike the stand-in. On player death combat calls time.slowMo(0.3, BALANCE.death.slowSeconds).
+- Juggle gravity (0.3) lasts the whole launch flight, about 3.3 s, which is under the 4 s maximum. Later light hits while airborne re-launch the target with a small upward velocity.
+- Bosses are not launched or hurled: every knock on a boss becomes a short push at 25% speed. The stand-in skipped knocks on bosses entirely.
+- Surge decay starts 12 s after leaving combat (GDD 5.6), not 12 s after the last gain as in the stand-in.
+- Combat writes `store.state.player.surge` on each Surge change, so the save carries it. initActor reads it back.
+
+### audio
+
+- ARCHITECTURE 4.2 binding decision 1 says one-shots are pre-rendered with an OfflineAudioContext. They are rendered instead by plain-JS synthesis (logic/dsp.js) into Float32Arrays that are copied into AudioBuffers. This is deterministic, testable in Node, and the time slicing can be controlled. The rendering is still offline, time-sliced, and starts after unlock. Sample rates are 32 kHz, and 22.05 kHz for long, dark sounds, to cut render cost.
+- Live loops: the contract lists four (wind, gather, beam, siphon). Following the task card, a fifth internal loop 'ambience' (an air bed driven by altitude) is added. It is not in IDS.sfx and costs 4 nodes.
+- nodes() counts every AudioNode the engine has created and not released, including reusable voice gain and panner nodes and the bus graph (14 on low). The limit is enforced against that count: new voices steal, and music notes or loops are skipped rather than go over 120.
+- voices() returns one-shot voices plus live loops plus sounding music notes.
+- setVolume also accepts 'ui' (UI bus trim) besides master, music and sfx.
+- The audio service has an extra debug() method, also registered as the 'audio' debug command.
+- ART_UX's 25 ms timer scheduler is replaced by a 150 ms look-ahead run from the audio frame phase. Notes are created only when they enter the horizon.
+- Distance lowpass is not per voice: positional voices beyond 70 m go through one shared far lowpass bus at 2.4 kHz, to stay inside the node budget. distanceCutoff() exists as a function in logic/voices.js but is not used for routing.
+- audio.stinger('levelUp' | 'questComplete' | 'discover') also plays the matching SFX (level_up, quest_complete, discover) on top of the musical phrase. The wiring calls the stinger for those events instead of play().
+- Footsteps and landings of other actors are skipped beyond 30 m and 60 m.
+
+### rpg and quests
+
+- MQ1 step 8 is a `reach` step on the flag `attuned.ringstone_sparkstead`, not `interact ringstone_sparkstead`. defs.validate checks a step's object against ObjectDefs, and Ringstones are POIs, not ObjectDefs. Using any Ringstone sets that flag.
+- The `openScreen` action does nothing in test mode. The stand-in UI has no shop or map screen, and opening one would pause the scenario stepping. It works normally in real play.
+- store.world.camps belongs to ai (it holds the day a camp was cleared). Camp chest state and clear counts are therefore kept in quest flags (`camp.<id>.chest` and `camp.<id>.clears`). Other flags: NPC moves are `npc.<id>.home`, and quest objects use `obj.<id>.used` and `obj.<id>.destroyed`.
+- Extra members beyond the contract: rpg.setStyle(style); quests.dialogueState(), quests.npcEntity(npcId) and quests.talkTo(npcId). The script api also gets questId, resumed and say(dialogueId), and setObjective takes an optional third questId argument so a free-running script can replace a quest's objective. Debug commands added: rpgTalk, rpgAdvance, rpgDialogue, rpgObjects.
+- Boss XP: the x6 multiplier from GDD 4.1 is applied in rpg, but only when the boss's enemy def does not already carry it.
+- NPC homes follow GDD 11 rather than the stand-in data: Bren is at the Tide Beacon and Yael at Copperwatch (the stand-in had them swapped). Ilan, Rina and Gal stand at fixed coordinates.
+- SQ4: rpg gives a rust_core directly on each Rust Golem kill while SQ4 is active, up to 3. No loot table gives quest items.
+- Added steps not in the GDD: MQ4 unlocks Dawn Lance when step 1 completes (so step 2 can use it), and MQ6 unlocks Tempest Form when step 5 completes. MQ7 step 1 moves Sela and Kerrin to the Spire Approach.
