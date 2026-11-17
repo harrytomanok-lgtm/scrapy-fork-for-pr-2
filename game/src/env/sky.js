@@ -153,23 +153,24 @@ void main() {
 
   // night: stars and the Seam
   if (uNight > 0.01 && y > 0.0) {
-    vec3 p = d * 150.0;
+    vec3 p = d * 90.0;
     vec3 cell = floor(p);
     float h = skyHash(cell);
     vec3 off = vec3(skyHash(cell + 3.1), skyHash(cell + 7.7), skyHash(cell + 1.3)) * 0.6 + 0.2;
     float r = length(fract(p) - off);
     float tw = 0.6 + 0.4 * sin(uTime * (1.5 + h * 3.0) + h * 40.0);
-    float star = (1.0 - smoothstep(0.04, 0.11, r)) * step(0.972, h) * tw * smoothstep(0.02, 0.25, y);
+    float star = (1.0 - smoothstep(0.06, 0.16, r)) * step(0.955, h) * tw * smoothstep(0.02, 0.25, y);
     c += uStarCol * star * uNight;
 
     float along = dot(d, uSeamCenter);
-    float across = abs(dot(d, uSeamNormal));
+    float rag0 = texture2D(uNoise, vec2(dot(d.xz, vec2(1.7, -1.1)), 0.37)).r;
+    float across = abs(dot(d, uSeamNormal) + (rag0 - 0.5) * 0.035);
     vec2 suv = vec2(atan(d.z, d.x) * 1.6, d.y * 3.0);
     float rag = texture2D(uNoise, suv * 0.5).b;
     float w = 0.006 + 0.016 * rag * rag;
     float span = smoothstep(0.3, 0.75, along);
-    float core = 1.0 - smoothstep(w * 0.25, w, across);
-    float glow = (1.0 - smoothstep(0.0, w * 6.0, across)) * 0.25;
+    float core = (1.0 - smoothstep(w * 0.2, w, across)) * 0.7;
+    float glow = (1.0 - smoothstep(0.0, w * 9.0, across)) * 0.3;
     c += uSeamCol * (core + glow) * span * uNight;
   }
 
@@ -232,7 +233,7 @@ export function createSky() {
     uRim: { value: new Color(tone[2]) },
     uMoonCol: { value: new Color(PALETTE.day[4].sun) },
     uStarCol: { value: new Color(PALETTE.zenith) },
-    uSeamCol: { value: new Color(PALETTE.hostile).multiplyScalar(0.55) },
+    uSeamCol: { value: new Color(PALETTE.hostile).multiplyScalar(0.4) },
     uSeamCenter: { value: new Vector3(0, 1, 0) },
     uSeamNormal: { value: new Vector3(1, 0, 0) },
     uTime: { value: 0 },

@@ -66,6 +66,18 @@ export const scenarios = [
       assert.equal(seen[1].phase, 'day', 'noon is day');
       assert.equal(seen[4].night, true, 'midnight is night');
       assert.ok(seen[1].sun[0] + seen[1].sun[1] > seen[4].sun[0] + seen[4].sun[1] + 1, 'noon is much brighter than midnight');
+      // the sky toward the setting sun, and the night sky over the Spire (stars, moon, the Seam)
+      await game((g) => g.setHour(17.4));
+      await game(viewAt, { id: 'sparkstead', dx: 0, dz: 20, tx: -100, tz: 42, pitch: 0.28, dist: 7 });
+      await shot('env-sky-sunset');
+      await game((g) => g.setHour(23.5));
+      await game((g) => {
+        const lm = g.ctx.world.landmark('sparkstead');
+        const yaw = Math.atan2(-lm.x, -lm.z);
+        g.setCamera({ yaw, pitch: 0.55, dist: 7 });
+        g.step(2);
+      });
+      await shot('env-sky-night');
       const ev = await game((g) => g.events(['env:hour']).map((e) => e.payload || e));
       assert.ok(ev.length >= 5, `env:hour emitted on each change (${ev.length})`);
       // the clock runs: one game hour per real minute at scale 1
@@ -174,7 +186,17 @@ export const scenarios = [
           return { drawCalls: st.drawCalls, triangles: st.triangles, programs: st.programs, states: window.__envProps.map((h) => h.state) };
         }, { STATES, si });
         budget(assert, s, 'props state ' + si);
-        await shot('env-props-' + si);
+        for (const side of [-1, 1]) {
+          await game((g, sd) => {
+            const lm = g.ctx.world.landmark('sparkstead');
+            const x = lm.x + 70 + sd * 17 - 2;
+            const z = lm.z - 40 + 15;
+            g.teleport(x, z, { yaw: Math.PI });
+            g.setCamera({ yaw: Math.PI, pitch: 0.1, dist: 5 });
+            g.step(2);
+          }, side);
+          await shot('env-props-' + si + (side < 0 ? 'a' : 'b'));
+        }
       }
       const after = await game((g) => {
         const n0 = g.cmd.envInfo().props;

@@ -46,7 +46,7 @@ export function createSettlements(ctx) {
   let tris = 0;
 
   const lantern = new Color(PALETTE.structure.lantern);
-  const windowDay = new Color(PALETTE.ink);
+  const windowDay = new Color(PALETTE.structure.curtain).multiplyScalar(0.55);
   const tmpM = new Matrix4();
   const tmpQ = new Quaternion();
   const tmpE = new Euler();
@@ -558,7 +558,7 @@ export function createSettlements(ctx) {
     const K = createBuilder();
     // pivot at the pole top; the kite flies downwind along local +z
     const ink = PALETTE.ink;
-    K.add(prim.cbox(0.025, 0.025, 7.4), mat(0, 2.3, 3.5, 0, -0.62), SLOT.CLAY, ink);
+    K.add(prim.cbox(0.02, 0.02, 7.88), mat(0, 2.3, 3.2, 0, -0.62), SLOT.CLAY, ink);
     const kx = 0;
     const ky = 4.6;
     const kz = 6.4;
@@ -616,7 +616,8 @@ export function createSettlements(ctx) {
       tmpE.set(pitch, yaw, roll, 'YXZ');
       tmpQ.setFromEuler(tmpE);
       tmpP.set(k.x, k.y, k.z);
-      tmpS.set(1, 1, 1).multiplyScalar(1).set(k.len * 0.35 + 0.65, k.len * 0.35 + 0.65, k.len);
+      const ks = 1.5 * (k.len * 0.35 + 0.65);
+      tmpS.set(ks, ks, 1.5 * k.len);
       tmpM.compose(tmpP, tmpQ, tmpS);
       kiteMesh.setMatrixAt(i, tmpM);
     }

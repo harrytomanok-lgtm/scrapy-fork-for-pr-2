@@ -129,8 +129,8 @@ const KIND_GEO = {
     // unlit additive torus of light; vertex colours shade the tube
     return {
       light: build((B) => {
-        B.add(prim.ring(4.5, 0.32, 6, 40), mat(0, 0, 0), 0, 0x9a9a9a);
-        B.add(prim.ring(4.5, 0.12, 4, 40), mat(0, 0, 0), 0, 0xffffff);
+        B.add(prim.ring(4.5, 0.32, 6, 40), mat(0, 0, 0), 0, 0x707070);
+        B.add(prim.ring(4.5, 0.12, 4, 40), mat(0, 0, 0), 0, 0xc8c8c8);
         B.add(prim.ring(4.95, 0.05, 3, 40), mat(0, 0, 0), 0, 0x606060);
       }),
       glowY: 0, pillarY: 0,
