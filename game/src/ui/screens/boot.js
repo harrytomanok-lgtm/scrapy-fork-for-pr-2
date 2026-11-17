@@ -223,10 +223,13 @@ export function registerBootScreens(ctx, kit, ui, reg) {
 
   // ------------------------------------------------------------------ newgame
   reg('newgame', () => {
-    const { root, body } = shell(kit, { ribbon: 'ui.title.newGame', ribbonIcon: 'play', size: 'narrow' });
+    const { root, body } = shell(kit, { ribbon: 'ui.title.newGame', ribbonIcon: 'play', size: '' });
+    const cols = kit.el('div', 'ui-two', body);
+    const colA = kit.el('div', 'ui-col', cols);
+    const colB = kit.el('div', 'ui-col', cols);
     const pick = { preset: 'hero_a', gender: /** @type {'m'|'f'} */ ('m'), difficulty: 'warrior' };
-    kit.el('h3', 'ui-h3', body, 'ui.newgame.look');
-    const looks = kit.el('div', 'ui-slots', body);
+    kit.el('h3', 'ui-h3', colA, 'ui.newgame.look');
+    const looks = kit.el('div', 'ui-slots ui-eqslots', colA);
     /** @type {Record<string, HTMLButtonElement>} */
     const lookBtns = {};
     for (const id of ['hero_a', 'hero_b']) {
@@ -245,21 +248,21 @@ export function registerBootScreens(ctx, kit, ui, reg) {
       });
       lookBtns[id] = b;
     }
-    const genderBox = kit.el('div', 'ui-col', body);
+    const genderBox = kit.el('div', 'ui-col', colB);
     kit.el('h3', 'ui-h3', genderBox, 'ui.newgame.address');
     const gender = chips(kit, genderBox, [{ id: 'm', key: 'core.gender.m' }, { id: 'f', key: 'core.gender.f' }], (id) => {
       pick.gender = id === 'f' ? 'f' : 'm';
     });
-    kit.el('h3', 'ui-h3', body, 'ui.newgame.difficulty');
-    const diff = chips(kit, body, ['story', 'warrior', 'master'].map((id) => ({ id, key: 'core.difficulty.' + id })), (id) => {
+    kit.el('h3', 'ui-h3', colB, 'ui.newgame.difficulty');
+    const diff = chips(kit, colB, ['story', 'warrior', 'master'].map((id) => ({ id, key: 'core.difficulty.' + id })), (id) => {
       pick.difficulty = id;
       sync();
     });
-    const diffDesc = kit.el('p', 'ui-small', body);
-    const exists = kit.el('div', 'ui-card', body);
+    const diffDesc = kit.el('p', 'ui-small', colB);
+    const exists = kit.el('div', 'ui-card', colA);
     kit.el('p', 'ui-small', exists, 'ui.newgame.replaces');
     kit.button(exists, 'core.save.copyCode', () => ui.open('savecode', { tab: 'copy' }), 'ui-sm ui-ghostbtn', 'copy');
-    const row = kit.el('div', 'ui-row', body);
+    const row = kit.el('div', 'ui-row', colB);
     kit.button(row, 'ui.common.back', () => ui.close('newgame'), 'ui-ghostbtn', 'back');
     const start = kit.button(row, 'ui.newgame.start', () => {
       const go = () => {

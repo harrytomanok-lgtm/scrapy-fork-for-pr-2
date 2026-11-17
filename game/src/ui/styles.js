@@ -164,7 +164,7 @@ export const UI_CSS = `
 .ui-banner.ui-k-level .ui-banner-main{background:linear-gradient(to bottom,#FFF6D8,var(--ui-crit))}
 .ui-banner.ui-k-break .ui-banner-main,.ui-banner.ui-k-danger .ui-banner-main{background:var(--danger);color:var(--paper)}
 .ui-banner.ui-k-perfect .ui-banner-main{background:var(--accent)}
-.ui-banner.ui-k-region .ui-banner-main{background:transparent;color:var(--paper);text-shadow:${OUTLINE};padding-inline:12px}
+.ui-banner.ui-k-region .ui-banner-main{background:transparent;color:var(--paper);text-shadow:${OUTLINE};padding-inline:12px;font-size:var(--fs-title)}
 .ui-banner.ui-k-region .ui-banner-kicker::after{content:"";display:block;margin:4px auto 0;inline-size:60%;block-size:2px;background:var(--paper)}
 
 .ui-pill{position:absolute;inset-block-end:calc(var(--safe-bottom) + 110px);left:var(--ui-cx);transform:translateX(-50%);display:flex;align-items:center;gap:8px;
