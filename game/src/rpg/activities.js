@@ -106,7 +106,6 @@ export function createActivities(ctx, host) {
     }
     if (ctx.vfx) ctx.vfx.shockwave(r.x + RS_DX, ground(r.x + RS_DX, r.z + RS_DZ) + 0.5, r.z + RS_DZ, { radius: 6, color: PALETTE.structure.ringstone, seconds: 0.5 });
     ctx.bus.emit('ringstone:activated', { id: r.id, first });
-    ctx.bus.emit('ui:toast', { key: 'rpg.toast.ringstone', args: null, kind: 'good' });
   }
 
   function buildShrine(poi) {
@@ -159,7 +158,7 @@ export function createActivities(ctx, host) {
     host.quests.setInteractable(r.id, false);
     for (const g of got) {
       if (g.kind === 'shells') ctx.bus.emit('ui:toast', { key: 'rpg.toast.shells', args: { n: g.count }, kind: 'good' });
-      else ctx.bus.emit('ui:toast', { key: 'rpg.toast.item', args: { item: 'item.' + g.itemId + '.name', count: g.count }, kind: 'good' });
+      else ctx.bus.emit('ui:toast', { key: 'rpg.toast.item', args: { item: ctx.i18n.t('item.' + g.itemId + '.name'), count: g.count }, kind: 'good' });
     }
     ctx.bus.emit('chest:opened', { id: r.id });
   }
@@ -361,7 +360,8 @@ export function createActivities(ctx, host) {
     if (!c) return;
     const y = ground(c.start.x, c.start.z);
     const r = add({ id: poi.id, kind: 'race', x: c.start.x, y, z: c.start.z, state: 'idle', prop: null, entId: 0, regionId: poi.regionId, data: { courseId } });
-    r.prop = prop('ringGate', c.start.x, y + 3, c.start.z, { state: 'idle', yaw: Math.atan2(c.gates[0].x - c.start.x, c.gates[0].z - c.start.z) });
+    r.prop = prop('signpost', c.start.x, y, c.start.z, { yaw: Math.atan2(c.gates[0].x - c.start.x, c.gates[0].z - c.start.z) });
+    if (r.prop) r.prop.setGlow(0.6);
     host.quests.addInteractable({ id: poi.id, kind: 'race', x: c.start.x, y: y + 1, z: c.start.z, radius: 6, promptKey: 'rpg.prompt.race',
       onUse: () => api.raceStart(courseId) });
   }
@@ -512,7 +512,7 @@ export function createActivities(ctx, host) {
         const n = c.gates[i + 1] || g;
         const prev = i > 0 ? c.gates[i - 1] : c.start;
         race.gates.push({ x: g.x, y, z: g.z });
-        race.props.push(prop('ringGate', g.x, y, g.z, { state: i === 0 ? 'next' : 'idle', yaw: Math.atan2(n.x - prev.x, n.z - prev.z), scale: 1.6 }));
+        race.props.push(prop('ringGate', g.x, y, g.z, { state: i === 0 ? 'next' : 'idle', yaw: Math.atan2(n.x - prev.x, n.z - prev.z), scale: 1.25 }));
       }
       host.quests.setInteractable('race_' + courseId, false);
       ctx.bus.emit('race:start', { courseId });

@@ -617,7 +617,9 @@ export function createRpg(ctx) {
       S().stats.kills++;
       const pl = PL();
       let xp = F.enemyXp(def, p.level, pl.level, pl.difficulty);
-      if (p.kind === 'boss' || def.tier === 'boss') xp = Math.round(xp * BALANCE.bossRules.xpMult);
+      // Bosses use xpMult 6 (GDD 4.1); applied here unless the boss's enemy def already carries it.
+      const ownMult = def.mult && typeof def.mult.xp === 'number' ? def.mult.xp : 1;
+      if ((p.kind === 'boss' || def.tier === 'boss') && ownMult < BALANCE.bossRules.xpMult) xp = Math.round(xp * BALANCE.bossRules.xpMult / ownMult);
       rpg.grantXp(xp, 'kill');
       const bd = p.kind === 'boss' ? ctx.defs.find('boss', p.defId) : null;
       const bi = bd && BALANCE.bosses[bd.id] ? BALANCE.bosses[bd.id].index : 1;

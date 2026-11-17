@@ -24,11 +24,9 @@ const ROWS = [
   // toasts and banners
   ['rpg.toast.item', '{item} x{count}', '{item} x{count}'],
   ['rpg.toast.shells', 'Shells +{n}', 'צדפים +{n}'],
-  ['rpg.toast.ringstone', 'The Ringstone remembers you', 'אבן הטבעת זוכרת אותך'],
   ['rpg.toast.tether', 'Thread delivered: {n} / {total}', 'חוט נמסר: {n} / {total}'],
   ['rpg.banner.shrine', 'Ora Shrine {n} / {total}: +1 TP', 'מקדש אורה {n} / {total}: עוד נקודת טכניקה'],
   ['rpg.banner.siphon', 'Siphon silenced', 'המגדל הושתק'],
-  ['rpg.banner.questDone', 'Quest complete', 'המשימה הושלמה'],
   ['rpg.banner.awakening', 'Resonance rising', 'התהודה עולה'],
   ['rpg.banner.mq7', 'The way to the Court is open', 'הדרך אל החצר פתוחה'],
   ['rpg.banner.freeRoam', 'The island is yours', 'האי שלך'],

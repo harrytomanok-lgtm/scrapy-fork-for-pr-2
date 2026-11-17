@@ -36,7 +36,6 @@ export const QUESTS = [
     ],
     rewards: rewards('mq1', [
       { op: 'moveNpc', npc: 'sela', settlement: 'sparkstead', spot: 'a' },
-      { op: 'banner', kind: 'quest', key: 'rpg.banner.questDone' },
     ]),
   },
   {

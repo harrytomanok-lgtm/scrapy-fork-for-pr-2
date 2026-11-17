@@ -532,7 +532,7 @@ export function createQuests(ctx, rpgInternals) {
     switch (a.op) {
       case 'giveItem': {
         const uid = ctx.rpg.addItem(a.item, a.count || 1, typeof a.level === 'number' ? { level: a.level } : undefined);
-        if (uid) ctx.bus.emit('ui:toast', { key: 'rpg.toast.item', args: { item: 'item.' + a.item + '.name', count: a.count || 1 }, kind: 'good' });
+        if (uid) ctx.bus.emit('ui:toast', { key: 'rpg.toast.item', args: { item: ctx.i18n.t('item.' + a.item + '.name'), count: a.count || 1 }, kind: 'good' });
         break;
       }
       case 'giveXp': ctx.rpg.grantXp(a.amount, 'quest'); break;

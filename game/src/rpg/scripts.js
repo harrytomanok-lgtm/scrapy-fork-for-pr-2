@@ -206,7 +206,6 @@ export function registerScripts(ctx) {
   // MQ2 story beats (free scripts).
   Q.registerScript('mq2_raid', (c, api) => {
     api.say('mq2_raid');
-    hint(c, 'guard', null);
     api.done();
   });
   Q.registerScript('mq2_durn', (c, api) => {
