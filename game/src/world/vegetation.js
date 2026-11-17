@@ -18,6 +18,8 @@ const MAX_TREES = 4000;
 const MAX_ROCKS = 2000;
 const MAX_RADIUS = 960;
 const MAX_PROP_COLLIDERS = 3000;
+/** Trees whose trunk is closer to the camera than this many metres (times the instance scale) are hidden. */
+const TREE_NEAR_HIDE = 4.2;
 
 // ------------------------------------------------------------- geometry builder
 /** Flat-shaded triangle soup with per-vertex colours. */
@@ -243,6 +245,8 @@ export function createVegetation(ctx, grid, colliders, seed) {
     m.instanceColor = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
     m.count = 0;
     m.frustumCulled = false;
+    // a tree the camera is inside (crown at eye height, trunk a few metres away) is not drawn: no screen-filling canopy
+    if (IS_TREE[k] === 1 && m.material.uniforms.uNearHide) m.material.uniforms.uNearHide.value = TREE_NEAR_HIDE;
     ctx.render.layers.props.add(m);
     meshes.push(m);
   }

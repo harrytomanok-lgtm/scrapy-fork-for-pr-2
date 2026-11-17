@@ -117,6 +117,8 @@ uniform float uUsePalette;
 uniform vec3 uPalette[16];
 uniform float uEmissive[16];
 uniform float uWindOn;
+uniform float uNearHide;
+uniform vec3 uCamPos;
 varying vec3 vBase;
 varying float vEmis;
 varying vec3 vNormalW;
@@ -163,6 +165,17 @@ void main() {
   vNormalW = normalize(mat3(modelMatrix) * wn);
   vPosW = wp.xyz;
   gl_Position = projectionMatrix * viewMatrix * wp;
+  #ifdef USE_INSTANCING
+  // near hide (vegetation): an instance whose trunk is within uNearHide x its scale of the camera, horizontally,
+  // and whose crown reaches the camera height collapses to a point outside the view (no canopy filling the screen)
+  if (uNearHide > 0.0) {
+    vec4 io = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    float sc = length(instanceMatrix[0].xyz);
+    float r = uNearHide * sc;
+    vec2 dh = io.xz - uCamPos.xz;
+    if (dot(dh, dh) < r * r && uCamPos.y < io.y + r * 4.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+  }
+  #endif
 }
 `;
 

@@ -72,6 +72,7 @@ export function createMaterials(globals, internal) {
         uEmissiveIntensity: { value: hasEm ? (typeof o.emissiveIntensity === 'number' ? o.emissiveIntensity : 1) : 0 },
         uGlossy: { value: o.glossy ? 1 : 0 },
         uWindOn: { value: o.wind ? 1 : 0 },
+        uNearHide: { value: 0 },
         uRimColor: { value: new Color(PALETTE.ora) },
         uRimStrength: { value: 0 },
         uDissolve: { value: 0 },
