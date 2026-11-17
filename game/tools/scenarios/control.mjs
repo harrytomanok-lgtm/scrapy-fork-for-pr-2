@@ -10,7 +10,177 @@ async function opening(game, assert) {
   return p;
 }
 
+/** In the page: rectangles of every visible touch control. */
+function touchRects() {
+  const out = [];
+  for (const el of document.querySelectorAll('.ctl-touch [data-action]')) {
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    const r = el.getBoundingClientRect();
+    out.push({ action: el.getAttribute('data-action'), x: r.left, y: r.top, w: r.width, h: r.height, btn: el.classList.contains('ctl-btn') });
+  }
+  return { list: out, W: innerWidth, H: innerHeight, shown: !!document.querySelector('.ctl-touch.ctl-on') };
+}
+
+/**
+ * Touch scenario body for one orientation: layout checks, the stick walks the player, Attack starts a technique,
+ * the flight sub-layout shows Descend, a short tap in the camera zone locks on.
+ * @param {string} name @param {number} w @param {number} h
+ */
+function touchScenario(name, w, h) {
+  return {
+    name,
+    width: w,
+    height: h,
+    touch: true,
+    query: 'autoplay=1',
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await game((g) => {
+        g.pause();
+        g.unlockAll();
+        g.setDevice('touch');
+        g.ctx.loop.stepSim(2);
+        g.render();
+      });
+      await game((g) => g.screenshotReady());
+      await game((g) => { g.ctx.loop.stepSim(12); g.render(); });
+      const ui = await game(touchRects);
+      assert.equal(ui.shown, true, 'touch controls are visible on the touch device');
+      const btns = ui.list.filter((r) => r.btn);
+      const actions = btns.map((b) => b.action);
+      for (const a of ['attack', 'bolt', 'dash', 'guard', 'jump']) assert.ok(actions.includes(a), `${a} is shown`);
+      assert.ok(!actions.includes('descend'), 'Descend is hidden on the ground');
+      for (const z of ['move', 'look']) assert.ok(ui.list.some((r) => r.action === z), `zone ${z}`);
+      for (const b of btns) {
+        assert.ok(b.w >= 48 && b.h >= 48, `${b.action} is at least 48 px (${b.w})`);
+        assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.w <= ui.W && b.y + b.h <= ui.H, `${b.action} inside the viewport`);
+      }
+      for (let i = 0; i < btns.length; i++) {
+        for (let j = i + 1; j < btns.length; j++) {
+          const a = btns[i];
+          const b = btns[j];
+          const gap = Math.hypot(a.x + a.w / 2 - b.x - b.w / 2, a.y + a.h / 2 - b.y - b.h / 2) - a.w / 2 - b.w / 2;
+          assert.ok(gap >= 7.5, `${a.action} and ${b.action} keep 8 px apart (${gap.toFixed(1)})`);
+        }
+      }
+      // The floating stick walks the player forward.
+      const moved = await game((g) => {
+        const zone = document.querySelector('.ctl-touch [data-action="move"]');
+        const r = zone.getBoundingClientRect();
+        const x = r.left + Math.min(110, r.width / 2);
+        const y = r.bottom - 120;
+        const ev = (type, px, py) => zone.dispatchEvent(new PointerEvent(type, {
+          pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: px, clientY: py, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1,
+        }));
+        const p0 = g.player();
+        ev('pointerdown', x, y);
+        ev('pointermove', x + 4, y - 30);
+        ev('pointermove', x + 4, y - 70);
+        const knobOn = document.querySelector('.ctl-touch.ctl-stick-on') !== null;
+        g.ctx.loop.stepSim(1);
+        const axis = g.ctx.input.axis('moveY');
+        g.ctx.loop.stepSim(79);
+        const p1 = g.player();
+        g.render();
+        return { d: Math.hypot(p1.x - p0.x, p1.z - p0.z), axis, knobOn, device: g.ctx.input.device, x, y };
+      });
+      assert.ok(moved.knobOn, 'the floating stick appears under the thumb');
+      assert.ok(moved.axis > 0.8, `the stick pushes forward (moveY ${moved.axis.toFixed(2)})`);
+      assert.ok(moved.d > 4, `the touch stick walks the player (${moved.d.toFixed(2)} m)`);
+      assert.equal(moved.device, 'touch');
+      await shot(name + '-stick');
+      await game((g, pt) => {
+        const zone = document.querySelector('.ctl-touch [data-action="move"]');
+        zone.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, pointerType: 'touch', clientX: pt.x, clientY: pt.y - 70, bubbles: true }));
+        g.ctx.loop.stepSim(20);
+      }, { x: moved.x, y: moved.y });
+      // Tap Attack next to an enemy: a technique starts.
+      const id = await game((g) => g.spawn('tusk_boar', { dist: 3, passive: true }));
+      const tapped = await game((g, eid) => {
+        const btn = document.querySelector('.ctl-touch [data-action="attack"]');
+        const b = btn.getBoundingClientRect();
+        const ev = (type) => btn.dispatchEvent(new PointerEvent(type, {
+          pointerId: 9, pointerType: 'touch', isPrimary: false, clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, bubbles: true, cancelable: true,
+        }));
+        g.lock(eid);
+        const before = g.events(['combat:techStart']).length;
+        ev('pointerdown');
+        const down = btn.classList.contains('ctl-down');
+        g.ctx.loop.stepSim(3);
+        ev('pointerup');
+        g.ctx.loop.stepSim(30);
+        g.render();
+        return { started: g.events(['combat:techStart']).length - before, down };
+      }, id);
+      assert.equal(tapped.down, true, 'Attack shows its pressed state');
+      assert.ok(tapped.started >= 1, 'tapping Attack starts a technique');
+      // A short tap on the enemy in the camera zone locks on through combat.pickAtScreen.
+      const locked = await game((g, eid) => {
+        g.lock(0);
+        g.ctx.loop.stepSim(2);
+        g.render();
+        const e = g.ctx.ents.get(eid);
+        const pt = { x: 0, y: 0, visible: false, depth: 0 };
+        g.ctx.render.project(e.pos.x, e.pos.y + e.height * 0.5, e.pos.z, pt);
+        const app = document.getElementById('app').getBoundingClientRect();
+        const cx = app.left + pt.x;
+        const cy = app.top + pt.y;
+        const el = document.elementFromPoint(cx, cy);
+        const target = el && el.getAttribute('data-action') === 'look' ? el : document.querySelector('.ctl-touch [data-action="look"]');
+        const ev = (type) => target.dispatchEvent(new PointerEvent(type, {
+          pointerId: 11, pointerType: 'touch', clientX: cx, clientY: cy, bubbles: true, cancelable: true,
+        }));
+        ev('pointerdown');
+        ev('pointerup');
+        g.ctx.loop.stepSim(2);
+        return { target: g.ctx.combat.target(), eid, hitLook: !!el && el.getAttribute('data-action') === 'look', vis: pt.visible };
+      }, id);
+      assert.ok(locked.vis, 'the enemy is on screen');
+      assert.equal(locked.target, locked.eid, 'a tap on the enemy locks on');
+      // Flight sub-layout: Descend appears while flying, and the double-tap latch lights Dash.
+      const flight = await game((g) => {
+        g.lock(0);
+        g.killAll();
+        const dash = document.querySelector('.ctl-touch [data-action="dash"]');
+        const jump = document.querySelector('.ctl-touch [data-action="jump"]');
+        const tap = (el, idn) => {
+          const b = el.getBoundingClientRect();
+          const o = { pointerId: idn, pointerType: 'touch', clientX: b.left + b.width / 2, clientY: b.top + b.height / 2, bubbles: true, cancelable: true };
+          el.dispatchEvent(new PointerEvent('pointerdown', o));
+          g.ctx.loop.stepSim(2);
+          el.dispatchEvent(new PointerEvent('pointerup', o));
+        };
+        tap(jump, 21);
+        g.ctx.loop.stepSim(6);
+        tap(jump, 22);
+        g.ctx.loop.stepSim(40);
+        g.render();
+        g.ctx.input.inject.move(0, 1);
+        tap(dash, 23);
+        g.ctx.loop.stepSim(6);
+        tap(dash, 24);
+        g.ctx.loop.stepSim(30);
+        g.render();
+        const descend = document.querySelector('.ctl-touch [data-action="descend"]');
+        return {
+          mode: g.player().mode, boost: g.ctx.player.move.boost, latched: dash.classList.contains('ctl-latched'),
+          descend: getComputedStyle(descend).display !== 'none',
+        };
+      });
+      assert.equal(flight.mode, 'fly', 'two taps on Jump take off');
+      assert.ok(flight.descend, 'Descend appears in flight');
+      assert.ok(flight.latched, 'the double tap on Dash lights the latch ring');
+      assert.ok(flight.boost >= 1, 'the latch boosts');
+      await shot(name + '-flight');
+      await game((g) => { g.ctx.input.inject.move(0, 0); g.resume(); });
+    },
+  };
+}
+
 export const scenarios = [
+  touchScenario('control-touch-landscape', 844, 390),
+  touchScenario('control-touch-portrait', 400, 860),
   {
     name: 'control-walk-fly',
     width: 640,

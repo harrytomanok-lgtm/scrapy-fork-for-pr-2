@@ -25,8 +25,9 @@ const D2R = Math.PI / 180;
 /**
  * Create the camera service and its systems.
  * @param {any} ctx
+ * @param {any} shared package-private state ({ noLock })
  */
-export function createCam(ctx) {
+export function createCam(ctx, shared) {
   const st = {
     targetId: 0, lockId: 0, yaw: 0, pitch: -12 * D2R, mode: 'explore', distOverride: 0, lastLookTick: -100000,
     snap: true, lastReal: -1, aspect: 16 / 9, lastX: 0, lastY: 0, lastZ: 0,
@@ -386,7 +387,7 @@ export function createCam(ctx) {
             st.threatT = 0;
           }
         }
-        const delay = touch ? CAM.recentreDelayTouch : CAM.recentreDelay;
+        const delay = touch || (shared && shared.noLock) ? CAM.recentreDelayTouch : CAM.recentreDelay;
         if (!framed && vh > 1.5 && idle > delay && target.move && target.move.grounded !== undefined) {
           // Recentre behind forward running; pure strafing and backpedalling never spin the camera.
           const fwd = isPlayer ? (myA > 0.3 ? clamp(1 - mxA * 1.5, 0, 1) : 0) : 1;
