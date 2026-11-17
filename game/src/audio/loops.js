@@ -1,0 +1,185 @@
+/**
+ * The live loops (ARCHITECTURE 4.2 binding decision 2): `wind_loop`, `gather_loop`, `beam_loop`, `siphon_loop`,
+ * plus the internal `ambience` air bed. Each is a small node graph built on start and torn down after its
+ * fade-out; `setLevel` drives the recipe-specific sweep (speed, hold time, charge).
+ * @module audio/loops
+ */
+
+/** Live loop ids handled here (`ambience` is internal and not in IDS.sfx). */
+export const LIVE_IDS = Object.freeze(['wind_loop', 'gather_loop', 'beam_loop', 'siphon_loop', 'ambience']);
+
+/** Node cost of each live loop including its stereo panner (for the node budget). */
+export const LOOP_COST = Object.freeze({ wind_loop: 8, gather_loop: 9, beam_loop: 10, siphon_loop: 7, ambience: 4 });
+
+/**
+ * @typedef {object} LiveLoop
+ * @property {number} id
+ * @property {string} kind
+ * @property {any[]} nodes      every node of the graph (for teardown and counting)
+ * @property {any[]} sources    nodes that need start / stop
+ * @property {any} out          output gain (envelope, volume and distance)
+ * @property {any} pan          StereoPanner or null
+ * @property {any} a @property {any} b @property {any} c   recipe-specific params
+ * @property {number} level @property {number} vol @property {number} dist
+ * @property {number} entId @property {number} x @property {number} y @property {number} z @property {boolean} positional
+ * @property {number} endAt     context time the graph may be released (0 while playing)
+ */
+
+/** @returns {LiveLoop} */
+export function createLoopSlot() {
+  return {
+    id: 0, kind: '', nodes: [], sources: [], out: null, pan: null, a: null, b: null, c: null,
+    level: 0, vol: 1, dist: 1, entId: 0, x: 0, y: 0, z: 0, positional: false, endAt: 0, t0: 0, lg: 1,
+  };
+}
+
+/**
+ * @param {any} ac @param {LiveLoop} L @param {any} node @returns {any}
+ */
+function add(ac, L, node) {
+  L.nodes.push(node);
+  return node;
+}
+
+/** @param {any} ac @param {LiveLoop} L @param {any} buffer @param {number} rate */
+function noiseSrc(ac, L, buffer, rate) {
+  const s = add(ac, L, ac.createBufferSource());
+  s.buffer = buffer;
+  s.loop = true;
+  s.playbackRate.value = rate;
+  L.sources.push(s);
+  return s;
+}
+
+/** @param {any} ac @param {LiveLoop} L @param {string} type @param {number} f */
+function osc(ac, L, type, f) {
+  const o = add(ac, L, ac.createOscillator());
+  o.type = type;
+  o.frequency.value = f;
+  L.sources.push(o);
+  return o;
+}
+
+/** @param {any} ac @param {LiveLoop} L @param {string} type @param {number} f @param {number} q */
+function biquad(ac, L, type, f, q) {
+  const b = add(ac, L, ac.createBiquadFilter());
+  b.type = type;
+  b.frequency.value = f;
+  b.Q.value = q;
+  return b;
+}
+
+/** @param {any} ac @param {LiveLoop} L @param {number} v */
+function gain(ac, L, v) {
+  const g = add(ac, L, ac.createGain());
+  g.gain.value = v;
+  return g;
+}
+
+/**
+ * Build the graph of a live loop into `L` (its `out` starts silent; the engine fades it in).
+ * @param {any} ac @param {LiveLoop} L @param {string} kind
+ * @param {{ pink:any, white:any, clipCurve:Float32Array }} shared
+ */
+export function buildLoop(ac, L, kind, shared) {
+  L.nodes.length = 0;
+  L.sources.length = 0;
+  L.kind = kind;
+  L.level = 0;
+  const out = gain(ac, L, 0);
+  L.out = out;
+  if (kind === 'wind_loop') {
+    // pink noise -> bp (500 + speed x 20 Hz, Q 0.7) and an octave-up band; 0.3 Hz LFO on the gain
+    const src = noiseSrc(ac, L, shared.pink, 1);
+    const bp1 = biquad(ac, L, 'bandpass', 500, 0.7);
+    const bp2 = biquad(ac, L, 'bandpass', 1000, 0.9);
+    const body = gain(ac, L, 0.7);
+    src.connect(bp1); src.connect(bp2);
+    bp1.connect(body); bp2.connect(out);
+    body.connect(out);
+    const lfo = osc(ac, L, 'sine', 0.3);
+    const lfoG = gain(ac, L, 0.25);
+    lfo.connect(lfoG); lfoG.connect(body.gain);
+    L.a = bp1; L.b = bp2; L.c = body;
+  } else if (kind === 'gather_loop') {
+    // pink noise bp 300 Q 0.5 with 18 Hz tremolo and a 55 Hz saw through lp 300 -> 1400 rising with the hold
+    const src = noiseSrc(ac, L, shared.pink, 1);
+    const bp = biquad(ac, L, 'bandpass', 300, 0.5);
+    const trem = gain(ac, L, 0.55);
+    const tOsc = osc(ac, L, 'sine', 18);
+    const tDepth = gain(ac, L, 0.4);
+    src.connect(bp); bp.connect(trem); trem.connect(out);
+    tOsc.connect(tDepth); tDepth.connect(trem.gain);
+    const saw = osc(ac, L, 'sawtooth', 55);
+    const lp = biquad(ac, L, 'lowpass', 300, 2);
+    saw.connect(lp); lp.connect(out);
+    L.a = lp; L.b = saw; L.c = tOsc;
+  } else if (kind === 'beam_loop') {
+    // saw 82 + square 164 -> soft clip -> lp 2.2k with a 6 Hz LFO, and noise bp 1200
+    const saw = osc(ac, L, 'sawtooth', 82);
+    const sq = osc(ac, L, 'square', 164);
+    const ws = add(ac, L, ac.createWaveShaper());
+    ws.curve = shared.clipCurve;
+    const lp = biquad(ac, L, 'lowpass', 2200, 3);
+    const lfo = osc(ac, L, 'sine', 6);
+    const lfoG = gain(ac, L, 700);
+    saw.connect(ws); sq.connect(ws); ws.connect(lp); lp.connect(out);
+    lfo.connect(lfoG); lfoG.connect(lp.frequency);
+    const src = noiseSrc(ac, L, shared.white, 1);
+    const bp = biquad(ac, L, 'bandpass', 1200, 1.2);
+    src.connect(bp); bp.connect(out);
+    L.a = lp; L.b = saw; L.c = sq;
+  } else if (kind === 'siphon_loop') {
+    // low detuned saw drone 40 Hz with slow downward sweeps
+    const s1 = osc(ac, L, 'sawtooth', 40);
+    const s2 = osc(ac, L, 'sawtooth', 40.35);
+    const lp = biquad(ac, L, 'lowpass', 260, 4);
+    const lfo = osc(ac, L, 'sawtooth', 0.09);
+    const lfoG = gain(ac, L, -140);
+    s1.connect(lp); s2.connect(lp); lp.connect(out);
+    lfo.connect(lfoG); lfoG.connect(lp.frequency);
+    L.a = lp; L.b = null; L.c = null;
+  } else {
+    // ambience: a soft, slowly moving air bed
+    const src = noiseSrc(ac, L, shared.pink, 0.5);
+    const lp = biquad(ac, L, 'lowpass', 650, 0.5);
+    src.connect(lp); lp.connect(out);
+    L.a = lp; L.b = null; L.c = null;
+  }
+  L.pan = ac.createStereoPanner ? add(ac, L, ac.createStereoPanner()) : null;
+  if (L.pan) out.connect(L.pan);
+}
+
+/**
+ * Recipe-specific sweep for `level` 0..1 at context time `t`; returns the level gain of the loop.
+ * @param {LiveLoop} L @param {number} level @param {number} t
+ * @returns {number}
+ */
+export function applyLevel(L, level, t) {
+  const l = Math.max(0, Math.min(1, level));
+  L.level = l;
+  if (L.kind === 'wind_loop') {
+    const speed = l * 60;
+    L.a.frequency.setTargetAtTime(500 + speed * 20, t, 0.12);
+    L.b.frequency.setTargetAtTime(1000 + speed * 40, t, 0.12);
+    return 0.05 + 0.95 * l * l;
+  }
+  if (L.kind === 'gather_loop') {
+    L.a.frequency.setTargetAtTime(300 + 1100 * l, t, 0.1);
+    L.b.frequency.setTargetAtTime(55 * (1 + 0.06 * l), t, 0.1);
+    L.c.frequency.setTargetAtTime(18 + 6 * l, t, 0.1);
+    return 0.55 + 0.45 * l;
+  }
+  if (L.kind === 'beam_loop') {
+    L.a.frequency.setTargetAtTime(1600 + 1400 * l, t, 0.05);
+    return 0.8 + 0.2 * l;
+  }
+  if (L.kind === 'ambience') {
+    L.a.frequency.setTargetAtTime(500 + 900 * l, t, 0.5);
+    return 0.35 + 0.65 * l;
+  }
+  return 1;
+}
+
+/** Peak gain of each loop before volume and distance. */
+export const LOOP_GAIN = Object.freeze({ wind_loop: 0.5, gather_loop: 0.32, beam_loop: 0.22, siphon_loop: 0.5, ambience: 0.09 });
