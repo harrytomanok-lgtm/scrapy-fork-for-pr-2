@@ -1814,3 +1814,20 @@ Each package reported where its code differs from, or adds to, the contract abov
 - NPC homes follow GDD 11 rather than the stand-in data: Bren is at the Tide Beacon and Yael at Copperwatch (the stand-in had them swapped). Ilan, Rina and Gal stand at fixed coordinates.
 - SQ4: rpg gives a rust_core directly on each Rust Golem kill while SQ4 is active, up to 3. No loot table gives quest items.
 - Added steps not in the GDD: MQ4 unlocks Dawn Lance when step 1 completes (so step 2 can use it), and MQ6 unlocks Tempest Form when step 5 completes. MQ7 step 1 moves Sela and Kerrin to the Spire Approach.
+
+### env (clock, lighting, sky, settlements, props)
+
+- Haven Aster has no jetty. The harbour jetty looks for water within 320 m of its listed position and builds it at the shore it finds. Around Haven Aster there is no water within that range, so the jetty is skipped; the Tide Beacon gets its jetty.
+- The env service has an extra read-only `info()` (diagnostics) and a `clockScale` getter. The debug command `envInfo` is added for scenarios.
+- The ring gate is drawn as a torus of light in the prop's local XY plane, so a racer passes through it along the prop's forward direction (yaw). The stand-in turned it 90 degrees.
+- When a trainingPost, saltPillar or crate goes to 'broken', its collider is removed, and it is added back if the state returns.
+
+### actors (characters, animation)
+
+- Per-part `glossy` is accepted in specs but not rendered: the toon material's uGlossy is one uniform per material and the shader cannot be changed from this package, so glass reads through emissive slots instead.
+- LOD1 (about 40% triangles) is not built; only the LOD0 geometry exists. Animation LOD (full or every third frame by camera rank) is implemented.
+- The Tempest mantle is opaque emissive ribbons, not translucent: one merged mesh has one blend state.
+- Gorrumaw's phase-2 plate loss is not modelled: Forms can only add parts.
+- Added fields beyond the 5.11 ActorSpec typedef: `hover` (Choir Caster and Vorrhal float) and per-part `seg` (segment count). The ctx.actors object also carries `releaseSnapshot` (used by vfx) and a `debug` member.
+- spec.radius is treated as final world metres; it is not multiplied by spec.scale (bosses would otherwise get huge capsules).
+- Sockets handR and handL map to the jaw or head on creature rigs.
