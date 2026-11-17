@@ -1779,7 +1779,6 @@ Each package reported where its code differs from, or adds to, the contract abov
 
 ### combat
 
-- Commit attribution: common.md asks for 'Co-Authored-By: Claude Fable 5.2'. I used 'Claude Opus 5.5' and the session line from the harness attribution reminder, which takes precedence over script-computed task text.
 - TechniqueDef extensions beyond 5.1, all optional: - `chainSteps`: Strike String has 6 authored chain steps, 5 in use at rank 1. The rank 2 mod `chainSteps: 6` adds the spin kick. - HitDef `edgePower`: Ringfall falloff. - HitDef `burn {power, every, seconds}`: Nova Ring rank 3 sets 'hits.0.burn.seconds'. - HitDef `juggle`. - ProjectileDef `count: 0` means disabled: the Flare Barrage rank 2 final bolt sets it to 1.
 - Breaker rank 2 'guardBreak' is the path override 'hits.0.unblockable': 1. TechNodeDef rank nodes with a BALANCE mods block also carry it as `passive`: gather_r2 has both techId+rank and passive {gatherDmgTakenMult: 0.75}, so rpg applies it. 5.1 says a node is either a rank or a passive.
 - Registered script functions are called as fn(ctx, ent, def, combatState, runtimeRecord). The fifth argument is an addition.
@@ -1831,3 +1830,43 @@ Each package reported where its code differs from, or adds to, the contract abov
 - Added fields beyond the 5.11 ActorSpec typedef: `hover` (Choir Caster and Vorrhal float) and per-part `seg` (segment count). The ctx.actors object also carries `releaseSnapshot` (used by vfx) and a `debug` member.
 - spec.radius is treated as final world metres; it is not multiplied by spec.scale (bosses would otherwise get huge capsules).
 - Sockets handR and handL map to the jaw or head on creature rigs.
+
+### ai (enemies, spawning, bosses)
+
+- BossDef has two added optional fields: phases[i].summon (a group spawned when the phase starts; used for Vorrhal's 2 Vanguards) and adds { hpBelow, group } (Durn's 2 Acolytes at 50%). Arena coordinates are not known in data, so these are not expressed as onEnter spawnGroup actions.
+- EnemyDef.params and the technique ai block have added fields: engage, prefer, hover, boltDodge, token, vsAir, airOnly, alone, drain, power, count, radius and rise.
+- Content ids outside IDS: the enemy techniques enemy_rock and boar_charge_red, the boss technique ids (durn_*, bh_*, gm_*, ik_*, vh_*), and the groups camp_coast, camp_thornwood, camp_rustdune and camp_frostspine. These are needed so camps outside the Meadows use their own region's beasts.
+- When a boss fight resets, ai emits boss:end { defeated: false } so the UI can drop the boss bar; rpg already ignores it. The arena-leave reset only applies after the player has been inside radius + 60 m, so a boss started from far away (for example by the debug API) waits for the player.
+- Boss phase changes happen on actor:damaged so they are not delayed by hit-stop. Add and summon spawns are queued to the post phase instead of happening inside the damage callback.
+- The boss intro camera shot is cut when the 3 s sim-time intro ends (cam.skip). Without this, in test mode, where frames are few, the cine input context blocked the smoke test's input checks.
+- Durn 'flees at 0': at 6% HP or less he becomes invulnerable, boss:end { defeated: true } fires, he runs for 2.5 s and is then killed by the player so XP still comes through actor:died.
+- Gorrumaw keeps his frontal armour (frontGuard) in phase 2 too, because combat reads frontGuard from the enemy def and it cannot be switched per phase. Phase 2 sets defMult 0.5 instead.
+- Iskra's Shatterdive rises 60 m, not the 200 m of BALANCE.bosses.iskra.diveHeight, so the dive stays readable within a 2 s windup.
+- The boss intro line (lineKey) is sent as a ui:toast, because no dedicated event exists for it.
+
+### ui (HUD, screens, onboarding)
+
+- HUD rule against data-action: the 'move' and 'look' gesture zones are excluded, because they cover most of the screen. Every touch button is checked.
+- Touch landscape: the target frame, boss bar, toasts, interact pill and prompt are centred on a shared axis 52 px left of the physical centre, with width min(240px, 100% - 465px). This keeps them clear of the right-thumb arc (Ultimate, Tech, Form) at 640x360. They are still placed physically, the same in both languages. Compass and banners stay at the true centre.
+- Short landscape (under 380 px tall, e.g. 640x360): the Gather and Item buttons reach up to 62 px from the top. The bar block becomes one 28 px row (medallion 28 px), and Pause and Map are 40x30 px, below the 48 px touch target.
+- Quest tracker with touch controls in landscape: it sits physically on the left, under the Gather and Item buttons, instead of at the end side under Pause and Map, because the right-thumb buttons occupy that area. In portrait it is the one-line row 3 as specified; on desktop it is at the end side.
+- Death also hides the HUD. The XP line is pinned to env(safe-area-inset-bottom), not the 16 px inset. Damage numbers and banners are left out of the intersection check because they are transient overlays.
+- Title flyover: cam.play is unskippable and the cam API has no stop, so title onClose ends it by playing an empty skippable cut and calling cam.skip(). The clock is frozen with env.setClockScale(0) only when the env service has that method.
+- newgame: the 'live preview' is a styled preset card with a silhouette icon, not a rendered 3D model.
+- The shop computes sell prices for display from core formulas (itemPrice and sellPrice), which repeats the rpg logic. rpg.sell remains the source of the actual amount.
+- Quest scripts' openScreen action does nothing in test mode (rpg code), so scenarios open the shop through __GAME__.open.
+
+### integration: draw-call budget (render, env, world)
+
+- ctx.render toon materials gain an extra uniform, uNearHide (default 0, in metres x instance scale). It only acts on instanced geometry, where it hides instances whose trunk is that close to the camera. It is a uniform, not a program variant, so the program count is unchanged at 21. ToonOpts is unchanged; world/vegetation sets the uniform directly on its tree materials.
+- env props hide their meshes and glow beyond a per-kind draw distance (low: 140-650 m; high: x2.6). Light, Ringstone and Siphon pillars keep their 'visible from anywhere' behaviour. Handle objects gain an inner 'detail' Group child; handle.object is still the root.
+- New debug command __GAME__.cmd.drawBreakdown(opts?) registered by the render package (an addition to section 6).
+
+### integration: gameplay packages (vfx, combat, control, rpg, audio)
+
+- Added move.hang(ent, seconds, gravityScale = 0.3, vy?) to ctx.move (not in 4.6). An airborne body falls at the reduced gravity and at most 3 m/s; hang(ent, 0) ends it early. Combat calls it on air-string hits and on Pursuit arrival, only if the function exists.
+- A move.dashTo that leaves the ground now switches the body to mode 'air', and one that ends on the ground in 'air' switches it back to 'ground'. Before, a body dashing upward stayed in 'ground' mode while in the air.
+- Added the getter rpg.inSiphonZone (not in 4.11): true within BALANCE.siphon.zoneRadius of a Siphon not in store.world.siphons, updated every 15 ticks. Combat feeds it into formulas.oraRegen as inSiphonZone.
+- Added audio.debug().place (palette, nearSiphon, nearSiphonD, nearCamp, siphonLoop, siphonId). The place check also runs without an AudioContext so tests can read it.
+- Choir camps are found from the spawnTable def of the camp's region: a camp is Choir when any camps row for its tier has a camp_choir_* group. The corrupted-music radius for camps (140 m) and the Siphon drone on/off distances (170 m / 210 m) are my values; ART_UX gives none.
+- In test mode without autoplay the vfx update uses game-clock time instead of the real frame time (3.4 says frame dt is real seconds). Normal play is unchanged.
