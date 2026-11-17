@@ -38,7 +38,7 @@ export const scenarios = [
       await opening(game, assert);
       const prog0 = await game((g) => g.stats().programs);
       const n = await game((g, ids) => {
-        const out = g.cmd.actorsLineup({ ids, dist: 14, back: 12, up: 2.2, look: 1.0 });
+        const out = g.cmd.actorsLineup({ ids, dist: 14, back: 15, up: 2.4, look: 1.0 });
         g.step(3);
         return out.filter((x) => x > 0).length;
       }, HUMANS);

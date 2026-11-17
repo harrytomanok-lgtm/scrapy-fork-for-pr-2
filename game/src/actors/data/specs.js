@@ -190,8 +190,8 @@ function hero(v) {
   };
   const mantle = [];
   for (const s of [1, -1]) {
-    mantle.push(P('extra1', 'box', [0.08, 0.62 * k, 0.012], [s * 0.1, -0.27 * k, -0.04], [0.42, 0, s * 0.3], 'ora'));
-    mantle.push(P('extra1', 'box', [0.065, 0.55 * k, 0.012], [s * 0.24, -0.2 * k, -0.02], [0.36, 0, s * 0.62], 'ora'));
+    mantle.push(P('extra1', 'box', [0.08, 0.62 * k, 0.012], [s * 0.12, -0.26 * k, -0.04], [0.45, 0, s * 0.5], 'ora'));
+    mantle.push(P('extra1', 'box', [0.065, 0.55 * k, 0.012], [s * 0.26, -0.18 * k, -0.02], [0.3, 0, s * 0.95], 'ora'));
     mantle.push(P('head', 'blade', [0.065, 0.3 * k, 0.014], [s * 0.115 * k, 0.19 * k, -0.03], [-1.05, s * 0.15, s * -0.5], 'ora'));
   }
   const blades = [];
