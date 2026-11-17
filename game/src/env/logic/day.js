@@ -103,6 +103,26 @@ export function createSample() {
 }
 
 const SEG = { i: 0, t: 0 };
+const MEADOWS_FOG = hexToLinear(PALETTE.biome.meadows.fog);
+const FOG_A = [0, 0, 0];
+const FOG_B = [0, 0, 0];
+
+/**
+ * Fog colour of a key: the region's fogDay where the key has no tint (Day); otherwise the key's time tint, shifted
+ * halfway toward the region's hue (region fogDay relative to the meadows reference), so every region keeps its own
+ * fog through the day while each key keeps its brightness.
+ * @param {LinearKey} k @param {number[]} regionFog @param {number[]} out
+ */
+function keyFog(k, regionFog, out) {
+  if (!k.fog) {
+    out[0] = regionFog[0];
+    out[1] = regionFog[1];
+    out[2] = regionFog[2];
+    return out;
+  }
+  for (let i = 0; i < 3; i++) out[i] = k.fog[i] * (1 + (regionFog[i] / MEADOWS_FOG[i] - 1) * 0.5);
+  return out;
+}
 
 /** @param {number[]} out @param {number[]} a @param {number[]} b @param {number} t */
 function lerp3(out, a, b, t) {
@@ -129,7 +149,7 @@ export function sampleDay(h, regionFog, out) {
   lerp3(out.ambGround, a.ambGround, b.ambGround, t);
   lerp3(out.shadow, a.shadow, b.shadow, t);
   lerp3(out.zenith, a.zenith, b.zenith, t);
-  lerp3(out.fog, a.fog || regionFog, b.fog || regionFog, t);
+  lerp3(out.fog, keyFog(a, regionFog, FOG_A), keyFog(b, regionFog, FOG_B), t);
   return out;
 }
 

@@ -207,4 +207,18 @@ export const scenarios = [
       assert.ok(after.n0 >= 14 && after.n1 === after.n0 - 14, `props disposed (${after.n0} -> ${after.n1})`);
     },
   },
+  {
+    name: 'env-settlements',
+    query: 'hour=15',
+    width: 640,
+    height: 360,
+    async run({ game, assert, shot }) {
+      const ids = ['copperwatch', 'ridgerest', 'still_wind', 'talias_camp', 'tide_beacon', 'selas_ledge', 'spire_approach'];
+      for (const id of ids) {
+        const s = await game(viewAt, { id, dx: 32, dz: 44, tx: 0, tz: 0, pitch: -0.12, dist: 9, alt: 10 });
+        budget(assert, s, id);
+        await shot('env-settle-' + id);
+      }
+    },
+  },
 ];
