@@ -92,8 +92,11 @@ export function createInput(ctx) {
 
   /** @type {Map<string, number>} */
   const slotOf = new Map(FIXED_SOURCES.map((s, i) => [s, i]));
-  /** @type {Map<string, InputSource>} */
-  const sources = new Map();
+  /** Registered source ids and sources, parallel arrays in registration order. */
+  /** @type {string[]} */
+  const sourceIds = [];
+  /** @type {InputSource[]} */
+  const sourceList = [];
   /** @type {Array<(action:string)=>void>} */
   let pressListeners = [];
   /** @type {Set<string>} */
@@ -221,7 +224,8 @@ export function createInput(ctx) {
     },
 
     registerSource(id, source) {
-      const prev = sources.get(id);
+      const at = sourceIds.indexOf(id);
+      const prev = at >= 0 ? sourceList[at] : null;
       if (prev && prev !== source && typeof prev.dispose === 'function') {
         try {
           prev.dispose();
@@ -230,7 +234,12 @@ export function createInput(ctx) {
         }
       }
       releaseSource(id);
-      sources.set(id, source);
+      if (at >= 0) {
+        sourceList[at] = source;
+      } else {
+        sourceIds.push(id);
+        sourceList.push(source);
+      }
     },
 
     setButton(action, isDown, source) {
@@ -377,12 +386,13 @@ export function createInput(ctx) {
     },
 
     poll(dt) {
-      for (const [id, src] of sources) {
+      for (let s = 0; s < sourceList.length; s++) {
+        const src = sourceList[s];
         if (typeof src.poll !== 'function') continue;
         try {
           src.poll(input, dt);
         } catch (err) {
-          warnOnce('poll:' + id, `source '${id}' poll threw:`, err);
+          warnOnce('poll:' + sourceIds[s], `source '${sourceIds[s]}' poll threw:`, err);
         }
       }
       const list = pressListeners;
@@ -445,6 +455,8 @@ export function createKbmSource(input) {
   /** @type {Set<string>} */
   const held = new Set();
   const counts = new Int32Array(NA);
+  /** Held look keys: index 2 = lookX, 3 = lookY, each summed with its sign. */
+  const look = new Int32Array(4);
   let locked = false;
 
   /** @param {string} action @param {boolean} on */
@@ -482,6 +494,10 @@ export function createKbmSource(input) {
     held.add(e.code);
     if (acts) for (const a of acts) count(a, true);
     if (isMove) updateMove();
+    if (isLook) {
+      const m = /** @type {Record<string, number[]>} */ (KBM_LOOK_KEYS)[e.code];
+      look[m[0]] += m[1];
+    }
   }
 
   /** @param {KeyboardEvent} e */
@@ -491,6 +507,8 @@ export function createKbmSource(input) {
     const acts = /** @type {Record<string, string[]>} */ (KBM_KEYS)[e.code];
     if (acts) for (const a of acts) count(a, false);
     if (e.code in KBM_MOVE_KEYS) updateMove();
+    const m = /** @type {Record<string, number[]>} */ (KBM_LOOK_KEYS)[e.code];
+    if (m) look[m[0]] -= m[1];
   }
 
   /** @param {MouseEvent} e */
@@ -529,6 +547,7 @@ export function createKbmSource(input) {
 
   function releaseAll() {
     held.clear();
+    look.fill(0);
     for (let i = 0; i < NA; i++) {
       if (counts[i] > 0) input.setButton(ACTIONS[i], false, ID);
       counts[i] = 0;
@@ -552,16 +571,7 @@ export function createKbmSource(input) {
 
   return {
     poll(inp, dt) {
-      if (held.size === 0) return;
-      let lx = 0;
-      let ly = 0;
-      for (const code of held) {
-        const m = /** @type {Record<string, number[]>} */ (KBM_LOOK_KEYS)[code];
-        if (!m) continue;
-        if (m[0] === 2) lx += m[1];
-        else ly += m[1];
-      }
-      if (lx !== 0 || ly !== 0) inp.addLook(lx * KEY_LOOK_DEG_PER_S * dt, ly * KEY_LOOK_DEG_PER_S * dt, ID);
+      if (look[2] !== 0 || look[3] !== 0) inp.addLook(look[2] * KEY_LOOK_DEG_PER_S * dt, look[3] * KEY_LOOK_DEG_PER_S * dt, ID);
     },
     dispose() {
       for (const [t, type, fn, opt] of listeners) t.removeEventListener(type, fn, opt);
@@ -603,9 +613,8 @@ export function createPadSource(input) {
     active = false;
   }
 
-  /** Radial dead zone with rescale; writes into out[0], out[1]. */
   const stick = new Float64Array(2);
-  /** @param {number} x @param {number} y */
+  /** Radial dead zone with rescale; writes into `stick`. @param {number} x @param {number} y */
   function deadZone(x, y) {
     const m = Math.sqrt(x * x + y * y);
     if (m < PAD_DEAD_ZONE) {
