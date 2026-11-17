@@ -1,0 +1,24 @@
+{
+  "name": "kethra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kethra: Veins of Light. An original open-world 3D action RPG for the browser.",
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  },
+  "scripts": {
+    "gen": "node tools/gen-registry.mjs",
+    "build": "node tools/build.mjs",
+    "dev": "node tools/build.mjs --dev --watch --serve",
+    "serve": "node tools/serve.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "lint": "node tools/lint-strings.mjs && node tools/check-ip.mjs && node tools/check-imports.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "scenarios": "node tools/scenarios.mjs",
+    "check": "npm run lint && npm test && npm run build && npm run smoke"
+  }
+}
