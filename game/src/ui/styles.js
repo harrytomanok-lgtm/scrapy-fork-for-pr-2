@@ -26,7 +26,7 @@ export const UI_CSS = `
 .ui-hud[hidden]{display:none}
 .ui-hud{--med:48px;--hpw:220px;--hph:12px;--oraw:200px;--orah:8px;--resfs:18px;--endb:48px;--tw:240px;--tracker:220px}
 .ui-hud.ui-m-desktop{--med:64px;--hpw:320px;--hph:14px;--oraw:300px;--orah:10px;--resfs:22px;--tracker:280px}
-.ui-hud.ui-m-portrait{--med:40px;--hpw:180px;--hph:10px;--oraw:160px;--orah:8px;--resfs:15px;--endb:44px;--tw:200px}
+.ui-hud.ui-m-portrait{--med:40px;--hpw:min(180px,calc(100vw - 222px));--hph:10px;--oraw:min(160px,calc(100vw - 242px));--orah:8px;--resfs:15px;--endb:44px;--tw:200px}
 .ui-hud.ui-m-short{--med:28px;--hpw:116px;--hph:10px;--oraw:104px;--orah:6px;--resfs:15px;--endb:30px;--tracker:156px}
 .ui-hud.ui-m-landscape,.ui-hud.ui-m-short{--ui-cx:calc(50% - 52px);--tw:min(240px,calc(100% - 465px))}
 .ui-fadeable{transition:opacity 400ms linear}
@@ -139,7 +139,7 @@ export const UI_CSS = `
 
 .ui-toasts{position:absolute;inset-block-start:calc(var(--safe-top) + 68px);left:var(--ui-cx);transform:translateX(-50%);inline-size:var(--tw);
   display:flex;flex-direction:column;gap:6px;align-items:center}
-.ui-m-portrait .ui-toasts{inset-block-start:auto;inset-block-end:calc(32% + 64px);flex-direction:column-reverse}
+.ui-m-portrait .ui-toasts{inset-block-start:auto;inset-block-end:calc(32% + 64px);flex-direction:column-reverse;inline-size:min(320px,calc(100% - 32px))}
 .ui-m-desktop .ui-toasts{inset-block-start:calc(var(--safe-top) + 84px)}
 .ui-toast{position:relative;max-inline-size:100%;display:flex;gap:8px;align-items:center;padding:6px 12px;background:var(--panel);
   box-shadow:0 0 0 2px var(--ink);font-size:var(--fs-small);line-height:1.3;clip-path:${CUT_S};opacity:0;transform:translateY(-6px);
@@ -184,7 +184,10 @@ export const UI_CSS = `
   max-inline-size:var(--tw);padding:5px 14px 5px 6px;border-radius:22px;background:rgba(27,22,38,.72);font-size:var(--fs-small);line-height:1.25;
   text-shadow:0 1px 2px var(--ink);animation:ui-in 180ms var(--ui-ease)}
 .ui-prompt[hidden]{display:none}
-.ui-m-portrait .ui-prompt{inset-block-end:calc(32% + 152px)}
+.ui-m-portrait .ui-prompt{inset-block-end:calc(32% + 172px)}
+.ui-m-short .ui-prompt{inset-block-end:calc(var(--safe-bottom) + 160px);padding-block:3px}
+.ui-m-short .ui-prompt .ui-glyph,.ui-m-short .ui-pill .ui-glyph{min-inline-size:26px;block-size:26px}
+.ui-m-short .ui-pill{min-block-size:38px;inset-block-end:calc(var(--safe-bottom) + 114px)}
 .ui-m-desktop .ui-prompt{inset-block-end:24%;font-size:var(--fs-body)}
 .ui-ghost{position:absolute;left:0;top:0;border-radius:50%;box-shadow:0 0 0 3px var(--accent),0 0 18px 4px rgba(127,242,224,.55);
   animation:ui-ghost 1.1s ease-in-out infinite;pointer-events:none}

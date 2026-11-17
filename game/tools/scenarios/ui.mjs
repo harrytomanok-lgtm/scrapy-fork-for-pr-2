@@ -73,11 +73,60 @@ function hudState(g) {
   g.ctx.ui.toast('ui.toast.ringstone', null, 'good');
   g.ctx.ui.toast('ui.toast.questStarted', { title: g.ctx.i18n.t('quest.mq2.title') }, 'info');
   g.step(3);
+  // A tutorial prompt and the interact pill take their slots too.
+  g.ctx.bus.emit('tutorial:prompt', { action: 'attack', textKey: 'rpg.tut.attack' });
+  g.ctx.bus.emit('interact:focus', { id: 'test', kind: 'npc', promptKey: 'rpg.prompt.talk' });
+  g.render();
   return { target: g.ctx.combat.target(), tracked: g.ctx.quests.tracked };
 }
 
+/** ui-prompts: every prompt shows the glyph of the last-used device; touch rings the real control. */
+const promptScenario = {
+  name: 'ui-prompts',
+  width: 640,
+  height: 360,
+  query: 'lang=en',
+  async run({ game, assert, shot }) {
+    await game((g) => g.step(3));
+    const r = await game((g) => {
+      const out = [];
+      const actions = ['attack', 'bolt', 'dash', 'guard', 'jump', 'gather', 'lock', 'interact', 'item'];
+      for (const dev of ['kbm', 'pad', 'touch']) {
+        g.setDevice(dev);
+        g.render();
+        for (const a of actions) {
+          g.ctx.bus.emit('tutorial:prompt', { action: a, textKey: null });
+          g.render();
+          const glyph = document.querySelector('.ui-prompt .ui-glyph');
+          const ghost = document.querySelector('.ui-ghost');
+          const want = g.ctx.input.glyph(a);
+          const text = document.querySelector('.ui-prompt span:last-child').textContent;
+          if (dev === 'touch') {
+            const btn = document.querySelector(`[data-action="${a}"]`);
+            const br = btn ? btn.getBoundingClientRect() : null;
+            const shown = btn && br.width > 2;
+            if (shown) {
+              const gr = ghost.getBoundingClientRect();
+              const dx = Math.abs(gr.left + gr.width / 2 - (br.left + br.width / 2));
+              const dy = Math.abs(gr.top + gr.height / 2 - (br.top + br.height / 2));
+              if (ghost.hidden || dx > 2 || dy > 2) out.push(`${dev}/${a}: ghost not over the control (${dx},${dy})`);
+            }
+            if (!glyph.classList.contains('ui-tap')) out.push(`${dev}/${a}: no tap glyph`);
+          } else if (glyph.textContent !== (want.label || '?')) out.push(`${dev}/${a}: glyph '${glyph.textContent}' != '${want.label}'`);
+          if (!text || text.startsWith('[')) out.push(`${dev}/${a}: text '${text}'`);
+        }
+      }
+      g.ctx.bus.emit('tutorial:prompt', { action: 'jump', textKey: 'rpg.tut.jump' });
+      g.render();
+      return out;
+    });
+    await shot('ui-prompts-touch');
+    assert.deepEqual(r, []);
+  },
+};
+
 const hudScenarios = [];
-for (const s of SIZES) {
+for (const s of [...SIZES, { w: 844, h: 390 }, { w: 360, h: 640 }]) {
   for (const lang of LANGS) {
     hudScenarios.push({
       name: `ui-hud-${s.w}x${s.h}-${lang}`,
@@ -378,7 +427,7 @@ const flows = [
     async run({ page, game, assert, shot }) {
       await game((g) => {
         g.kill(g.player().id);
-        g.step(120);
+        g.step(400);
       });
       assert.equal(await game((g) => g.top()), 'death');
       await shot('ui-death');
@@ -402,7 +451,7 @@ const flows = [
           const t = n.textContent.trim();
           if (!t || !/[A-Za-z֐-׿]/.test(t)) continue;
           const el = n.parentElement;
-          if (!el || el.closest('[hidden]') || !el.getClientRects().length) continue;
+          if (!el || el.closest('[hidden],.ui-glyph,.ui-tabhint,bdi') || !el.getClientRects().length) continue;
           if (getComputedStyle(el).visibility === 'hidden') continue;
           out.push(t);
         }
@@ -466,4 +515,4 @@ for (const f of flows) {
   }
 }
 
-export const scenarios = [...hudScenarios, ...screenScenarios, ...flowScenarios];
+export const scenarios = [...hudScenarios, promptScenario, ...screenScenarios, ...flowScenarios];
