@@ -64,7 +64,7 @@ export const scenarios = [
         let maxRise = 0;
         let apexTick = 0;
         for (let i = 0; i < 90; i++) {
-          g.step(1);
+          g.ctx.loop.stepSim(1);
           const r = g.actors().find((a) => a.id === id);
           if (r && r.y - ground > maxRise) { maxRise = r.y - ground; apexTick = i; }
         }
@@ -502,9 +502,7 @@ export const scenarios = [
         const p = g.ctx.player;
         for (let i = 0; i < 4; i++) {
           g.press('attack');
-          for (let k = 0; k < 13; k++) {
-            g.step(1);
-          }
+          g.step(13);
           const t = g.ctx.ents.get(id);
           rows.push({ py: +(p.pos.y - ground).toFixed(1), ty: +(t.pos.y - ground).toFixed(1), mode: p.move.mode, gs: p.move.gravityScale });
         }
@@ -530,7 +528,7 @@ export const scenarios = [
         g.step(Math.ceil(0.35 * 60) + 3);
         g.hold('attack', false);
         let slamAt = -1;
-        for (let i = 0; i < 60; i++) { g.step(1); if (slamAt < 0 && g.events(['actor:slam']).length > s0) slamAt = i; }
+        for (let i = 0; i < 60; i++) { g.ctx.loop.stepSim(1); if (slamAt < 0 && g.events(['actor:slam']).length > s0) slamAt = i; }
         return {
           heel: g.events(['combat:techStart']).some((e) => e.payload.techId === 'meteor_heel'),
           slam: g.events(['actor:slam']).length - s0,
@@ -720,7 +718,7 @@ export const scenarios = [
         g.hold('attack', false);
         let slamTick = -1;
         for (let i = 0; i < 40; i++) {
-          g.step(1);
+          g.ctx.loop.stepSim(1);
           if (slamTick < 0 && g.events(['actor:slam']).length > s0) slamTick = i;
         }
         const knock = g.events(['actor:knocked']).filter((e) => e.payload.entId === id && e.payload.hurtle)[0];
