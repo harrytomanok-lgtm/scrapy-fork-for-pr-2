@@ -722,7 +722,16 @@ export function createAi(ctx) {
     const lm = ctx.world ? ctx.world.landmark(bd.arena.landmarkId) : null;
     let x = lm ? lm.x : 0;
     let z = lm ? lm.z : 0;
-    if (ctx.world && ctx.world.findSpot && ctx.world.findSpot(x, z, 25, SPOT, {})) { x = SPOT.x; z = SPOT.z; }
+    // The nearest dry, walkable spot to the arena centre (a basin arena may hold water at its floor).
+    if (ctx.world && ctx.world.findSpot) {
+      for (let r = 25; r <= bd.arena.radius; r += 30) {
+        if (ctx.world.findSpot(x, z, r, SPOT, {}) && (!ctx.world.waterDepthAt || ctx.world.waterDepthAt(SPOT.x, SPOT.z) <= 0)) {
+          x = SPOT.x;
+          z = SPOT.z;
+          break;
+        }
+      }
+    }
     let hpMult = bd.hpMult;
     if (typeof bd.hpPerSiphonStanding === 'number' && ctx.quests && ctx.quests.siphonsSilenced) {
       hpMult *= 1 + bd.hpPerSiphonStanding * Math.max(0, 5 - ctx.quests.siphonsSilenced());
@@ -938,7 +947,8 @@ export function createAi(ctx) {
     },
 
     get boss() {
-      return bossEnt();
+      const e = bossEnt();
+      return e && !bossEnded && e.combat && e.combat.state !== 'dead' ? e : null;
     },
 
     /** @param {boolean} on */

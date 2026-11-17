@@ -157,7 +157,7 @@ function orbit(b, s, radius, speed) {
 function eligible(b, i, s, api, prospective) {
   const t = b.techs[i];
   if (!(b.weights[i] > 0)) return false;
-  const outOfReach = s.groundOnly && s.dy > OUT_OF_REACH;
+  const outOfReach = s.groundOnly && s.tAir && s.dy > OUT_OF_REACH;
   if (outOfReach && !t.vsAir) return false;
   if (t.airOnly && !outOfReach) return false;
   if (t.alone && s.allies > 0) return false;
@@ -268,7 +268,7 @@ export function think(b, s, api) {
 
   // GDD 6.6: a target hovering high above a ground-only enemy for 6 s makes it disengage and heal.
   if (s.hasTarget && s.groundOnly && b.kind !== 'boss') {
-    if (s.dy > b.hoverRule.height) b.hoverT += dt;
+    if (s.tAir && s.dy > b.hoverRule.height) b.hoverT += dt;
     else b.hoverT = Math.max(0, b.hoverT - dt * 2);
     if (b.hoverT >= b.hoverRule.seconds && b.state !== 'return') {
       api.release();
@@ -323,7 +323,7 @@ export function think(b, s, api) {
     case 'approach': {
       b.face = s.dist < 20;
       const d = toTarget(s);
-      if (s.groundOnly && s.dy > OUT_OF_REACH && b.kind !== 'boss') {
+      if (s.groundOnly && s.tAir && s.dy > OUT_OF_REACH && b.kind !== 'boss') {
         enter(b, 'skirmish');
         break;
       }
@@ -337,7 +337,7 @@ export function think(b, s, api) {
     }
     case 'circle': {
       b.face = true;
-      if (s.groundOnly && s.dy > OUT_OF_REACH && b.kind !== 'boss') {
+      if (s.groundOnly && s.tAir && s.dy > OUT_OF_REACH && b.kind !== 'boss') {
         enter(b, 'skirmish');
         break;
       }
@@ -366,7 +366,7 @@ export function think(b, s, api) {
     case 'skirmish': {
       // Stand off under the flyer and throw.
       b.face = true;
-      if (!(s.dy > OUT_OF_REACH)) {
+      if (!(s.tAir && s.dy > OUT_OF_REACH)) {
         enter(b, 'approach');
         break;
       }

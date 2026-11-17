@@ -308,7 +308,11 @@ const LIST = [
         g.teleport(lm.x + 22, lm.z + 22, {});
         g.step(5);
         const b = g.startBoss(id);
-        g.step(240);
+        // Face the fight from 16 m on dry ground.
+        const e = g.ctx.ents.get(b);
+        g.teleport(e.pos.x + 12, e.pos.z + 11, { yaw: Math.atan2(-12, -11) });
+        g.setCamera({ yaw: Math.atan2(-12, -11), pitch: -0.15 });
+        for (let i = 0; i < 8; i++) g.step(60);
         const L = window.__aiLog;
         return {
           b, phases: bd.phases.map((p) => p.hpBelow),
@@ -328,7 +332,11 @@ const LIST = [
           const e = g.ctx.ents.get(a.b);
           const want = (a.below - 0.03) * e.stats.hpMax;
           g.damage(a.b, Math.max(2, e.stats.hp - want));
-          g.step(150);
+          // Vorrhal's last phase starts the finale script, which speaks: close the dialogue before stepping.
+          for (let k = 0; k < 12; k++) {
+            if (g.top() !== 'hud') g.closeAll();
+            g.step(20);
+          }
           return window.__aiLog.filter((x) => x.t === 'boss:phase' && x.phase === a.i).length;
         }, { b: start.b, below: start.phases[i], i });
         assert.equal(r, 1, 'boss:phase ' + i + ' fires once');
@@ -338,7 +346,10 @@ const LIST = [
         const e = g.ctx.ents.get(a.b);
         if (a.flee) g.damage(a.b, Math.max(2, e.stats.hp - 0.03 * e.stats.hpMax));
         else g.kill(a.b);
-        g.step(200);
+        for (let k = 0; k < 10; k++) {
+          if (g.top() !== 'hud') g.closeAll();
+          g.step(20);
+        }
         const L = window.__aiLog;
         const attacks = L.filter((x) => x.t === 'combat:techStart' && x.entId === a.b);
         const tele = attacks.every((s) => L.some((x) => x.t === 'combat:telegraph' && x.entId === a.b && x.tick <= s.tick && x.tick >= s.tick - 1));

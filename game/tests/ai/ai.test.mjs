@@ -266,7 +266,7 @@ function place(s, dist, o = {}) {
   s.hasTarget = o.target !== false;
   s.x = 0; s.z = 0; s.y = o.y || 0; s.alt = o.alt !== undefined ? o.alt : s.y;
   s.tx = dist; s.tz = 0; s.ty = o.ty || 0;
-  s.dist = dist; s.dy = s.ty - s.y;
+  s.dist = dist; s.dy = s.ty - s.y; s.tAir = s.ty > 3;
   s.homeDist = o.home || 0; s.homeDx = 0; s.homeDz = 0;
 }
 
