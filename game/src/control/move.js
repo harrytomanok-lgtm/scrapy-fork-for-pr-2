@@ -11,7 +11,7 @@ import { SIM_DT } from '../core/constants.js';
 import { TMP, wrapAngle, clamp } from '../core/math.js';
 import {
   MODES, createMoveState, createIntent, createRec, resetRec, stepActor, knock as knockActor, impulse as impulseActor,
-  dashTo as dashActor, setBoostAllowed as boostAllowed, setMode as setModeRaw, setBoost, separatePair,
+  dashTo as dashActor, hang as hangActor, setBoostAllowed as boostAllowed, setMode as setModeRaw, setBoost, separatePair,
 } from './logic/mover.js';
 import { createIntentInput, createLatch, resetLatch, computeIntent } from './logic/intent.js';
 
@@ -249,6 +249,16 @@ export function createMove(ctx, shared) {
     dashTo(ent, x, y, z, seconds) {
       if (!ent || !ent.move) return;
       dashActor(ent, recOf(ent), x, y, z, seconds);
+    },
+
+    /**
+     * Air hang for air strings and Pursuit (addition to 4.6): an airborne body falls with `gravityScale` (default the
+     * juggle gravity 0.3) and at most 3 m/s for `seconds`. No effect on the ground or in flight.
+     * @param {any} ent @param {number} seconds @param {number} [gravityScale] @param {number} [vy] vertical speed to take now
+     */
+    hang(ent, seconds, gravityScale, vy) {
+      if (!ent || !ent.move) return;
+      hangActor(ent, recOf(ent), seconds, typeof gravityScale === 'number' ? gravityScale : 0.3, typeof vy === 'number' ? vy : NaN);
     },
 
     /** @param {any} ent @param {number} seconds @param {{ noTurn?:boolean, slow?:number }} [opts] */

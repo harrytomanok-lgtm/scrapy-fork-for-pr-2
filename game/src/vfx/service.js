@@ -1236,14 +1236,18 @@ export function createVfx(ctx) {
     id: 'vfx.update',
     phase: 'vfx',
     /**
-     * Real frame time; a frame pass with dt 0 after stepped ticks (tests) uses the sim time that passed instead.
+     * Real frame time; a frame pass with dt 0 after stepped ticks uses the sim time that passed instead. In test mode
+     * without autoplay the sim is stepped by hand while the rAF loop keeps drawing: effects then follow the sim clock
+     * only, so a screenshot shows the tick the scenario stepped to, not however much wall time the renderer took.
      * @param {any} c @param {number} frameDt @param {number} alpha
      */
     frame(c, frameDt, alpha) {
       const real = c.time.real;
       const simDt = lastReal < 0 ? 0 : real - lastReal;
       lastReal = real;
-      const dt = Math.min(0.1, frameDt > 0 ? frameDt : Math.max(0, simDt));
+      const f = c.flags;
+      const manual = !!(f && f.test && !f.autoplay);
+      const dt = Math.min(0.1, !manual && frameDt > 0 ? frameDt : Math.max(0, simDt));
       if (!built) return;
       const low = isLow();
       parts.clearSprites();

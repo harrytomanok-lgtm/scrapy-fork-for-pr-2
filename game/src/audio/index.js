@@ -98,6 +98,7 @@ export function createAudio(ctx) {
       return {
         state: ac ? ac.state : 'none', ready: engine.ready, pending: engine.pending(), tier: engine.tier,
         voices: engine.voices(), musicVoices: music.voices(), nodes: engine.nodes(), music: music.state(),
+        place: wiring ? wiring.place() : null,
       };
     },
 
@@ -116,7 +117,10 @@ export function createAudio(ctx) {
     phase: 'audio',
     /** @param {any} c @param {number} dt */
     frame(c, dt) {
-      if (!engine.ready) return;
+      if (!engine.ready) {
+        wiring.idle(dt);
+        return;
+      }
       engine.frame(c);
       wiring.frame(c, dt);
       music.frame();

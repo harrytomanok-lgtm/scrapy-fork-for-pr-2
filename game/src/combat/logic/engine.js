@@ -35,6 +35,8 @@ const MAX_SHOTS = 4;
 const OUT_MAX = 64;
 /** Seconds after the last string hit during which Breaker still counts the string (smash rule). */
 const STRING_GRACE = 0.7;
+/** Seconds an air-string hit or a Pursuit arrival keeps the player hanging with the juggled target. */
+const AIR_HANG_SECONDS = 0.9;
 /** Seconds between two hits that keep the combo counter running. */
 const COMBO_WINDOW = 2.0;
 /** Ticks between line-of-sight checks of the hard lock. */
@@ -550,6 +552,14 @@ export function createCombatEngine(ctx) {
     const tl = stepOf(r.def, r.step).timeline;
     if (c.state === 'windup' && m.kind === 'toTarget' && m.t + seconds > tl.windup) r.windupExtra = Math.min(0.4, m.t + seconds - tl.windup);
     mv.dashTo(ent, x, y, z, Math.max(1 / 60, seconds));
+    // Pursuit and air lunges arrive beside a juggled target: hang there so the air string can follow (GDD 6.2).
+    if (isPlayer(ent) && typeof mv.hang === 'function') {
+      if (m.kind === 'toTarget' && t && t.alive && y === y && airborne(t) && (r.def.id === 'pursuit' || airborne(ent))) {
+        mv.hang(ent, seconds + AIR_HANG_SECONDS, STRING.juggle.gravityScale, NaN);
+      } else if (m.kind === 'dive') {
+        mv.hang(ent, 0, 1, NaN); // Meteor Heel: the dive ends the air hang
+      }
+    }
   }
 
   function groundAt(x, y, z) {
@@ -1105,6 +1115,8 @@ export function createCombatEngine(ctx) {
     if (c.burnoutT > 0) c.burnoutT = Math.max(0, c.burnoutT - dt);
     const noRegen = c.burnoutT > FORM_RULES.burnout.lockoutSeconds - FORM_RULES.burnout.noRegenSeconds;
     const boost = ent.move ? ent.move.boost : 0;
+    const rp = ctx.rpg;
+    REGEN.inSiphonZone = !!(rp && rp.inSiphonZone === true);
     REGEN.inCombat = st.inCombat; REGEN.boosting = boost > 0; REGEN.inForm = c.formId !== null; REGEN.burnout = noRegen;
     const regen = F.oraRegen(spr, md, REGEN);
     if (regen > 0 && stt.ora < stt.oraMax) combat.addOra(ent, regen * dt);
@@ -1653,6 +1665,10 @@ export function createCombatEngine(ctx) {
       if (!killed && !blocked && t.move) {
         hurtle = knock(t, src, req.knock, dirX, dirZ, typeof req.rx === 'number' && (req.rx || req.rz) ? req.rx : dirX,
           typeof req.rz === 'number' && (req.rx || req.rz) ? req.rz : dirZ, amount, !!req.juggle && sPlayer);
+        // Air string: the attacker hangs with the juggled target while the string goes on (GDD 6.2).
+        if (sPlayer && src.move && ctx.move && typeof ctx.move.hang === 'function' && tr.juggleT > 0 && airborne(t) && airborne(src)) {
+          ctx.move.hang(src, AIR_HANG_SECONDS, STRING.juggle.gravityScale, t.vel.y);
+        }
       } else if (killed && !blocked && t.move && ctx.move && req.knock && req.knock.kind !== 'none' && (t.tags & TAG.BOSS) === 0 && !tPlayer) {
         // Kills still fly: the body takes the knock without a slam.
         WHO.boss = false; WHO.player = false;

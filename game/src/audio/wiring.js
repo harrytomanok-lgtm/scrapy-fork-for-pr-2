@@ -10,13 +10,19 @@
 import { STEP_SURFACE, HIT_CLASS } from './logic/voices.js';
 import { RECIPES } from './logic/recipes.js';
 import { IDS } from '../core/ids.js';
+import { BALANCE } from '../core/balance.js';
 
 /** Pentatonic steps for the rising xp-orb and gate pings (semitones). */
 const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 /** Distance beyond which footsteps and landings of other actors are skipped (m). */
 const FOLEY_RANGE = 30;
-/** Corrupted palette within this distance of a standing Siphon (m). */
-const SIPHON_RANGE = 300;
+/** Corrupted palette within this distance of a standing Siphon (m, ART_UX 9.3). */
+const SIPHON_RANGE = BALANCE.siphon.corruptedMusicRadius;
+/** Corrupted palette within this distance of a Choir camp (m): the camp and its patrol ring. */
+const CAMP_RANGE = 140;
+/** The Siphon drone starts within this distance of a standing Siphon and stops beyond SIPHON_LOOP_OFF (m). */
+const SIPHON_LOOP_ON = 170;
+const SIPHON_LOOP_OFF = 210;
 /** Tracked technique sounds per entity. */
 const TRACK = 16;
 
@@ -41,7 +47,11 @@ export function installWiring(ctx, audio, engine, music) {
   const st = {
     gatherVoice: 0, gatherT: 0, gatherFull: false, windVoice: 0, ambVoice: 0, boss: false,
     orbStep: 0, orbT: -10, healT: -10, beamT: -10, regionPalette: 'warm', checkT: 0, lastPalette: '', lastSettlement: false,
+    siphonVoice: 0, siphonId: '', nearSiphon: '', nearSiphonD: Infinity, nearCamp: '', palette: 'warm',
   };
+  const LOOP_AT = { x: 0, y: 0, z: 0, vol: 1 };
+  /** @type {Map<string, boolean>} camp POI id -> its spawn group is a Choir group (from the region's camp table) */
+  const choirCamp = new Map();
   /** @type {Set<string>} Siphons destroyed this session */
   const siphonDown = new Set();
 
@@ -355,6 +365,11 @@ export function installWiring(ctx, audio, engine, music) {
       if (p.state === 'destroyed') {
         siphonDown.add(p.id);
         playFlat('siphon_break', 1, 1);
+        if (st.siphonVoice && st.siphonId === p.id) {
+          engine.stop(st.siphonVoice, 1.2);
+          st.siphonVoice = 0;
+          st.siphonId = '';
+        }
         st.checkT = 0;
       } else if (p.state === 'open') playFlat('siphon_core', 1, 1);
     },
@@ -408,13 +423,14 @@ export function installWiring(ctx, audio, engine, music) {
     },
     loaded() {
       siphonDown.clear();
+      st.siphonVoice = 0; st.siphonId = ''; st.checkT = 0;
       st.boss = false;
       MODE.mode = 'explore';
       music.set(MODE);
     },
     ended() {
       for (let i = 0; i < TRACK; i++) if (track[i].entId) clearTrack(track[i], 0.2);
-      st.gatherVoice = 0; st.windVoice = 0; st.ambVoice = 0;
+      st.gatherVoice = 0; st.windVoice = 0; st.ambVoice = 0; st.siphonVoice = 0; st.siphonId = '';
       engine.stopAll();
       music.stopAll();
     },
@@ -478,21 +494,82 @@ export function installWiring(ctx, audio, engine, music) {
   bus.on('game:loaded', on.loaded, OWNER);
   bus.on('game:ended', on.ended, OWNER);
 
-  /** Music place: Siphon proximity (corrupted), region palette, settlements. */
+  /** A Siphon is standing unless it was silenced this session or in the saved journey. @param {string} id */
+  function standing(id) {
+    if (siphonDown.has(id)) return false;
+    const w = ctx.store && ctx.store.state ? ctx.store.state.world : null;
+    return !(w && w.siphons && w.siphons.indexOf(id) >= 0);
+  }
+
+  /** Camp POIs whose region spawn table (5.9 camps) gives them a Choir group (camp_choir_*). @param {any} poi */
+  function isChoirCamp(poi) {
+    let v = choirCamp.get(poi.id);
+    if (v !== undefined) return v;
+    v = false;
+    const d = ctx.defs;
+    const table = d && poi.regionId && d.has('spawnTable', poi.regionId) ? d.get('spawnTable', poi.regionId) : null;
+    const tier = poi.data && typeof poi.data.tier === 'number' ? poi.data.tier : 1;
+    const camps = table && Array.isArray(table.camps) ? table.camps : null;
+    if (camps) {
+      // Any Choir group in the rows of the camp's tier (the first row when no row has that tier).
+      let rows = 0;
+      for (let i = 0; i < camps.length; i++) {
+        if (camps[i].tier !== tier) continue;
+        rows++;
+        if (typeof camps[i].group === 'string' && camps[i].group.indexOf('camp_choir') === 0) v = true;
+      }
+      if (!rows && camps.length) v = typeof camps[0].group === 'string' && camps[0].group.indexOf('camp_choir') === 0;
+    }
+    choirCamp.set(poi.id, v);
+    return v;
+  }
+
+  /**
+   * Place state, 1 Hz: the nearest standing Siphon (drone loop and corrupted music within 300 m), Choir camps
+   * (corrupted music), region palette and settlements. Runs without an AudioContext too, so tests can read it.
+   */
   function checkPlace() {
     const p = ctx.player;
     if (!p) return;
     let palette = st.regionPalette;
     const w = ctx.world;
+    let near = null;
+    let nearD2 = Infinity;
     if (w && w.pois) {
       const list = w.pois('siphon');
       for (let i = 0; i < list.length; i++) {
         const s = list[i];
-        if (siphonDown.has(s.id)) continue;
+        if (!standing(s.id)) continue;
         const dx = s.x - p.pos.x;
         const dz = s.z - p.pos.z;
-        if (dx * dx + dz * dz < SIPHON_RANGE * SIPHON_RANGE) { palette = 'corrupted'; break; }
+        const d2 = dx * dx + dz * dz;
+        if (d2 < nearD2) { nearD2 = d2; near = s; }
       }
+      if (nearD2 < SIPHON_RANGE * SIPHON_RANGE) palette = 'corrupted';
+      let camp = '';
+      const camps = w.pois('camp');
+      for (let i = 0; i < camps.length; i++) {
+        const c = camps[i];
+        const dx = c.x - p.pos.x;
+        const dz = c.z - p.pos.z;
+        if (dx * dx + dz * dz < CAMP_RANGE * CAMP_RANGE && isChoirCamp(c)) { palette = 'corrupted'; camp = c.id; break; }
+      }
+      st.nearCamp = camp;
+    }
+    st.nearSiphon = near ? near.id : '';
+    st.nearSiphonD = near ? Math.sqrt(nearD2) : Infinity;
+    st.palette = palette;
+    if (!engine.ready) return;
+    // The Siphon drone: positional at the spire, started near a standing Siphon, stopped when far or silenced.
+    if (st.siphonVoice && (!near || near.id !== st.siphonId || nearD2 > SIPHON_LOOP_OFF * SIPHON_LOOP_OFF)) {
+      engine.stop(st.siphonVoice, 0.8);
+      st.siphonVoice = 0;
+      st.siphonId = '';
+    }
+    if (!st.siphonVoice && near && nearD2 < SIPHON_LOOP_ON * SIPHON_LOOP_ON) {
+      LOOP_AT.x = near.x; LOOP_AT.y = near.y + 12; LOOP_AT.z = near.z;
+      st.siphonVoice = engine.loop('siphon_loop', LOOP_AT);
+      st.siphonId = st.siphonVoice ? near.id : '';
     }
     let inTown = false;
     const env = ctx.env;
@@ -516,6 +593,18 @@ export function installWiring(ctx, audio, engine, music) {
   }
 
   return {
+    /** Place state for tests and the debug command. */
+    place() {
+      return { palette: st.palette, nearSiphon: st.nearSiphon, nearSiphonD: st.nearSiphonD, nearCamp: st.nearCamp, siphonLoop: st.siphonVoice !== 0, siphonId: st.siphonId };
+    },
+    /** Place check without an AudioContext (noaudio, before unlock): 1 Hz. @param {number} dt */
+    idle(dt) {
+      st.checkT -= dt;
+      if (st.checkT <= 0) {
+        st.checkT = 1;
+        checkPlace();
+      }
+    },
     /** Frame: loop levels and the 1 Hz place check. @param {any} c @param {number} dt */
     frame(c, dt) {
       if (!engine.ready) return;

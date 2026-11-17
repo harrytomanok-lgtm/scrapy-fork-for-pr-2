@@ -351,8 +351,9 @@ export const scenarios = [
         };
         let closed = -1;
         let open = -1;
+        // Sim ticks without a render each: 540 queued software-GL frames would stall the screenshot.
         for (let i = 0; i < 9 * 60 && (closed < 0 || open < 0); i++) {
-          g.step(1);
+          g.ctx.loop.stepSim(1);
           const st = g.ctx.quests.objects().find((x) => x.id === 'siphon_2').state;
           if (states[states.length - 1] !== st) states.push(st);
           if (st === 'closed' && closed < 0 && i > 2) closed = hit();

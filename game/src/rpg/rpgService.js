@@ -152,6 +152,13 @@ export function createRpg(ctx) {
     get level() {
       return PL().level;
     },
+    /**
+     * Addition to 4.11: true while the player is within BALANCE.siphon.zoneRadius (80 m) of a standing Siphon.
+     * Combat halves passive Ora regen there (GDD 8.3). Updated 4 times per second by `rpg.pickups`.
+     */
+    get inSiphonZone() {
+      return siphonZone;
+    },
     get xp() {
       return PL().xp;
     },
@@ -555,12 +562,34 @@ export function createRpg(ctx) {
     }
   }
 
+  let siphonZone = false;
+  let zoneTick = 0;
+  /** Is the player within the zone radius of a Siphon that is not silenced? @param {any} c @param {any} e */
+  function checkSiphonZone(c, e) {
+    const w = c.world;
+    if (!e || !w || !w.pois) return false;
+    const done = c.store.state.world.siphons;
+    const r2 = BALANCE.siphon.zoneRadius * BALANCE.siphon.zoneRadius;
+    const list = w.pois('siphon');
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i];
+      const dx = s.x - e.pos.x;
+      const dz = s.z - e.pos.z;
+      if (dx * dx + dz * dz < r2 && done.indexOf(s.id) < 0) return true;
+    }
+    return false;
+  }
+
   const tickSystem = {
     id: 'rpg.pickups',
     phase: 'post',
     /** @param {any} c @param {number} dt */
     step(c, dt) {
       const e = ent();
+      if (++zoneTick >= 15) {
+        zoneTick = 0;
+        siphonZone = checkSiphonZone(c, e);
+      }
       if (e && healLeft > 0 && e.combat && e.combat.state !== 'dead') {
         const h = Math.min(healLeft, healRate * dt);
         healLeft -= h;
