@@ -44,7 +44,7 @@ function hudProblems() {
 }
 
 /** In the page: no horizontal overflow on the root, dir as expected, no [key] placeholders in the visible DOM. */
-function screenProblems(dir) {
+function screenProblems(g, dir) {
   const app = document.getElementById('app');
   const out = [];
   if (app.scrollWidth > app.clientWidth + 1) out.push('root overflows: ' + app.scrollWidth + ' > ' + app.clientWidth);
@@ -186,7 +186,7 @@ async function tap(page, sel) {
 }
 
 /** In the page: the action value of the first element matching a selector, or null. */
-function attrOf(a) {
+function attrOf(g, a) {
   const b = document.querySelector(a.sel);
   return b ? b.getAttribute(a.attr) : null;
 }

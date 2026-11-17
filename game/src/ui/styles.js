@@ -260,7 +260,7 @@ export const UI_CSS = `
 .ui-btn.ui-icon{padding:0;inline-size:48px}
 .ui-btn.ui-full{inline-size:100%}
 .ui-btn.ui-left{justify-content:flex-start}
-.ui-btn-label{min-inline-size:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ui-btn-label{min-inline-size:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.1;padding-block:2px}
 .ui-kbd .ui-focus{outline:3px solid var(--accent);outline-offset:3px;z-index:1}
 .ui-kbd .ui-btn.ui-focus{clip-path:none;box-shadow:0 0 0 3px var(--ink),0 0 0 6px var(--accent);outline:0}
 
@@ -345,6 +345,14 @@ export const UI_CSS = `
 
 /* character, inventory, techniques, shop, map */
 .ui-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:14px;min-block-size:0}
+.ui-three{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.1fr) minmax(0,1fr);gap:12px;min-block-size:0;align-items:start}
+.ui-eqslots{grid-template-columns:minmax(0,1fr)}
+.ui-tabs.ui-grow{flex:1 1 0;min-inline-size:0}
+.ui-char{grid-template-areas:"hero main" "der main";align-items:start}
+.ui-char .ui-hero{grid-area:hero}
+.ui-char .ui-der{grid-area:der}
+.ui-char .ui-main{grid-area:main}
+.ui-eqslots .ui-slot{min-block-size:52px}
 .ui-portrait-only{display:none}
 .ui-statline{display:flex;align-items:center;gap:10px;min-block-size:52px;padding:2px 0;border-block-end:1px solid rgba(74,63,92,.7)}
 .ui-statline > .ui-grow{display:flex;flex-direction:column}
@@ -410,7 +418,9 @@ export const UI_CSS = `
 
 /* narrow and short screens */
 @media (max-width:560px){
-  .ui-two{grid-template-columns:minmax(0,1fr)}
+  .ui-two,.ui-three{grid-template-columns:minmax(0,1fr)}
+  .ui-char{grid-template-areas:"hero" "main" "der"}
+  .ui-eqslots{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ui-pbody{padding:14px 14px 16px}
   .ui-ribbon{margin-inline-start:-14px}
   .ui-portrait-only{display:block}
@@ -418,6 +428,11 @@ export const UI_CSS = `
   .ui-hero-sil{inline-size:56px;block-size:56px}
 }
 @media (max-height:440px){
+  .ui-ringico{inline-size:36px;block-size:36px}
+  .ui-eqslots .ui-slot,.ui-slot{min-block-size:46px;padding:4px 6px}
+  .ui-cells{grid-template-columns:repeat(auto-fill,minmax(56px,1fr))}
+  .ui-cell{block-size:56px}
+  .ui-statline{min-block-size:46px}
   .ui-pbody{padding:10px 14px 12px;gap:8px}
   .ui-ribbon{font-size:var(--fs-body);padding-block:3px}
   .ui-big{font-size:var(--fs-title)}
@@ -432,7 +447,8 @@ export const UI_CSS = `
   .ui-menugrid .ui-btn,.ui-two .ui-btn{min-block-size:42px}
   .ui-resbig{font-size:1.5rem}
 }
-@media (max-width:560px){.ui-tabs .ui-tab span{display:none}}
+@media (max-width:760px){.ui-tabs .ui-tab.ui-hasico:not(.ui-sel) span{display:none}.ui-tabs .ui-tab.ui-hasico:not(.ui-sel){flex:0 0 48px}}
+.ui-title .ui-ghostbtn{background:var(--panel);box-shadow:inset 0 0 0 2px rgba(243,235,221,.55)}
 
 @keyframes ui-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes ui-fadein{from{opacity:0}to{opacity:1}}

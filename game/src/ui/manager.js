@@ -369,7 +369,7 @@ export function createManager(ctx, kit) {
       prev.dataset.glyph = 'uiTabPrev';
       for (const id of PAUSE_TABS) {
         const b = kit.button(bar, 'ui.tab.' + id, () => mgr.replace(id, {}), 'ui-tab', TAB_ICONS[id]);
-        b.className = 'ui-tab' + (id === current ? ' ui-sel' : '');
+        b.className = 'ui-tab ui-hasico' + (id === current ? ' ui-sel' : '');
         b.dataset.tab = id;
         kit.attr(b, 'aria-label', 'ui.tab.' + id);
       }

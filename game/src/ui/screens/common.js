@@ -43,7 +43,7 @@ export function tabRow(kit, parent, items, onPick) {
       ctl.set(it.id);
       onPick(it.id);
     }, 'ui-tab', it.icon || null);
-    b.className = 'ui-tab';
+    b.className = 'ui-tab' + (it.icon ? ' ui-hasico' : '');
     b.dataset.tab = it.id;
     btns[it.id] = b;
   }

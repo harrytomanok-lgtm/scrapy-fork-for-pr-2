@@ -95,9 +95,8 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
   // ------------------------------------------------------------------ character
   reg('character', () => {
     const { root, body } = tabbed('character', 'ui.tab.character');
-    const two = kit.el('div', 'ui-two', body);
-    const side = kit.el('div', 'ui-col', two);
-    const hero = kit.el('div', 'ui-hero ui-card', side);
+    const two = kit.el('div', 'ui-two ui-char', body);
+    const hero = kit.el('div', 'ui-hero ui-card', two);
     const sil = kit.el('div', 'ui-hero-sil', hero);
     sil.appendChild(icon(doc, 'person'));
     const heroText = kit.el('div', 'ui-col', hero);
@@ -107,9 +106,10 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
     kit.el('div', 'ui-small', heroText, 'core.term.resonance');
     const res = kit.num(heroText, 'ui-resbig');
     const xp = kit.el('div', 'ui-small', heroText);
-    kit.el('h3', 'ui-h3', side, 'ui.char.derived');
-    const derived = kit.el('dl', 'ui-kv', side);
-    const main = kit.el('div', 'ui-col', two);
+    const der = kit.el('div', 'ui-col ui-der', two);
+    kit.el('h3', 'ui-h3', der, 'ui.char.derived');
+    const derived = kit.el('dl', 'ui-kv', der);
+    const main = kit.el('div', 'ui-col ui-main', two);
     const points = kit.el('div', 'ui-spread', main);
     kit.el('h3', 'ui-h3', points, 'ui.char.stats');
     const pts = kit.el('span', 'ui-tag ui-ok', points);
@@ -191,8 +191,9 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
     branch.bar.classList.add('ui-grow');
     const two = kit.el('div', 'ui-two', body);
     const list = kit.el('div', 'ui-list', two);
-    const sheet = kit.el('div', 'ui-sheet ui-card', two);
-    const slots = kit.el('div', 'ui-col', body);
+    const col2 = kit.el('div', 'ui-col', two);
+    const sheet = kit.el('div', 'ui-sheet ui-card', col2);
+    const slots = kit.el('div', 'ui-col', col2);
     kit.el('h3', 'ui-h3', slots, 'ui.tech.loadout');
     const slotRow = kit.el('div', 'ui-slots', slots);
     /** @type {string|null} */
@@ -223,6 +224,7 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
           const max = Math.max(r.rank, 3);
           for (let i = 1; i <= max; i++) kit.el('i', i <= owned ? 'ui-on' : '', pips);
         }
+        if (r.rank > 1) kit.el('span', 'ui-tag', subl, 'node.rank', { rank: formatInt(r.rank) });
         if (r.state === 'owned') kit.el('span', 'ui-tag ui-ok', subl, 'ui.tech.owned');
         else kit.el('span', 'ui-tag', subl, 'ui.tech.cost', { n: formatInt(r.tp) });
         if (r.state === 'available') {
@@ -325,14 +327,14 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
   // ------------------------------------------------------------------ inventory
   reg('inventory', () => {
     const { root, body } = tabbed('inventory', 'ui.tab.inventory');
-    const two = kit.el('div', 'ui-two', body);
+    const two = kit.el('div', 'ui-three', body);
     const side = kit.el('div', 'ui-col', two);
     kit.el('h3', 'ui-h3', side, 'ui.inv.equipped');
-    const slotsBox = kit.el('div', 'ui-slots', side);
+    const slotsBox = kit.el('div', 'ui-slots ui-eqslots', side);
     const shells = kit.el('div', 'ui-tag', side);
     const main = kit.el('div', 'ui-col', two);
     const cells = kit.el('div', 'ui-cells', main);
-    const sheet = kit.el('div', 'ui-sheet ui-card', main);
+    const sheet = kit.el('div', 'ui-sheet ui-card', two);
     /** @type {number} */
     let sel = 0;
     function render() {
@@ -638,7 +640,7 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       n.style.top = (uv.v * 100).toFixed(2) + '%';
       n.dataset.poi = id;
       n.appendChild(icon(doc, ic));
-      if (labelKey) {
+      if (labelKey && (wrap.clientWidth || 0) >= 380) {
         const l = kit.el('span', 'ui-maplabel', n, labelKey);
         l.style.left = '50%';
         l.style.top = '100%';

@@ -17,7 +17,7 @@ import { registerOtherScreens } from './screens/other.js';
 
 const OWNER = 'ui';
 /** Screens that cover the HUD completely. */
-const BLOCKING = Object.freeze(['title', 'loading', 'newgame', 'ending', 'fatal']);
+const BLOCKING = Object.freeze(['title', 'loading', 'newgame', 'ending', 'fatal', 'death']);
 const HUD_MENUS = Object.freeze({ map: 'map', menuQuests: 'quests', menuInventory: 'inventory', menuTechniques: 'techniques', menuCharacter: 'character' });
 
 /**
