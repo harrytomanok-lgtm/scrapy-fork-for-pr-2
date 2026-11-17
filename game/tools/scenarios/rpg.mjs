@@ -450,4 +450,52 @@ export const scenarios = [
       await shot('rpg-mq1-end');
     },
   },
+  {
+    name: 'rpg-finale',
+    width: W, height: H,
+    async run({ game, assert, shot }) {
+      const r = await game((g, drain) => {
+        const d = (0, eval)('(' + drain + ')');
+        const TAGS = 64 | 128;
+        g.god(true);
+        g.ai(false);
+        g.state();
+        g.ctx.store.state.world.siphons.push('siphon_1', 'siphon_2', 'siphon_3', 'siphon_4');
+        g.goto('dim_court');
+        const bossId = g.startBoss('vorrhal');
+        g.step(2);
+        d(g);
+        g.ctx.quests.runActions([{ op: 'script', script: 'finale_tethers' }]);
+        d(g);
+        const boss = g.ctx.ents.get(bossId);
+        const tagged = boss ? (boss.tags & TAGS) === TAGS : false;
+        const p = g.ctx.player;
+        const ora0 = p.stats.ora;
+        const oras = [];
+        const anchors = g.ctx.defs.all('object').filter((o) => o.id.startsWith('tether_')).slice(0, 4);
+        for (const a of anchors) {
+          g.teleport(a.x + 1, a.z + 1);
+          g.step(3);
+          g.press('interact');
+          g.step(2);
+          g.teleport(6, 6, { alt: 4 });
+          g.step(3);
+          oras.push(Math.round(p.stats.ora));
+        }
+        d(g);
+        g.step(2);
+        const b2 = g.ctx.ents.get(bossId);
+        return { bossId, tagged, ora0, oras, oraMax: p.stats.oraMax, form: p.combat.formId, cleared: b2 ? (b2.tags & TAGS) === 0 : true,
+          toasts: g.events(['ui:toast']).filter((x) => x.payload.key === 'rpg.toast.tether').length };
+      }, drainSrc.toString());
+      assert.ok(r.bossId > 0, 'Vorrhal spawned');
+      assert.ok(r.tagged, 'the boss is tagged scripted and invulnerable');
+      assert.equal(r.ora0, 0, 'the Ora is drained');
+      assert.equal(r.toasts, 4, 'one tether per silenced Siphon delivered');
+      assert.ok(r.oras.every((o) => o >= r.oraMax - 1), 'each delivery refills Ora');
+      assert.equal(r.form, 'zenith', 'Zenith after the last thread');
+      assert.ok(r.cleared, 'the boss tags are cleared');
+      await shot('rpg-finale-zenith');
+    },
+  },
 ];

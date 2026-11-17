@@ -326,7 +326,9 @@ export function createQuestEngine(host) {
      * @param {{x:number,z:number}} tmp
      */
     poll(px, pz, alt, target, tmp) {
-      for (const id of snapshot()) {
+      const list = snapshot();
+      for (let i = 0; i < list.length; i++) {
+        const id = list[i];
         const s = current(id);
         if (!s) continue;
         if (s.type === 'goto') {

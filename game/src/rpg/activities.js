@@ -421,7 +421,8 @@ export function createActivities(ctx, host) {
   function stepDiscovery(p) {
     const w = W();
     const R = BALANCE.world.discoveryRadius;
-    for (const d of discover) {
+    for (let i = 0; i < discover.length; i++) {
+      const d = discover[i];
       const dx = p.pos.x - d.x;
       const dz = p.pos.z - d.z;
       if (dx * dx + dz * dz > R * R || w.discovered.indexOf(d.id) >= 0) continue;
