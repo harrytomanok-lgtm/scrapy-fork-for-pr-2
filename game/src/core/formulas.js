@@ -364,7 +364,7 @@ export function enemyAtk(atkMult, level) {
 }
 
 /** DEF(Le) = defMult * 2 * Le. @param {number} defMult @param {number} level @returns {number} */
-export function enemyDef(defMult, level) {
+export function enemyDefense(defMult, level) {
   return defMult * B.enemyScale.def.perLevel * level;
 }
 
@@ -389,7 +389,7 @@ export function enemyStats(enemyDef, level, difficulty = 'warrior', opts) {
   return {
     hp, hpMax: hp, ora: 100, oraMax: 100,
     meleeRating: atk, oraRating: atk,
-    defense: enemyDef(typeof m.def === 'number' ? m.def : 1, Le),
+    defense: enemyDefense(typeof m.def === 'number' ? m.def : 1, Le),
     critChance: 0,
     poise, poiseMax: poise,
     resonance: enemyResonance(Le, (enemyDef && enemyDef.tier) || 'grunt'),

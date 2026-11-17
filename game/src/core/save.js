@@ -70,15 +70,20 @@ function fillDefaults(target, defaults) {
   return target;
 }
 
+/** Sections every saved journey of every version has; a value without them is not a journey. */
+const CORE_SECTIONS = Object.freeze(['meta', 'player', 'inv', 'quests', 'world']);
+
 /**
- * Migrate a parsed state up to `version`. Returns a new object; never mutates the input.
+ * Migrate a parsed state up to `version`, then fill fields that are missing with their defaults.
+ * Returns a new object; never mutates the input.
  * @param {any} state
  * @param {Readonly<Record<number, (state:object) => object>>} [migrations=MIGRATIONS]
  * @param {number} [version=SAVE_VERSION]
- * @returns {object|null} null when the input is not a state, is newer than `version`, or a migration is missing
+ * @returns {object|null} null when the input is not a journey, is newer than `version`, or a migration is missing
  */
 export function migrateState(state, migrations = MIGRATIONS, version = SAVE_VERSION) {
   if (!isObj(state) || !Number.isInteger(state.v) || state.v < 0) return null;
+  for (const k of CORE_SECTIONS) if (!isObj(state[k])) return null;
   if (state.v > version) return null;
   let s = cloneJson(state);
   while (s.v < version) {
@@ -522,7 +527,7 @@ export function createSave(opts) {
       if (meta) meta.playSeconds += dt;
       if (!inCombat) {
         timer += dt;
-        if (timer >= AUTOSAVE_INTERVAL) {
+        if (timer >= AUTOSAVE_INTERVAL - 1e-6) {
           timer = 0;
           save.request('timer');
         }
