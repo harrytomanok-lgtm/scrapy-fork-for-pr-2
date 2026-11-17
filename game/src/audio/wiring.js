@@ -511,10 +511,14 @@ export function installWiring(ctx, audio, engine, music) {
     const tier = poi.data && typeof poi.data.tier === 'number' ? poi.data.tier : 1;
     const camps = table && Array.isArray(table.camps) ? table.camps : null;
     if (camps) {
-      let row = null;
-      for (let i = 0; i < camps.length; i++) if (camps[i].tier === tier) row = camps[i];
-      if (!row && camps.length) row = camps[0];
-      v = !!(row && typeof row.group === 'string' && row.group.indexOf('camp_choir') === 0);
+      // Any Choir group in the rows of the camp's tier (the first row when no row has that tier).
+      let rows = 0;
+      for (let i = 0; i < camps.length; i++) {
+        if (camps[i].tier !== tier) continue;
+        rows++;
+        if (typeof camps[i].group === 'string' && camps[i].group.indexOf('camp_choir') === 0) v = true;
+      }
+      if (!rows && camps.length) v = typeof camps[0].group === 'string' && camps[0].group.indexOf('camp_choir') === 0;
     }
     choirCamp.set(poi.id, v);
     return v;
@@ -543,14 +547,12 @@ export function installWiring(ctx, audio, engine, music) {
       }
       if (nearD2 < SIPHON_RANGE * SIPHON_RANGE) palette = 'corrupted';
       let camp = '';
-      if (palette !== 'corrupted') {
-        const camps = w.pois('camp');
-        for (let i = 0; i < camps.length; i++) {
-          const c = camps[i];
-          const dx = c.x - p.pos.x;
-          const dz = c.z - p.pos.z;
-          if (dx * dx + dz * dz < CAMP_RANGE * CAMP_RANGE && isChoirCamp(c)) { palette = 'corrupted'; camp = c.id; break; }
-        }
+      const camps = w.pois('camp');
+      for (let i = 0; i < camps.length; i++) {
+        const c = camps[i];
+        const dx = c.x - p.pos.x;
+        const dz = c.z - p.pos.z;
+        if (dx * dx + dz * dz < CAMP_RANGE * CAMP_RANGE && isChoirCamp(c)) { palette = 'corrupted'; camp = c.id; break; }
       }
       st.nearCamp = camp;
     }

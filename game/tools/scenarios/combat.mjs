@@ -743,4 +743,37 @@ export const scenarios = [
       assert.ok(bonus && bonus.amount > 0, 'the slam deals bonus damage: ' + JSON.stringify(smash.hits));
     },
   },
+  {
+    // GDD 8.3: within 80 m of a standing Siphon passive Ora regen is halved (rpg reports the zone, combat applies it).
+    name: 'combat-siphon-regen',
+    async run({ game, assert }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        g.god(true);
+        g.ai(false);
+        const s = g.ctx.world.pois('siphon')[0];
+        const regen = () => {
+          g.killAll();
+          g.step(20);
+          g.setOra(10);
+          const o0 = g.player().ora;
+          g.step(120);
+          return { gain: (g.player().ora - o0) / 2, zone: g.ctx.rpg.inSiphonZone, inCombat: g.ctx.combat.inCombat };
+        };
+        g.teleport(s.x + 500, s.z + 500, {});
+        g.step(4);
+        const far = regen();
+        g.teleport(s.x + 40, s.z + 30, {});
+        g.step(4);
+        const near = regen();
+        return { far, near };
+      });
+      console.log('    regen: ' + JSON.stringify(r));
+      assert.equal(r.far.zone, false, 'no zone far away');
+      assert.equal(r.near.zone, true, 'the zone within 80 m');
+      assert.equal(r.near.inCombat, r.far.inCombat, 'same combat state in both measures');
+      const ratio = r.near.gain / r.far.gain;
+      assert.ok(Math.abs(ratio - 0.5) < 0.05, 'regen is halved in the Siphon zone (' + ratio.toFixed(2) + ')');
+    },
+  },
 ];

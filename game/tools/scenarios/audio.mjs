@@ -171,7 +171,8 @@ export const scenarios = [
       let maxVoices = 0;
       const t0 = Date.now();
       let i = 0;
-      while (Date.now() - t0 < 10000) {
+      // 10 s of real time and at least 25 bursts (a loaded machine renders slowly), capped at 60 s.
+      while ((Date.now() - t0 < 10000 || i < 25) && Date.now() - t0 < 60000) {
         const s = await game((g, hp, k) => {
           const f = (0, eval)('(' + hp + ')');
           g.setOra(9999);
@@ -196,6 +197,68 @@ export const scenarios = [
       assert.ok(maxNodes <= 120, 'at most 120 live audio nodes (max ' + maxNodes + ')');
       assert.equal(osc, 0, 'no oscillator was created for a one-shot');
       console.log('  barrage: ' + i + ' bursts, max nodes ' + maxNodes + ', max voices ' + maxVoices);
+    },
+  },
+  {
+    // Place audio: the Siphon drone starts near a standing Siphon and stops when it is silenced or far; the
+    // corrupted palette plays near standing Siphons and at Choir camps (ART_UX 9.3).
+    name: 'audio-siphon-camp',
+    query: QUERY,
+    async run({ page, game, assert }) {
+      await unlock(page, game, assert);
+      const where = await game((g) => {
+        g.god(true);
+        g.ai(false);
+        const s = g.ctx.world.pois('siphon')[0];
+        const camps = g.ctx.world.pois('camp');
+        const choir = camps.find((c) => {
+          const t = g.ctx.defs.has('spawnTable', c.regionId) ? g.ctx.defs.get('spawnTable', c.regionId) : null;
+          const rows = t && t.camps ? t.camps.filter((r) => r.tier === c.data.tier) : [];
+          if (!rows.some((r) => r.group.indexOf('camp_choir') === 0)) return false;
+          // far from every Siphon, so only the camp can turn the music corrupted
+          return g.ctx.world.pois('siphon').every((q) => Math.hypot(q.x - c.x, q.z - c.z) > 450);
+        });
+        g.teleport(s.x + 40, s.z + 30, {});
+        g.step(4);
+        return { siphon: { id: s.id, x: s.x, z: s.z }, camp: choir ? { id: choir.id, x: choir.x, z: choir.z } : null };
+      });
+      // The place check runs at 1 Hz of frame time (frames are slow here): poll until it reflects the new spot.
+      const place = async (key, want) => {
+        await page.waitForFunction(({ k, w }) => {
+          const pl = /** @type {any} */ (window).__GAME__.ctx.audio.debug().place;
+          return pl && pl[k] === w;
+        }, { k: key, w: want }, { timeout: 30000, polling: 200 }).catch(() => {});
+        return game((g) => g.ctx.audio.debug().place);
+      };
+      const near = await place('siphonLoop', true);
+      assert.equal(near.nearSiphon, where.siphon.id, 'the nearest standing Siphon is found');
+      assert.equal(near.palette, 'corrupted', 'corrupted music near a standing Siphon');
+      assert.ok(near.siphonLoop, 'the Siphon drone plays near a standing Siphon');
+      const zone = await game((g) => { g.step(20); return g.ctx.rpg.inSiphonZone; });
+      assert.equal(zone, true, 'rpg reports the Siphon zone within 80 m');
+      // Silenced: the drone stops and the music leaves the corrupted palette.
+      await game((g, id) => {
+        g.ctx.bus.emit('siphon:state', { id, state: 'destroyed', regionId: '' });
+        g.step(2);
+      }, where.siphon.id);
+      const down = await place('siphonLoop', false);
+      assert.equal(down.siphonLoop, false, 'the drone stops when the Siphon is silenced');
+      assert.notEqual(down.nearSiphon, where.siphon.id, 'a silenced Siphon no longer counts');
+      assert.ok(where.camp, 'a Choir camp exists away from the Siphons');
+      await game((g, c) => {
+        g.teleport(c.x + 30, c.z, {});
+        g.step(4);
+      }, where.camp);
+      const camp = await place('nearCamp', where.camp ? where.camp.id : '');
+      assert.equal(camp.nearCamp, where.camp.id, 'the Choir camp is found');
+      assert.equal(camp.palette, 'corrupted', 'corrupted music at a Choir camp');
+      await game((g, c) => {
+        g.teleport(c.x + 600, c.z + 600, {});
+        g.step(4);
+      }, where.camp);
+      const far = await place('nearCamp', '');
+      assert.equal(far.siphonLoop, false, 'no drone far from Siphons');
+      console.log('    place: ' + JSON.stringify({ near, down, camp, far }));
     },
   },
 ];
