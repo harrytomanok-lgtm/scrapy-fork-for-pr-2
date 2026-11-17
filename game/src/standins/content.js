@@ -17,6 +17,7 @@ import { IDS } from '../core/ids.js';
 import { PALETTE } from '../core/palette.js';
 import { REGIONS, LANDMARKS } from './world.js';
 import { CONTENT_STRINGS } from './strings.js';
+import { musicDefs } from './residual.js';
 
 const T = BALANCE.tech;
 const NONE = Object.freeze({ kind: 'none' });
@@ -500,7 +501,7 @@ export function standinDefs() {
     region: REGIONS.slice(),
     landmark: LANDMARKS.slice(),
     settlement: settlements(),
-    music: IDS.music.map((id, i) => ({ id, bpm: [84, 72, 66, 132, 144][i], mode: id === 'warm' ? 'major' : 'minor' })),
+    music: musicDefs(),
   };
 }
 
