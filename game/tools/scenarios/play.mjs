@@ -230,7 +230,7 @@ function installHelpers() {
         const t = n.textContent.trim();
         if (!/[A-Za-z]{3,}/.test(t) || /^(RES|HP|XP|Lv)\b/.test(t)) continue;
         const el = n.parentElement;
-        if (!el || el.closest('[hidden],bdi,.ui-glyph,svg') || !el.getClientRects().length) continue;
+        if (!el || el.closest('[hidden],bdi,.ui-glyph,svg,.ui-logo-alt') || !el.getClientRects().length) continue;
         if (getComputedStyle(el).visibility === 'hidden' || getComputedStyle(el).opacity === '0') continue;
         out.problems.push('english: ' + t.slice(0, 40));
       }
@@ -447,6 +447,7 @@ function firstTen(name, w, h) {
         P.sim(4);
         P.tap('dash');
         P.sim(10);
+        g.render();
         const latched = P.ctl('dash').classList.contains('ctl-latched');
         const b = g.ctx.player.move.boost;
         return { latched, boost: b };
@@ -468,7 +469,9 @@ function firstTen(name, w, h) {
           if (g.ctx.ui.top() === 'dialogue') P.dlg();
         }
         P.run(20);
-        return { taps, step: P.step('mq1'), hp: Math.round(g.ctx.player.stats.hp), mode: g.ctx.player.move.mode };
+        const p = g.ctx.player;
+        const ws = g.ctx.ents.list('enemy').filter((e) => e.alive).map((e) => ({ d: e.defId, hp: Math.round(e.stats.hp), dx: Math.round(e.pos.x - p.pos.x), dy: Math.round(e.pos.y - p.pos.y), dz: Math.round(e.pos.z - p.pos.z) }));
+        return { taps, step: P.step("mq1"), hp: Math.round(g.ctx.player.stats.hp), mode: g.ctx.player.move.mode, ws, ora: Math.round(p.stats.ora) };
       });
       console.log('    wisps: ' + JSON.stringify(wisps) + ' prompt "' + b5.prompt + '"');
       assert.equal(wisps.step, 's6', 'four wisps down with Bolt');
@@ -502,9 +505,21 @@ function firstTen(name, w, h) {
       const boars = await game((g) => {
         const P = window.__P;
         const ctx = g.ctx;
-        const out = { locks: 0, flicker: 0, breaker: 0, taps: 0, red: 0, hpMin: 1e9 };
+        const out = { locks: 0, flicker: 0, breaker: 0, taps: 0, red: 0, hpMin: 1e9, landTicks: 0 };
+        // The Awakening leaves the player in the air: hold Descend (the prompt says so) until landed.
+        g.render();
+        out.landPrompt = document.querySelector('.ui-prompt').innerText;
+        if (ctx.player.move.mode === 'fly') {
+          P.down('descend');
+          for (; out.landTicks < 60 * 20 && ctx.player.move.mode === 'fly'; out.landTicks += 10) P.sim(10);
+          P.up('descend');
+          P.sim(20);
+        }
+        g.render();
+        out.lockPrompt = document.querySelector('.ui-prompt').innerText;
         let redSeen = g.events(['combat:telegraph']).length;
-        for (let t = 0; t < 60 * 90 && P.step('mq1') === 's7'; t += 1) {
+        const t0 = ctx.time.tick;
+        while (ctx.time.tick - t0 < 60 * 90 && P.step('mq1') === 's7') {
           const p = ctx.player;
           out.hpMin = Math.min(out.hpMin, p.stats.hp);
           if (ctx.ui.top() === 'death') break;
@@ -571,13 +586,13 @@ function firstTen(name, w, h) {
         const rs = g.pois('ringstone').find((x) => x.id === 'ringstone_sparkstead');
         g.teleport(rs.x - 6, rs.z - 6, { yaw: Math.atan2(10, 17) });
         P.sim(5);
-        const q = g.ctx.quests.objects().find((o) => o.id === 'ringstone_sparkstead');
-        const tx = q ? q.x : rs.x + 4;
-        const tz = q ? q.z : rs.z + 10;
+        // The stone (and its interactable) stands 4 m east and 10 m south of the POI point (ARCHITECTURE 11).
+        const tx = rs.x + 4;
+        const tz = rs.z + 7;
         P.faceCam(tx, tz);
         const left = P.walkTo(tx, tz, 2.5, 600);
         P.sim(4);
-        return { left, focus: g.ctx.quests.focus };
+        return { left, focus: g.ctx.quests.focus, dlg: g.ctx.quests.dialogueState(), top: g.top(), p: [g.ctx.player.pos.x, g.ctx.player.pos.y, g.ctx.player.pos.z, g.ctx.player.move.mode] };
       });
       const b8 = await look('ringstone');
       const done = await game((g) => {

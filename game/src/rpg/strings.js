@@ -50,6 +50,8 @@ const ROWS = [
   ['rpg.tut.bolt', 'Fire an Ora Bolt', 'לירות קליע אורה'],
   ['rpg.tut.gather', 'Hold to Gather', 'להחזיק כדי לאסוף'],
   ['rpg.tut.lock', 'Lock on', 'לנעול מטרה'],
+  ['rpg.tut.lockTap', 'Tap an enemy to lock on', 'לגעת באויב כדי לנעול'],
+  ['rpg.tut.land', 'Hold Descend to land', 'להחזיק ירידה כדי לנחות'],
   ['rpg.tut.flicker', 'Dash to vanish', 'להתחמק כדי להיעלם'],
   ['rpg.tut.heavy', 'Hold Attack: Breaker', 'להחזיק התקפה: שובר'],
   ['rpg.tut.rings', 'Fly through the rings ({count}/{need})', 'לעוף דרך הטבעות ({count}/{need})'],

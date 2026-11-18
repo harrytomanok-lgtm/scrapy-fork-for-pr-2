@@ -15,6 +15,8 @@ import { medalFor, gatePassed, siphonOpen } from './logic/activity.js';
 /** The Ringstone prop stands ahead of its POI so a journey (or respawn) never starts inside the stone (11). */
 const RS_DX = 4;
 const RS_DZ = 10;
+/** Interact reach of Ringstones and shrines (m). The stone's collider keeps the player about 4 m from its centre. */
+const STONE_REACH = 6.5;
 const CAMP_CHEST_DX = 5;
 const GATE_RADIUS = 10;
 const SIPHON_WAKE = 150;
@@ -85,7 +87,7 @@ export function createActivities(ctx, host) {
     const r = add({ id: poi.id, kind: 'ringstone', x: poi.x, y: poi.y, z: poi.z, state: done ? 'active' : 'idle', prop: null, entId: 0, regionId: poi.regionId, data: poi.data });
     r.prop = prop('ringstone', x, y, z, { state: r.state, yaw: Math.PI });
     if (r.prop && done) r.prop.setGlow(0.7);
-    host.quests.addInteractable({ id: poi.id, kind: 'ringstone', x, y: y + 1, z, radius: 4, promptKey: 'rpg.prompt.ringstone', onUse: () => useRingstone(r) });
+    host.quests.addInteractable({ id: poi.id, kind: 'ringstone', x, y: y + 1, z, radius: STONE_REACH, promptKey: 'rpg.prompt.ringstone', onUse: () => useRingstone(r) });
   }
 
   function useRingstone(r) {
@@ -113,7 +115,7 @@ export function createActivities(ctx, host) {
     const r = add({ id: poi.id, kind: 'shrine', x: poi.x, y: poi.y, z: poi.z, state: done ? 'claimed' : 'ready', prop: null, entId: 0, regionId: poi.regionId, data: poi.data });
     r.prop = prop('shrine', poi.x, poi.y, poi.z, { state: r.state });
     if (r.prop && !done) r.prop.setGlow(0.9);
-    host.quests.addInteractable({ id: poi.id, kind: 'shrine', x: poi.x, y: poi.y + 1, z: poi.z, radius: 4, promptKey: 'rpg.prompt.shrine', enabled: !done,
+    host.quests.addInteractable({ id: poi.id, kind: 'shrine', x: poi.x, y: poi.y + 1, z: poi.z, radius: STONE_REACH, promptKey: 'rpg.prompt.shrine', enabled: !done,
       onUse: () => claimShrine(r) });
   }
 

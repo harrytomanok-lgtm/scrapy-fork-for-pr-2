@@ -21,6 +21,8 @@ import { hudMode } from './logic/layout.js';
 const TEXT_PERIOD = 1 / 15;
 const TOAST_SECONDS = 3;
 const BANNER_SECONDS = 2.2;
+/** Combat call-out banners (Break!, Perfect!) are brief. */
+const CALLOUT_SECONDS = 0.9;
 const DMG_LIFE = 0.7;
 const DMG_COUNT = 24;
 const PIP_COUNT = 10;
@@ -276,6 +278,8 @@ export function createHud(ctx, kit, ui) {
   let viewW = 0;
   let viewH = 0;
   let layoutDirty = true;
+  /** Text ticks left to retry placing the tutorial ghost (a control can appear a few frames after its prompt). */
+  let ghostRetry = 0;
   let fadeT = 0;
   let faded = false;
   let chipVal = 1;
@@ -313,6 +317,7 @@ export function createHud(ctx, kit, ui) {
 
   function relayout() {
     layoutDirty = false;
+    ghostRetry = 8;
     const w = window.innerWidth || dom.root.clientWidth;
     const h = window.innerHeight || dom.root.clientHeight;
     const dev = ctx.input.device;
@@ -364,7 +369,7 @@ export function createHud(ctx, kit, ui) {
     banner.className = 'ui-banner ui-k-' + kind;
     void banner.offsetWidth;
     banner.classList.add('ui-on');
-    bannerUntil = clock + BANNER_SECONDS;
+    bannerUntil = clock + (kind === 'break' || kind === 'perfect' || kind === 'danger' ? CALLOUT_SECONDS : BANNER_SECONDS);
   }
   function renderBanner() {
     if (!bannerNow) return;
@@ -409,6 +414,7 @@ export function createHud(ctx, kit, ui) {
     } else promptGlyph.hidden = true;
     promptText.textContent = tutKey ? kit.t(tutKey) : kit.t('ui.action.' + tutAction);
     prompt.hidden = false;
+    ghostRetry = 8;
     placeGhost();
   }
   /** Ring the real touch control of the prompted action (layout read on events only). */
@@ -786,6 +792,10 @@ export function createHud(ctx, kit, ui) {
       textAcc += d;
       if (textAcc < TEXT_PERIOD && dt > 0) return;
       textAcc = 0;
+      if (ghostRetry > 0 && !prompt.hidden) {
+        ghostRetry--;
+        placeGhost();
+      }
       framePips(p);
       const surge = p.combat ? Math.min(1, p.combat.surge / BALANCE.surge.max) : 0;
       if (last.surge !== surge) {
