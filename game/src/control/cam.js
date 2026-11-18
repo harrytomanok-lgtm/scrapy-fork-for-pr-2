@@ -5,8 +5,9 @@
  * invert, auto-recentre behind movement, camera-pitch flight, velocity-following flight, lock-on yaw, framing of
  * an off-screen threat in group combat), because the player's camera-relative intent reads it. The frame system
  * `control.camRig` places the camera: critically damped springs on the pivot (boost lags 0.12 s), distance,
- * height and FOV per mode, portrait framing (player at 62% of the height above the control deck, 55% in
- * landscape), look-ahead, lock framing on thirds, a 0.3 m sphere-cast spring arm against terrain and solids (fast
+ * height and FOV per mode, portrait framing (body centre at 48% of the height, so the feet sit about 40% up, just
+ * above the control deck, with a rest pitch 3 degrees steeper for the ground modes, so the camera rides about 3 m
+ * over the feet and the horizon sits near the upper third; body centre at 55% in landscape), look-ahead, lock framing on thirds, a 0.3 m sphere-cast spring arm against terrain and solids (fast
  * in, slow out), flight roll into turns, trauma shake, FOV kicks, punch springs, dialogue over-the-shoulder
  * framing, scripted cinematic shots and a 0.4 s blend back out of cinematics and dialogue.
  * @module control/cam
@@ -17,7 +18,7 @@ import { SIM_DT } from '../core/constants.js';
 import { KIND_MASK, TAG } from '../core/ents.js';
 import { clamp, angleDelta, wrapAngle, lerp, smoothstep } from '../core/math.js';
 import {
-  CAM, CAM_MODES, spring, noise1, kickEnvelope, frameShift, horizontalFov, lockFraming, easeToward, interpAngle,
+  CAM, CAM_MODES, spring, noise1, kickEnvelope, frameShift, horizontalFov, lockFraming, easeToward, interpAngle, restPitch,
 } from './logic/camMath.js';
 
 const D2R = Math.PI / 180;
@@ -335,7 +336,7 @@ export function createCam(ctx, shared) {
       const mode = modeOf(c, target);
       st.mode = mode;
       const dt = SIM_DT;
-      const row = CAM_MODES[mode];
+      const rest = restPitch(mode, st.aspect < 1);
       const touch = c.input.device === 'touch';
       const pitchFlight = touch || !!(s && s.pitchFlight);
       const idle = (c.time.tick - st.lastLookTick) * SIM_DT;
@@ -352,7 +353,7 @@ export function createCam(ctx, shared) {
         // 250 ms ease on lock and switch; look input can still nudge pitch.
         const k = 1 - Math.exp((-3 / CAM.lockEase) * dt);
         st.yaw = wrapAngle(st.yaw + angleDelta(st.yaw, lockOut.yaw) * k);
-        if (idle > 0.5) st.pitch += (row.pitch * D2R - st.pitch) * (1 - Math.exp(-4 * dt));
+        if (idle > 0.5) st.pitch += (rest - st.pitch) * (1 - Math.exp(-4 * dt));
         st.threatT = 0;
       } else if (mode === 'flight' || mode === 'boost') {
         if (idle > 0.4 && vh > 3) {
@@ -368,7 +369,7 @@ export function createCam(ctx, shared) {
           }
         } else if (idle > 0.4) {
           const climb = vh > 5 ? Math.atan2(target.vel.y, vh) : 0;
-          const want = mode === 'boost' ? clamp(climb * 0.6, -40 * D2R, 25 * D2R) : row.pitch * D2R + clamp(climb * 0.35, -25 * D2R, 12 * D2R);
+          const want = mode === 'boost' ? clamp(climb * 0.6, -40 * D2R, 25 * D2R) : rest + clamp(climb * 0.35, -25 * D2R, 12 * D2R);
           st.pitch += (want - st.pitch) * (1 - Math.exp(-2 * dt));
         }
         st.threatT = 0;
@@ -398,10 +399,10 @@ export function createCam(ctx, shared) {
           const fwd = isPlayer ? (myA > 0.3 ? clamp(1 - mxA * 1.5, 0, 1) : 0) : 1;
           const rate = CAM.recentreRate * dt * fwd;
           st.yaw = wrapAngle(st.yaw + clamp(angleDelta(st.yaw, Math.atan2(vx, vz)), -rate, rate));
-          st.pitch += clamp(row.pitch * D2R - st.pitch, -30 * D2R * dt, 30 * D2R * dt);
-        } else if (idle > delay + 1.5 && Math.abs(st.pitch - row.pitch * D2R) > 1e-3) {
+          st.pitch += clamp(rest - st.pitch, -30 * D2R * dt, 30 * D2R * dt);
+        } else if (idle > delay + 1.5 && Math.abs(st.pitch - rest) > 1e-3) {
           // A camera left pitched far up or down drifts home on its own.
-          st.pitch += clamp(row.pitch * D2R - st.pitch, -12 * D2R * dt, 12 * D2R * dt);
+          st.pitch += clamp(rest - st.pitch, -12 * D2R * dt, 12 * D2R * dt);
         }
       }
     },

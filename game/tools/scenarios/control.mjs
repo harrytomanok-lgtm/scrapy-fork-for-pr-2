@@ -398,7 +398,10 @@ export const scenarios = [
         const p = g.ctx.player;
         const pt = { x: 0, y: 0, visible: false, depth: 0 };
         g.ctx.render.project(p.pos.x, p.pos.y + p.height * 0.6, p.pos.z, pt);
+        const ft = { x: 0, y: 0, visible: false, depth: 0 };
+        g.ctx.render.project(p.pos.x, p.pos.y, p.pos.z, ft);
         return {
+          feet: 1 - ft.y / innerHeight, pitch: g.ctx.cam.pitch, camY: c.position.y - p.pos.y,
           mode: g.ctx.cam.mode, fov: c.fov, d: Math.hypot(c.position.x - p.pos.x, c.position.y - p.pos.y, c.position.z - p.pos.z),
           px: pt.x / innerWidth, py: pt.y / innerHeight, visible: pt.visible,
           above: c.position.y - g.ctx.world.heightAt(c.position.x, c.position.z),
@@ -458,7 +461,10 @@ export const scenarios = [
       const po = await camState();
       assert.equal(po.mode, 'explore');
       assert.ok(Math.abs(po.fov - 72) < 1.5, `portrait fov ${po.fov.toFixed(1)}`);
-      assert.ok(po.py < 0.47 && po.py > 0.28, `portrait: the player sits above the control deck (${po.py.toFixed(2)})`);
+      assert.ok(po.py < 0.58 && po.py > 0.42, `portrait: the player sits above the control deck (${po.py.toFixed(2)})`);
+      assert.ok(po.feet > 0.34 && po.feet < 0.47, `portrait: the feet about 40% up from the bottom (${po.feet.toFixed(2)})`);
+      assert.ok(po.camY > 2 && po.above > 1.5, `portrait: the camera rides high (${po.camY.toFixed(2)} m over the feet, ${po.above.toFixed(2)} m over the ground)`);
+      assert.ok(Math.abs(po.pitch + 15 * Math.PI / 180) < 0.03, `portrait rest pitch -15 degrees (${(po.pitch * 180 / Math.PI).toFixed(1)})`);
       await shot('control-cam-portrait');
     },
   },
