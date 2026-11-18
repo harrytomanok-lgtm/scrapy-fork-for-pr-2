@@ -1,10 +1,12 @@
 /**
  * look scenarios: the visual quality gallery of the merged game on the low tier at res=1, in portrait (412x915)
- * and landscape (915x412). Every view uses the real follow camera unless it frames a character close up.
+ * and landscape (915x412). Every world view uses the real follow camera at ground level; close-ups of characters
+ * use the actors stage camera. Each view also checks the low-tier budget (perf-budget numbers: 120 draw calls in
+ * a fight, 250k triangles, 24 programs).
  * Run with `node tools/scenarios.mjs look [--only name]`. Screenshots go to tools/out/shots/look-*.png.
  */
 
-/** Boot state: test journey, AI and ambient spawns off, everything unlocked, noon. */
+/** Boot state: AI and ambient spawns off, everything unlocked, noon, nothing alive around. */
 async function opening(game, assert) {
   const p = await game((g) => g.player());
   assert.ok(p, 'the player exists after boot');
@@ -12,6 +14,7 @@ async function opening(game, assert) {
     g.ai(false);
     g.ambient(false);
     g.unlockAll();
+    g.god(true);
     g.setHour(12);
     g.killAll();
     g.step(2);
@@ -19,8 +22,8 @@ async function opening(game, assert) {
 }
 
 /**
- * In the page: put the player at (x, z) facing yaw (alt > 0 flies), set the follow camera, settle and render.
- * Returns the frame stats. Kept as a string so it can be shared by every page call.
+ * In the page: put the player at (x, z) facing yaw (alt > 0 flies), aim the follow camera, let streaming settle,
+ * wait out the region banner, render. Returns the frame stats. Kept as a string so every page call can share it.
  */
 const VIEW = `(g, o) => {
   g.cmd.actorsStage(null);
@@ -28,28 +31,64 @@ const VIEW = `(g, o) => {
   g.setCamera({ yaw: o.yaw, pitch: o.pitch, dist: o.dist });
   g.step(3);
   g.cmd.flushBuilds();
-  g.step(40);
+  for (let i = 0; i < 6; i++) g.step(40);
   g.cmd.flushBuilds();
-  g.step(20);
+  if (o.alt) g.teleport(o.x, o.z, { alt: o.alt, yaw: o.yaw });
+  g.setCamera({ yaw: o.yaw, pitch: o.pitch, dist: o.dist });
+  g.step(30);
   const s = g.stats();
   return { drawCalls: s.drawCalls, triangles: s.triangles, programs: s.programs };
 }`;
 
+/**
+ * In the page: a dry, gentle spot near (x, z) whose ground rises no more than 1.2 m over 8 m in any direction,
+ * away from the Spire's foot. Spiral search; falls back to (x, z).
+ */
+const SPOT = `(g, x, z) => {
+  const w = g.ctx.world;
+  const ok = (px, pz) => {
+    const h = w.heightAt(px, pz);
+    if (h < 3 || Math.hypot(px, pz) < 170) return false;
+    for (let a = 0; a < 8; a++) {
+      const d = Math.abs(w.heightAt(px + Math.cos(a * 0.785) * 8, pz + Math.sin(a * 0.785) * 8) - h);
+      if (d > 1.2) return false;
+    }
+    return w.waterDepthAt(px, pz) <= 0;
+  };
+  for (let r = 0; r < 900; r += 30) {
+    const n = Math.max(1, Math.floor(r / 15));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const px = x + Math.cos(a) * r;
+      const pz = z + Math.sin(a) * r;
+      if (ok(px, pz)) return { x: px, z: pz };
+    }
+  }
+  return { x, z };
+}`;
+
 /** In the page: the world views of the gallery, in order. */
-function worldViews(g) {
+function worldViews(g, spotSrc) {
+  const spot = (0, eval)('(' + spotSrc + ')');
   const out = [];
   for (const r of g.ctx.world.regions) {
-    // look across the region toward the island centre; the Spire region looks outward
-    const yaw = r.id === 'spire' ? 0.6 : Math.atan2(-r.cx, -r.cz);
-    out.push({ name: 'day-' + r.id, x: r.cx, z: r.cz, yaw, pitch: -0.08, hour: 12 });
+    const p = spot(g, r.id === 'spire' ? r.cx + 260 : r.cx, r.id === 'spire' ? r.cz + 260 : r.cz);
+    // look toward the island centre so the Spire anchors the composition; the Spire region looks across it
+    const yaw = Math.atan2(-p.x, -p.z) + (r.id === 'spire' ? 0.35 : 0.25);
+    out.push({ name: 'day-' + r.id, x: p.x, z: p.z, yaw, pitch: -0.12, hour: 12 });
   }
   const sp = g.ctx.world.landmark('sparkstead');
-  out.push({ name: 'sparkstead-dusk', x: sp.x + 18, z: sp.z + 26, yaw: Math.atan2(-18, -26), pitch: -0.05, hour: 19.5 });
-  out.push({ name: 'sparkstead-night', x: sp.x + 18, z: sp.z + 26, yaw: Math.atan2(-18, -26), pitch: -0.05, hour: 0 });
+  const yawS = Math.atan2(-18, -26);
+  out.push({ name: 'sparkstead-dusk', x: sp.x + 18, z: sp.z + 26, yaw: yawS, pitch: -0.08, hour: 19.5 });
+  out.push({ name: 'sparkstead-night', x: sp.x + 18, z: sp.z + 26, yaw: yawS, pitch: -0.08, hour: 0 });
   const m = g.ctx.world.regions.find((r) => r.id === 'meadows');
   out.push({ name: 'flight-150', x: m.cx, z: m.cz, alt: 150, yaw: Math.atan2(-m.cx, -m.cz), pitch: -0.3, hour: 12 });
+  // the Spire approach: 70 m out from the settlement, looking up at the Spire (off the Ringstone, so no discovery)
   const ap = g.ctx.world.landmark('spire_approach');
-  out.push({ name: 'spire-approach', x: ap.x, z: ap.z, yaw: Math.atan2(-ap.x, -ap.z), pitch: 0.12, hour: 12 });
+  const d = Math.hypot(ap.x, ap.z) || 1;
+  const ax = ap.x + (ap.x / d) * 70 + 20;
+  const az = ap.z + (ap.z / d) * 70;
+  out.push({ name: 'spire-approach', x: ax, z: az, yaw: Math.atan2(-ax, -az), pitch: 0.18, hour: 16 });
   return out;
 }
 
@@ -62,7 +101,7 @@ function worldScenario(tag, width, height) {
     query: 'res=1',
     async run({ game, assert, shot }) {
       await opening(game, assert);
-      const views = await game(worldViews);
+      const views = await game(worldViews, SPOT);
       assert.ok(views.length === 11, 'eleven world views');
       for (const v of views) {
         const s = await game((g, src, o) => {
@@ -70,6 +109,7 @@ function worldScenario(tag, width, height) {
           return (0, eval)('(' + src + ')')(g, o);
         }, VIEW, v);
         assert.ok(s.drawCalls <= 120 && s.triangles <= 250000 && s.programs <= 24, `${v.name}: within the low budget (${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs)`);
+        console.log(`  ${tag} ${v.name}: ${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs`);
         await shot(`look-${tag}-${v.name}`);
       }
       const errs = await game((g) => g.errors.filter((e) => e.indexOf('[error]') === 0 || e.indexOf('[fatal]') === 0));
@@ -80,6 +120,7 @@ function worldScenario(tag, width, height) {
 
 /** @param {string} tag @param {number} width @param {number} height */
 function actorScenario(tag, width, height) {
+  const portrait = height > width;
   return {
     name: 'look-actors-' + tag,
     width,
@@ -87,45 +128,58 @@ function actorScenario(tag, width, height) {
     query: 'res=1',
     async run({ game, assert, shot }) {
       await opening(game, assert);
-      const sp = await game((g) => {
-        const s = g.ctx.world.landmark('sparkstead');
-        return { x: s.x + 30, z: s.z + 40 };
-      });
+      const m = await game((g, src) => {
+        const r = g.ctx.world.regions.find((q) => q.id === 'meadows');
+        return (0, eval)('(' + src + ')')(g, r.cx + 120, r.cz - 60);
+      }, SPOT);
       // hero close up, base form and each Form, with the stage camera following the player
       for (const form of [null, 'ember', 'tempest', 'zenith']) {
         await game((g, src, o, f) => {
           (0, eval)('(' + src + ')')(g, o);
           g.setForm(f);
+          g.setOra(9999);
           g.step(60);
-          g.cmd.actorsFollow(3.2, 0.5, 0.15);
+          g.cmd.actorsFollow(3.4, 0.55, 0.1);
           g.step(4);
-        }, VIEW, { x: sp.x, z: sp.z, yaw: 2.4, pitch: -0.05 }, form);
+        }, VIEW, { x: m.x, z: m.z, yaw: 2.4, pitch: -0.05 }, form);
         await shot(`look-${tag}-hero-${form || 'base'}`);
+      }
+      // the same Forms through the real follow camera (how the phone sees them)
+      for (const form of ['ember', 'tempest', 'zenith']) {
+        await game((g, f) => {
+          g.cmd.actorsFollow(0);
+          g.cmd.actorsStage(null);
+          g.setForm(f);
+          g.setOra(9999);
+          g.setCamera({ yaw: 2.4 + 2.6, pitch: -0.1 });
+          g.step(40);
+        }, form);
+        await shot(`look-${tag}-play-${form}`);
       }
       await game((g) => { g.setForm(null); g.cmd.actorsFollow(0); g.step(10); });
       // the nine enemies in a row
-      await game((g) => {
+      await game((g, back) => {
         g.cmd.actorsLineup({ ids: ['ember_wisp', 'tusk_boar', 'bramble_boar', 'choir_acolyte', 'choir_caster', 'scuttlecrab', 'rust_golem', 'frost_harrier', 'choir_vanguard'],
-          dist: 12, back: 9, up: 2.4, look: 1.0 });
+          dist: 14, back, up: 2.6, look: 1.1 });
         g.step(4);
-      });
+      }, portrait ? 22 : 10);
       await shot(`look-${tag}-enemies`);
       // each boss on its own, front three-quarter
       for (const b of ['durn', 'bramblehorn', 'gorrumaw', 'iskra', 'vorrhal']) {
-        await game((g, id) => {
+        await game((g, id, port) => {
           const ids = g.cmd.actorsLineup({ ids: [id], dist: 14 });
           const e = g.ctx.ents.get(ids[0]);
           const bd = g.ctx.actors.bounds(id);
           const h = Math.max(2, bd.height || 3);
-          const d = Math.max(4.5, h * 1.9);
+          const d = Math.max(5, h * (port ? 2.6 : 2.0));
           const a = e.yaw + 0.35;
-          g.cmd.actorsStage([e.pos.x + Math.sin(a) * d, e.pos.y + h * 0.75, e.pos.z + Math.cos(a) * d], [e.pos.x, e.pos.y + h * 0.5, e.pos.z]);
+          g.cmd.actorsStage([e.pos.x + Math.sin(a) * d, e.pos.y + h * 0.7, e.pos.z + Math.cos(a) * d], [e.pos.x, e.pos.y + h * 0.5, e.pos.z]);
           g.step(4);
-        }, b);
+        }, b, portrait);
         await shot(`look-${tag}-boss-${b}`);
       }
       // a combat moment with effects, through the real follow camera
-      await game((g, src, o) => {
+      const s = await game((g, src, o) => {
         g.cmd.actorsClear();
         (0, eval)('(' + src + ')')(g, o);
         g.ai(true);
@@ -136,12 +190,18 @@ function actorScenario(tag, width, height) {
         g.step(8);
         g.use('nova_ring');
         g.step(9);
-      }, VIEW, { x: sp.x, z: sp.z, yaw: 2.4, pitch: -0.12 });
+        const st = g.stats();
+        return { drawCalls: st.drawCalls, triangles: st.triangles, programs: st.programs };
+      }, VIEW, { x: m.x, z: m.z, yaw: 2.4, pitch: -0.12 });
+      assert.ok(s.drawCalls <= 120 && s.triangles <= 250000 && s.programs <= 24, `combat: within the low budget (${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs)`);
+      console.log(`  ${tag} combat: ${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs`);
       await shot(`look-${tag}-combat`);
       await game((g) => { g.use('ora_bolt'); g.step(6); });
       await shot(`look-${tag}-combat2`);
       const nan = await game((g) => g.cmd.actorsNaN());
       assert.equal(nan, 0, 'no NaN bone matrices');
+      const errs = await game((g) => g.errors.filter((e) => e.indexOf('[error]') === 0 || e.indexOf('[fatal]') === 0));
+      assert.equal(errs.length, 0, 'no errors: ' + errs.join(' | '));
     },
   };
 }

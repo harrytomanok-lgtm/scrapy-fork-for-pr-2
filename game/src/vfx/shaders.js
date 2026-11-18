@@ -313,11 +313,31 @@ void main() {
     float w = 0.05 + 0.1 * (1.0 - uT);
     a = ringLine(r, uRing, w) * (1.0 - uT) * 0.95 + (1.0 - smoothstep(0.0, uRing, r)) * 0.12 * (1.0 - uT);
     c = mix(uColor, vec3(1.0), ringLine(r, uRing, w * 0.35) * 0.5);
-  } else {
+  } else if (uKind < 5.5) {
     float spin = ang + uTime * 1.2;
     float ticks = step(0.7, fract(spin * 3.8197)) * step(0.62, r) * step(r, 0.8);
     a = (ringLine(r, 0.9, 0.04) + ringLine(r, 0.55, 0.03) + ticks) * (1.0 - smoothstep(0.6, 1.0, uT)) * smoothstep(0.0, 0.1, uT);
     c = uColor;
+  } else {
+    // Form light on the ground (uRing: 2 ember, 3 tempest, 4 zenith), strength uFill: a soft pool of the Form
+    // colour plus the Form's own pattern, so a Form reads on the phone without bloom.
+    float pool = 1.0 - smoothstep(0.0, 1.0, r);
+    pool *= pool;
+    if (uRing < 2.5) {
+      float n = gfxNoise(vec3(p * 3.0, uTime * 1.5));
+      float lick = gfxNoise(vec3(ang * 2.0, r * 4.0 - uTime * 2.2, 1.7));
+      float heat = smoothstep(0.35, 0.0, abs(r - 0.62 - (lick - 0.5) * 0.25)) * (0.55 + 0.45 * n);
+      a = pool * (0.55 + 0.35 * n) + heat * 0.8;
+    } else if (uRing < 3.5) {
+      float s = fract(ang * 0.4775 + r * 0.8 - uTime * 1.4);
+      float arcs = smoothstep(0.1, 0.0, abs(s - 0.5) - 0.3) * smoothstep(0.3, 0.55, r) * (1.0 - smoothstep(0.82, 1.0, r));
+      a = pool * 0.4 + arcs * 0.75;
+    } else {
+      float rr = fract(r * 2.2 - uTime * 0.45);
+      a = pool * 0.45 + ringLine(rr, 0.5, 0.06) * (1.0 - smoothstep(0.65, 1.0, r)) * 0.75;
+    }
+    a = min(a, 1.0) * uFill;
+    c = mix(uColor, vec3(1.0), pool * 0.3);
   }
   a *= uAlpha;
   if (a < 0.004) discard;

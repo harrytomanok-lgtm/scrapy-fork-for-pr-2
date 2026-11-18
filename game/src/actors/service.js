@@ -230,7 +230,7 @@ export function createActors(ctx) {
         phase: 0, time: 0, locoMode: '', modeXf: 1, speed: 0, airT: 0, lastY: ent.pos.y,
         yaw: ent.yaw, yawRate: 0, bank: 0, lean: 0, spin: 0,
         springA: new Float32Array(rig.springN * 2), springV: new Float32Array(rig.springN * 2),
-        look: false, lookX: 0, lookY: 0, lookZ: 0, lookW: 0, lookYaw: 0, lookPitch: 0,
+        look: false, lockLook: false, lookX: 0, lookY: 0, lookZ: 0, lookW: 0, lookYaw: 0, lookPitch: 0,
         flinchT: 10, flinchX: 0, flinchZ: 0,
         flashStart: -10, flashDur: 0.06, dissolveStart: -1, dissolveDur: 1, ghost: 1,
         expr: 'neutral', exprUntil: 0, exprCur: new Float32Array(9), dead: false, talkUntil: 0,
@@ -676,8 +676,13 @@ export function createActors(ctx) {
       r.bank += (bankT - r.bank) * (dt > 0 ? 1 - Math.exp(-6 * dt) : 1);
       F[hips * 3 + 2] += r.bank;
       if (lm === 'hurtle') {
-        r.spin += dt * 13;
+        // a hurtling body tumbles with the movement's own spin (control's move.spin), else a fixed rate
+        const mv2 = ctx.move;
+        const sp = mv2 && typeof mv2.spin === 'function' ? mv2.spin(ent) : 0;
+        if (sp !== 0) r.spin = sp;
+        else r.spin += dt * 13;
         F[hips * 3] += r.spin;
+        F[hips * 3 + 2] += Math.sin(r.spin * 0.5) * 0.35;
       } else {
         r.spin = 0;
       }
@@ -691,6 +696,22 @@ export function createActors(ctx) {
       F[c + 2] += r.flinchZ * f;
       if (rig.spine >= 0) F[rig.spine * 3] += r.flinchX * f * 0.5;
       if (rig.head >= 0) F[rig.head * 3] += r.flinchX * f * 0.6;
+    }
+    // the player's head and chest turn toward the hard-lock target while locked on
+    if (ent === ctx.player) {
+      const cb = ctx.combat;
+      const tid = cb && typeof cb.target === 'function' ? cb.target() : 0;
+      const te = tid ? ctx.ents.get(tid) : null;
+      if (te && te.alive) {
+        r.look = true;
+        r.lockLook = true;
+        r.lookX = te.pos.x;
+        r.lookY = te.pos.y + (te.height > 0 ? te.height : 1.6) * 0.75;
+        r.lookZ = te.pos.z;
+      } else if (r.lockLook) {
+        r.look = false;
+        r.lockLook = false;
+      }
     }
     // look-at: head and chest turn toward the target
     r.lookW += ((r.look ? 1 : 0) - r.lookW) * (dt > 0 ? 1 - Math.exp(-8 * dt) : 1);
