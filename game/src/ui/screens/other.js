@@ -232,6 +232,23 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
     kit.button(restorePg, 'ui.code.restore', () => {
       const text = inp.value.trim();
       if (!text) return;
+      // A code replaces the saved journey for good: ask first when there is one (or one is being played).
+      let has = !!(ctx.session && ctx.session.running);
+      try {
+        const s = ctx.save.slots();
+        has = has || !!(s[0] && s[0].exists);
+      } catch (e) {
+        // no slots: nothing to replace
+      }
+      if (!has) restore(text);
+      else {
+        ui.confirm('ui.code.restoreConfirm', null).then((ok) => {
+          if (ok) restore(text);
+        });
+      }
+    }, 'ui-accent', 'restore');
+    /** @param {string} text */
+    function restore(text) {
       ctx.save.importCode(text).then((r) => {
         if (!r || !r.ok) {
           msg.textContent = kit.t((r && r.reasonKey) || 'core.save.codeInvalid');
@@ -243,7 +260,7 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
         ui.closeAll();
         if (ctx.session.start({ slot: 1, newGame: false })) ui.toast('core.save.restored', null, 'good');
       });
-    }, 'ui-accent', 'restore');
+    }
     kit.button(body, 'ui.common.back', () => ui.close('savecode'), 'ui-ghostbtn', 'back');
     function selectAll() {
       try {

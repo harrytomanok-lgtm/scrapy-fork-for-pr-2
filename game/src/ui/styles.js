@@ -257,6 +257,7 @@ export const UI_CSS = `
 .ui-grow{flex:1;min-inline-size:0}
 .ui-sep{block-size:2px;background:linear-gradient(to right,transparent,var(--line),transparent);border:0;margin:2px 0}
 
+.ui-scr [hidden],.ui-btn[hidden]{display:none!important}
 .ui-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-block-size:48px;min-inline-size:48px;padding:0 18px;border:0;
   background:var(--paper);color:var(--ink);font-family:var(--font-display);font-size:var(--fs-body);line-height:1.1;cursor:pointer;text-align:center;
   clip-path:${CUT_S};transition:transform 80ms ease-out,background-color 120ms;touch-action:manipulation}
