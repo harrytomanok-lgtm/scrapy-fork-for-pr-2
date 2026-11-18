@@ -359,7 +359,8 @@ export function createHud(ctx, kit, ui) {
     toastBox.appendChild(s.node);
     void s.node.offsetWidth;
     s.node.classList.add('ui-on');
-    s.until = clock + TOAST_SECONDS;
+    // A toast that arrives under a big banner gets its full time after the banner.
+    s.until = clock + TOAST_SECONDS + (bannerUntil > clock && root.classList.contains('ui-bnr') ? bannerUntil - clock : 0);
   }
 
   /** @param {string} kind @param {string} key @param {any} args */
@@ -369,6 +370,8 @@ export function createHud(ctx, kit, ui) {
     banner.className = 'ui-banner ui-k-' + kind;
     void banner.offsetWidth;
     banner.classList.add('ui-on');
+    // Big banners share the top band with the toasts outside portrait: the toasts wait out of sight meanwhile.
+    root.classList.toggle('ui-bnr', kind !== 'break' && kind !== 'perfect' && kind !== 'danger');
     bannerUntil = clock + (kind === 'break' || kind === 'perfect' || kind === 'danger' ? CALLOUT_SECONDS : BANNER_SECONDS);
   }
   function renderBanner() {
@@ -778,6 +781,7 @@ export function createHud(ctx, kit, ui) {
         bannerUntil = 0;
         bannerNow = null;
         banner.classList.remove('ui-on');
+        root.classList.remove('ui-bnr');
       }
       if (saveUntil && saveUntil <= clock) {
         saveUntil = 0;
