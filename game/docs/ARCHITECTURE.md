@@ -1895,3 +1895,48 @@ Each package reported where its code differs from, or adds to, the contract abov
 - The rpg 'ending' script opens the ui 'ending' screen itself, even in test mode, after the mq7_ending dialogue and a 0.3 s wait. Nothing else ever opened that screen.
 - MQ1 tutorial additions not in GDD 2: - self-destructed wisps are replaced - an Ora refill and a floor of 12 Ora during the wisp step - a 'Hold Descend to land' prompt before the boars when the player is flying - a touch-specific lock prompt - the Breaker hint (GDD 2 lists it as a hint strip) shows after the first lock-on
 - ui: the pause-tab screens and the shop (pause, character, techniques, inventory, quests, map, settings, controls, savecode, shop) now hide the HUD, as the screens that block play already did.
+
+### balance pass (numbers)
+
+- The GDD 7.3 boss hpMult values (6/14/18/16/24) were raised to 48/80/72/88/100. With the GDD values, Durn fell in 8 s in the browser, and no target was reachable without this change.
+- These GDD 7.1 formula numbers changed: HP base 40 → 75 and quad 0.35 → 0.25 (the GDD's example HPs no longer hold), ATK 8+4L → 9+3.5L, Shells 3+1.2L → 3+1.0L. This brings the GDD's own targets (1-2 strings to kill a grunt, 9-18 hits survived, about 600 Shells per hour) into band.
+- These GDD 10 economy numbers changed: gear price base 40 → 70 and boss Shells 500 → 250 per boss index.
+- Route band C xpMult changed 1.5 → 1.0 (GDD 4.1 tuning rule). The level curve and the route stay fixed.
+- Boss ATK changed 1.2 → 0.75 for all bosses (one number in src/ai/data/enemies.js). A different value per boss would have needed a logic change, so only Gorrumaw's and Vorrhal's move powers were lowered individually.
+- GDD 7.2 changes: wisp_spit power 0.8 → 0.6 and Choir Caster atk 1.2 → 1.0.
+- The GDD has no boss fight-length targets in the sections I was given. The bands I used and assert in the test are my own choice: Durn 40-80 s, Bramblehorn 65-120, Gorrumaw 75-140, Iskra 80-150, Vorrhal 120-240, with at most 1 healing item per boss on Story, 3 on Warrior and 5 on Master (the carry cap).
+
+### device fixes (core, control, audio)
+
+- D3 pause cap: while paused the cap is 30 fps only when the render tier's targetFps is 30 or less (low tier, which phones use). On the high tier (targetFps 60) the paused cap stays at 60. Reason: render/logic/dynres.update is fed the frame dt that frame systems receive. On the high tier it lowers the scale when fewer than 57 fps are presented, then requests a drop to the low tier after 6 s at minimum scale. A 30 fps menu would therefore drop the high tier to low, with a toast, after about 8 s in the pause menu. I cannot edit src/render. Once render holds dynres while ctx.loop.stats.cap is below targetFps, the 30 cap can apply on every tier by changing pausedCap() in src/core/loop.js.
+- D3: frames are not capped while a cinematic plays, even if the game is paused for it (for example the title flythrough, which pauses for 'menu'). The 'debug' pause reason that scenarios use also does not lower the cap. On 90 Hz and 144 Hz screens an even 60 fps cannot exist: the accumulator presents 2-1 (90 Hz) and 2-3 (144 Hz) vsync patterns averaging 60 fps, never more and never in bursts.
+- S1: the lifecycle save also runs in test mode, where storage is memory-only, so the scenario can prove it. The 'hidden' pause still applies only outside test mode.
+
+### second visual pass (vfx, actors, world, env, render)
+
+- Forms and the player's Gather now use a persistent flame aura made of two camera-facing planes, instead of 'no shell at rest' (ART_UX 2.3) and the Gather shell with rising ring bands (ART_UX 3.2). This was the lead's decision. Beam charge and the enemy aura keep the shell. The back plane uses normal (alpha) blending rather than additive so the hue survives on the low tier.
+- The shell shader gained flame styles: uStyle 6-9 for the back plane, +5 for the front plane. They reuse the same program, so the count stays at 21. The ground-light decal gained a Gather style (uRing 1) and now takes a radius.
+- The transformation flash (fx:impact 'transform') is lowered from 0.4 to 0.16, and the transform_burst core sprite is smaller (2.4-4.2 m instead of 5-9 m).
+- Hero palette changes: boots are CHAR.leather instead of sand #C9AE84 (the lead asked for coloured boots); eyes are dark almonds (ink) with an amber iris part ('iris' slot); hair tips glow in every Form, though ART_UX 2.3 says hair stays unchanged; the Ember sash uses PALETTE.scorchRim. The shared builder gained a nose box, larger eyes and thicker brows, and its hair cap is moved back.
+- To stay within 1800 triangles, hero limbs, neck, head, feet and rings use fewer segments (limbs 5, head 9, chest and spine 7).
+- Toon materials gained a uniform uCharRim (default 0; actors set it to 1): a lifted shadow floor and a rim light, both scaled by how dark the scene is. A negative uNearHide now shrinks instances near the camera to 55% instead of hiding them (used by the ground tufts).
+- The env service lifts the sun, ambient and shadow colours toward a night floor derived from the palette's night key whenever the sun is dim (dusk and night). Those hours no longer use the raw ART_UX 1.4 key values.
+- Shattered Crown: 16 large and 6 small shards in a ring 170 m out around the top of the Spire, instead of about 40 shards at 500-900 m altitude and 300-700 m out (GDD 3.3). crownShards now takes (seed, baseY) and exports CROWN_LARGE and CROWN_SMALL. Crown chests use shards[(n*7+3) % CROWN_LARGE].
+- The Crown ring does not orbit. Each shard turns about its own axis and bobs (up to 2.5 m on the small shards; crown chests do not bob with them), because the colliders and the rpg-owned crown chests stay at fixed positions.
+- Terrain: on the near chunks (LOD0 and LOD1), aNormal.w carries the region index plus 8 on path vertices. The near-ground noise uses camera-relative coordinates snapped to 256 m, and the hash no longer uses sin().
+
+### gameplay fixes (rpg, ai, combat, ui, i18n)
+
+- src/core/i18n.js: formatTemplate takes a fourth optional argument, isolate, and t() passes dir === 'rtl'. One existing assertion in tests/core/i18n.test.mjs had to change to expect the isolation marks ('⁨5⁩ קליעים'), and a new test was added.
+- The rpg service has two new members: grantItem(itemId, count, opts) and toastGrant(itemId, result). giveLoot rows gain the fields soldCount, soldShells and dropped, and count is now the amount actually added.
+- Quest host.run now takes (actions, resume?) and the script api has a new left field. RESUME_OPS now includes 'script'.
+- Marker specs accept { tag } (the nearest living enemy with that questTag). Boss phase defs accept fog (passed to env.setFog). The pending-boss state machine exposes ids, spawned (an id, not a boolean), last and has(), and defeat(id) clears a single boss; the pending getter is kept.
+- The combat driver returns an extra system, driver.latch (id combat.latch, input phase, order 50). combat/index.js registers it.
+- MQ4 s3 onStart is now { op: 'script', script: 'mq4_wave' } instead of a single spawnGroup. The group id and the kill count of 8 are unchanged.
+
+### last graphics fixes (sky, dynres, vegetation, tufts, portrait camera)
+
+- ARCHITECTURE 7.1 tier table: the unread 'grassRadius' row (low 0, high 70) is replaced by tuftRadius, tuftDensity and tuftInstances (low 22 m / 0.75 / 800, high 30 m / 1 / 1700), following the lead's decision to keep tufts on the low tier. src/standins/render.js (outside my ownership) still lists grassRadius in its own copy of the table; nothing reads it.
+- ARCHITECTURE 7.1 dynamic resolution rule: the decisions now use the measured frame cost (ctx.loop.stats.costMs) rather than the presented fps alone, the presented rate still acts as a guard against GPU-bound frames, and the controller holds while ctx.loop.stats.cap is below the tier's target. DynRes.update gained two optional arguments (costMs, cap). Without cost samples it behaves as before.
+- ART_UX 5 portrait framing: framePortrait changed from 0.62 to 0.48, and a portrait rest pitch 3 degrees steeper applies to explore, combat and lock (-15 degrees for explore). This was requested by the task; landscape is unchanged.
+- Hero spec: the head went from 9 to 8 segments, and the eye and iris spheres from 5 to 4, to keep hero_a under the 1800-triangle budget after adding the eye lids.
