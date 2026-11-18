@@ -78,41 +78,68 @@ export function phaseFor(phases, hpFrac, from) {
 }
 
 /**
- * Pending-boss state machine (ARCHITECTURE 4.10): `start` records the boss as pending; `reset` despawns but keeps it
- * pending; while pending and not spawned it restarts (without intro) when the player re-enters the arena or retries;
- * `defeat` and `end` clear it.
+ * Pending-boss state machine (ARCHITECTURE 4.10). Several quest bosses can be pending at once (MQ3, MQ5 and MQ6 run
+ * in parallel), but at most one is spawned. `start` records a boss as pending and spawned; `reset` despawns the
+ * spawned one but keeps it pending; while a boss is pending and nothing is spawned it restarts (without the intro)
+ * when the living player enters its arena, or on Retry (the last boss fought); `defeat` clears one boss and `end`
+ * clears them all.
  */
 export function createPendingBoss() {
+  /** Pending boss ids in the order they were first started. @type {string[]} */
+  const ids = [];
   const s = {
-    /** @type {string|null} */
-    pending: null,
-    spawned: false,
+    ids,
+    /** The spawned boss id, or null. @type {string|null} */
+    spawned: null,
+    /** The boss most recently spawned (the one Retry restarts). @type {string|null} */
+    last: null,
+    /** The boss Retry would restart, else the newest pending one (null when none). */
+    get pending() {
+      if (s.last && ids.indexOf(s.last) >= 0) return s.last;
+      return ids.length ? ids[ids.length - 1] : null;
+    },
+    /** @param {string} id */
+    has(id) {
+      return ids.indexOf(id) >= 0;
+    },
     /** @param {string} id */
     start(id) {
-      s.pending = id;
-      s.spawned = true;
+      if (ids.indexOf(id) < 0) ids.push(id);
+      s.spawned = id;
+      s.last = id;
     },
-    /** The fight was reset (player left the arena or died): the boss is gone but still pending. */
+    /** The fight was reset (player left the arena or died, or another boss started): the boss is gone but still pending. */
     reset() {
-      s.spawned = false;
+      s.spawned = null;
     },
-    defeat() {
-      s.pending = null;
-      s.spawned = false;
+    /** @param {string} [id] the defeated boss (default: the spawned one, else the last one) */
+    defeat(id) {
+      const d = id || s.spawned || s.last;
+      const i = d ? ids.indexOf(d) : -1;
+      if (i >= 0) ids.splice(i, 1);
+      if (s.spawned === d) s.spawned = null;
+      if (s.last === d) s.last = null;
     },
     /** game:ended */
     end() {
-      s.pending = null;
-      s.spawned = false;
+      ids.length = 0;
+      s.spawned = null;
+      s.last = null;
     },
     /**
-     * Should the boss restart now? Re-entry: the living player is inside the arena radius. Retry: player:respawned with retry.
-     * @param {boolean} playerInArena @param {boolean} playerAlive @param {boolean} [retry]
+     * Should a boss restart now? Re-entry: the living player is inside a pending boss's arena. Retry:
+     * player:respawned with retry restarts the last boss fought.
+     * @param {boolean|((id:string) => boolean)} playerInArena true/false, or a test of the player against a boss's arena
+     * @param {boolean} playerAlive @param {boolean} [retry]
      * @returns {string|null} the boss id to restart without the intro
      */
     restart(playerInArena, playerAlive, retry) {
-      if (!s.pending || s.spawned || !playerAlive) return null;
-      return retry || playerInArena ? s.pending : null;
+      if (!ids.length || s.spawned || !playerAlive) return null;
+      if (retry) return s.pending;
+      for (let i = 0; i < ids.length; i++) {
+        if (typeof playerInArena === 'function' ? playerInArena(ids[i]) : playerInArena) return ids[i];
+      }
+      return null;
     },
   };
   return s;

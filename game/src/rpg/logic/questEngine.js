@@ -9,8 +9,12 @@
 export const STEP_TYPES = Object.freeze(['talk', 'goto', 'kill', 'defeat', 'collect', 'deliver', 'interact', 'destroy', 'useTechnique',
   'reach', 'race', 'script']);
 export const MEDALS = Object.freeze(['none', 'bronze', 'silver', 'gold']);
-/** onStart ops that are re-run when a saved step resumes (the world they set up is not saved). */
-export const RESUME_OPS = Object.freeze(['spawnGroup', 'startBoss', 'setHour', 'moveNpc']);
+/**
+ * onStart ops that are re-run when a saved step resumes (the world they set up is not saved). Free scripts are
+ * re-run too, with `resumed` set (they skip their story lines) and `left` (the matches the step still needs), so a
+ * step that spawns its enemies, hints or objects from a script rebuilds them after a load.
+ */
+export const RESUME_OPS = Object.freeze(['spawnGroup', 'startBoss', 'setHour', 'moveNpc', 'script']);
 
 /**
  * @typedef {object} QuestHost
@@ -23,7 +27,7 @@ export const RESUME_OPS = Object.freeze(['spawnGroup', 'startBoss', 'setHour', '
  * @property {(itemId:string) => number} count     inventory count
  * @property {(itemId:string, n:number) => boolean} removeItem
  * @property {(type:string, payload:object) => void} emit
- * @property {(actions:any[]) => void} run         run declarative actions
+ * @property {(actions:any[], resume?:{ resumed:boolean, left:number }) => void} run   run declarative actions (resume: re-run after a load)
  * @property {(questId:string, step:any, index:number, resumed:boolean) => void} enter   build the step runtime
  * @property {(questId:string) => void} leave      tear the step runtime down
  * @property {(questId:string) => ({ key:string, args:any }|null)} [objective]  runtime objective override
@@ -227,7 +231,7 @@ export function createQuestEngine(host) {
         if (step.onStart) {
           const acts = [];
           for (const x of step.onStart) if (RESUME_OPS.indexOf(x.op) >= 0) acts.push(x);
-          if (acts.length) host.run(acts);
+          if (acts.length) host.run(acts, { resumed: true, left: Math.max(0, needOf(step) - (a.counts[step.id] || 0)) });
         }
         host.enter(id, step, a.step, true);
       }

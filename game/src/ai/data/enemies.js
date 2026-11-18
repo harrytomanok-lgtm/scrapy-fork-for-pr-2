@@ -84,7 +84,8 @@ const BOSS_PHASES = {
   ],
   iskra: [
     { techs: [{ id: 'ik_blade_string', weight: 3 }, { id: 'ik_flicker_slash', weight: 2 }, { id: 'ik_ice_spears', weight: 2 }] },
-    { techs: [{ id: 'ik_shatterdive', weight: 2 }, { id: 'ik_blade_string', weight: 2 }, { id: 'ik_ice_spears', weight: 2 }, { id: 'ik_flicker_slash', weight: 1 }], speedMult: 1.15 },
+    { techs: [{ id: 'ik_shatterdive', weight: 2 }, { id: 'ik_blade_string', weight: 2 }, { id: 'ik_ice_spears', weight: 2 }, { id: 'ik_flicker_slash', weight: 1 }], speedMult: 1.15,
+      fog: { snow: 1 } },
   ],
   vorrhal: [
     { techs: [{ id: 'vh_tether', weight: 2 }, { id: 'vh_void_bolts', weight: 3 }, { id: 'vh_glass_strike', weight: 2 }] },
@@ -130,6 +131,7 @@ export function bosses() {
         if (ph.speedMult) p.speedMult = ph.speedMult;
         if (ph.defMult) p.defMult = ph.defMult;
         if (ph.summon) p.summon = ph.summon;
+        if (ph.fog) p.fog = Object.assign({}, ph.fog);
         const onEnter = [];
         if (i > 0) onEnter.push({ op: 'banner', kind: 'boss', key: 'boss.' + id + '.phase' + (i + 1) });
         if (ph.onEnter) for (const a of ph.onEnter) onEnter.push(Object.assign({}, a));

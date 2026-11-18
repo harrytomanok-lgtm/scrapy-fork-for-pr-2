@@ -69,7 +69,7 @@ export function createQuests(ctx, rpgInternals) {
     count: (id) => ctx.rpg.count(id),
     removeItem: (id, n) => ctx.rpg.removeItem(id, n),
     emit: (type, p) => ctx.bus.emit(type, p),
-    run: (acts) => quests.runActions(acts),
+    run: (acts, resume) => runList(acts, resume || null),
     enter: enterRuntime,
     leave: teardown,
     objective: (qid) => {
@@ -98,15 +98,15 @@ export function createQuests(ctx, rpgInternals) {
     return { qid, stepIndex: index, cleanups: [], ticks: [], objectiveKey: null, objectiveArgs: null, objectiveQuest: null, prompt: false, finished: false, free: false };
   }
 
-  /** @param {string} scriptId @param {any} rt @param {boolean} resumed */
-  function runScript(scriptId, rt, resumed) {
+  /** @param {string} scriptId @param {any} rt @param {boolean} resumed @param {number} [left] matches the step still needs (resume) */
+  function runScript(scriptId, rt, resumed, left) {
     const fn = scripts.get(scriptId);
     if (!fn) {
       ctx.log.warn('quests', 'unknown script', scriptId);
       return;
     }
     try {
-      fn(ctx, makeApi(rt, resumed));
+      fn(ctx, makeApi(rt, resumed, left));
     } catch (err) {
       ctx.log.warn('quests', 'script threw', scriptId, err);
     }
@@ -133,11 +133,13 @@ export function createQuests(ctx, rpgInternals) {
     if (rt.prompt) ctx.bus.emit('tutorial:prompt', { action: null, textKey: null });
   }
 
-  /** The script api of 4.12 (plus questId, resumed, say and spawnEnemy). */
-  function makeApi(rt, resumed) {
+  /** The script api of 4.12 (plus questId, resumed, left, say and spawnEnemy). */
+  function makeApi(rt, resumed, left) {
     const api = {
       questId: rt.qid,
       resumed: !!resumed,
+      /** A free script re-run by a load: the matches its step still needs (-1 when not known). */
+      left: typeof left === 'number' ? left : -1,
       done() {
         if (rt.finished) return;
         if (rt.free) {
@@ -343,7 +345,26 @@ export function createQuests(ctx, rpgInternals) {
       return npcHome(m.npc, spot) && ((out.x = spot.x), (out.z = spot.z), true);
     }
     if (m.object) return activities.objectPos(m.object, out);
+    if (m.tag) return taggedNearest(m.tag, out);
     return false;
+  }
+
+  /** The living enemy with quest tag `tag` nearest the player (the marker of a kill step whose enemies a script spawns). */
+  function taggedNearest(tag, out) {
+    const p = player();
+    const list = ctx.ents.list('enemy');
+    let best = -1;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (!e.alive || e.questTag !== tag || (e.combat && e.combat.state === 'dead')) continue;
+      const dx = p ? e.pos.x - p.pos.x : 0;
+      const dz = p ? e.pos.z - p.pos.z : 0;
+      const d = dx * dx + dz * dz;
+      if (best >= 0 && d >= best) continue;
+      best = d;
+      out.x = e.pos.x; out.z = e.pos.z;
+    }
+    return best >= 0;
   }
 
   /** The implicit marker of a step without one. */
@@ -428,14 +449,7 @@ export function createQuests(ctx, rpgInternals) {
 
     /** @param {any[]} actions */
     runActions(actions) {
-      if (!Array.isArray(actions)) return;
-      for (const a of actions) {
-        try {
-          runAction(a);
-        } catch (err) {
-          ctx.log.warn('quests', 'action failed', a && a.op, err);
-        }
-      }
+      runList(actions, null);
     },
 
     siphonsSilenced() {
@@ -527,11 +541,32 @@ export function createQuests(ctx, rpgInternals) {
     },
   };
 
-  /** One declarative action (5.6). */
-  function runAction(a) {
+  /**
+   * Run declarative actions. `resume` is set when a saved step's onStart is re-run after a load: bosses skip their
+   * intro, quest groups spawn only the kills the step still needs, and free scripts know they were resumed.
+   * @param {any[]} actions @param {{ resumed:boolean, left:number }|null} resume
+   */
+  function runList(actions, resume) {
+    if (!Array.isArray(actions)) return;
+    for (const a of actions) {
+      try {
+        runAction(a, resume);
+      } catch (err) {
+        ctx.log.warn('quests', 'action failed', a && a.op, err);
+      }
+    }
+  }
+
+  /** One declarative action (5.6). @param {any} a @param {{ resumed:boolean, left:number }|null} [resume] */
+  function runAction(a, resume) {
     const p = player();
     switch (a.op) {
       case 'giveItem': {
+        if (ctx.rpg.grantItem) {
+          const g = ctx.rpg.grantItem(a.item, a.count || 1, typeof a.level === 'number' ? { level: a.level } : undefined);
+          ctx.rpg.toastGrant(a.item, g);
+          break;
+        }
         const uid = ctx.rpg.addItem(a.item, a.count || 1, typeof a.level === 'number' ? { level: a.level } : undefined);
         if (uid) ctx.bus.emit('ui:toast', { key: 'rpg.toast.item', args: { item: ctx.i18n.t('item.' + a.item + '.name'), count: a.count || 1 }, kind: 'good' });
         break;
@@ -546,8 +581,14 @@ export function createQuests(ctx, rpgInternals) {
       case 'unlockForm': ctx.rpg.unlockForm(a.form); break;
       case 'setFlag': ctx.rpg.setFlag(a.key, a.value); break;
       case 'startQuest': quests.start(a.quest); break;
-      case 'spawnGroup': ctx.ai.spawnGroup(a.group, a.x, a.z, { questTag: a.questTag, aggro: !!a.aggro }); break;
-      case 'startBoss': ctx.ai.startBoss(a.boss, {}); break;
+      case 'spawnGroup': {
+        if (resume && a.questTag && resume.left <= 0) break;
+        const ids = ctx.ai.spawnGroup(a.group, a.x, a.z, { questTag: a.questTag, aggro: !!a.aggro });
+        // A load inside a kill step: only the kills it still needs come back.
+        if (resume && a.questTag && Array.isArray(ids)) for (let i = ids.length - 1; i >= resume.left; i--) ctx.ai.despawn(ids[i]);
+        break;
+      }
+      case 'startBoss': ctx.ai.startBoss(a.boss, resume ? { skipIntro: true } : {}); break;
       case 'setHour': ctx.env.setHour(a.hour); break;
       case 'toast': ctx.bus.emit('ui:toast', { key: a.key, args: a.args || null, kind: a.kind || 'info' }); break;
       case 'banner': ctx.bus.emit('ui:banner', { kind: a.kind, key: a.key, args: a.args || null }); break;
@@ -581,7 +622,7 @@ export function createQuests(ctx, rpgInternals) {
         teardown(rt.qid);
         runtime.set(rt.qid, rt);
         runtimeList.push(rt);
-        runScript(a.script, rt, false);
+        runScript(a.script, rt, !!resume, resume ? resume.left : -1);
         break;
       }
       case 'awaken': ctx.rpg.awaken(); break;

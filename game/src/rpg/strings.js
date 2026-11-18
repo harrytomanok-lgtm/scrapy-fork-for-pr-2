@@ -117,6 +117,13 @@ const ROWS = [
   ['quest.sq4.s1', 'Break Rust Golems ({count}/{need})', 'לשבור גולמי חלודה ({count}/{need})'],
   ['quest.sq4.s2', 'Collect rust cores ({count}/{need})', 'לאסוף ליבות חלודה ({count}/{need})'],
   ['quest.sq4.s3', 'Bring the cores to Yael', 'להביא את הליבות אל יעל'],
+  // bag-full toasts and singular forms (added by the gameplay fix pass)
+  ['rpg.toast.itemOne', '{item}', '{item}'],
+  ['rpg.toast.bagFull', 'Bag full: {item} x{count} sold for {n} Shells', 'התיק מלא: {item} ×{count} נמכרו תמורת {n} צדפים'],
+  ['rpg.toast.bagFullOne', 'Bag full: {item} sold for {n} Shells', 'התיק מלא: {item} נמכר תמורת {n} צדפים'],
+  ['rpg.toast.bagFullDrop', 'Bag full: {item} left on the ground', 'התיק מלא: {item} נשאר על הקרקע'],
+  ['rpg.toast.raceFailed', 'Race over', 'המרוץ הסתיים'],
+  ['rpg.toast.wave', 'More of the Choir are coming', 'עוד מן המקהלה בדרך'],
 ];
 
 /** @param {Array<[string, string, string]>} rows */

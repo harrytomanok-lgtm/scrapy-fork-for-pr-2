@@ -14,6 +14,9 @@ const RING_RADIUS = 8;
 const SPIRE_REACH = 25;
 /** MQ1 wisps: the Ora never drops below two bolts (BALANCE.techniques.ora_bolt.ora is 6). */
 const TUT_ORA_FLOOR = 12;
+/** MQ4: where the Choir waves gather on the Tide Beacon headland, and the latest second wave (s). */
+const WAVE_AT = { x: 185, z: 2900 };
+const WAVE_SECONDS = 20;
 
 /** @param {any} ctx */
 const pl = (ctx) => (ctx.player && ctx.player.alive ? ctx.player : null);
@@ -146,8 +149,9 @@ export function registerScripts(ctx) {
   // A wisp that bursts in its own dive (or dies any other way not by the player's hand) does not count toward the
   // kill step, so a replacement drifts in: the step can always be finished.
   Q.registerScript('mq1_wisps', (c, api) => {
-    api.say('mq1_wisps');
-    spawnArc(c, 'ember_wisp', 4, 28, 10, { aggro: true, level: 1, questTag: 'mq1_wisps' });
+    if (!api.resumed) api.say('mq1_wisps');
+    // After a load inside the step only the wisps it still needs drift in (around the Ringstone the load puts the player at).
+    spawnArc(c, 'ember_wisp', api.resumed && api.left >= 0 ? api.left : 4, 28, 10, { aggro: true, level: 1, questTag: 'mq1_wisps' });
     hint(c, 'bolt', 'rpg.tut.bolt');
     let owed = 0;
     api.onEvent('actor:died', (p) => {
@@ -207,8 +211,8 @@ export function registerScripts(ctx) {
 
   // MQ1 step 7 (free script): two boars charge; the first red telegraph slows time.
   Q.registerScript('mq1_boars', (c, api) => {
-    api.say('mq1_boars');
-    spawnArc(c, 'tusk_boar', 2, 18, 0, { aggro: true, level: 1, questTag: 'mq1_boars' });
+    if (!api.resumed) api.say('mq1_boars');
+    spawnArc(c, 'tusk_boar', api.resumed && api.left >= 0 ? api.left : 2, 18, 0, { aggro: true, level: 1, questTag: 'mq1_boars' });
     // The Awakening often leaves the player in the air: the boars are on the ground, so first teach landing.
     const lockHint = () => hint(c, 'lock', c.input && c.input.device === 'touch' ? 'rpg.tut.lockTap' : 'rpg.tut.lock');
     const me = pl(c);
@@ -244,23 +248,68 @@ export function registerScripts(ctx) {
     });
   });
 
-  Q.registerScript('mq1_home', (c, api) => {
-    api.say('mq1_home');
-    api.done();
-  });
+  // Story beats (free scripts): the line plays once, not again after a load inside the step.
+  for (const id of ['mq1_home', 'mq2_raid', 'mq2_durn', 'mq2_siphon']) {
+    Q.registerScript(id, (c, api) => {
+      if (!api.resumed) api.say(id);
+      api.done();
+    });
+  }
 
-  // MQ2 story beats (free scripts).
-  Q.registerScript('mq2_raid', (c, api) => {
-    api.say('mq2_raid');
-    api.done();
-  });
-  Q.registerScript('mq2_durn', (c, api) => {
-    api.say('mq2_durn');
-    api.done();
-  });
-  Q.registerScript('mq2_siphon', (c, api) => {
-    api.say('mq2_siphon');
-    api.done();
+  // MQ4 step 3 (free script): the Choir answers the Dawn Lance in two waves of four (the mq4_wave group, split
+  // alternately so each wave mixes Acolytes and Casters). The second wave comes when the first is down to one, or
+  // after 20 s near the beacon. After a load only the kills the step still needs come back.
+  Q.registerScript('mq4_wave', (c, api) => {
+    const g = c.defs.find('group', 'mq4_wave');
+    if (!g || !c.ai) return api.done();
+    const list = [];
+    for (const m of g.members) for (let k = 0; k < m.count; k++) list.push(m.enemy);
+    const waveA = [];
+    const waveB = [];
+    for (let i = 0; i < list.length; i++) (i % 2 === 0 ? waveA : waveB).push(list[i]);
+    const left = api.resumed && api.left >= 0 ? Math.min(api.left, list.length) : list.length;
+    // On a resume, the kills already made come off the first wave, then off the second.
+    const firstN = Math.max(0, left - waveB.length);
+    const secondN = Math.min(waveB.length, left);
+    const at = { x: 0, y: 0, z: 0 };
+    const spawnWave = (wave, n, from) => {
+      for (let i = 0; i < n; i++) {
+        const id = wave[wave.length - n + i];
+        const a = from + (i / Math.max(1, n)) * Math.PI * 2;
+        let x = WAVE_AT.x + Math.sin(a) * 9;
+        let z = WAVE_AT.z + Math.cos(a) * 9;
+        if (c.world.findSpot && c.world.findSpot(x, z, 6, at, {})) { x = at.x; z = at.z; }
+        c.ai.spawn(id, x, c.world.heightAt(x, z), z, { aggro: true, questTag: 'mq4_wave' });
+      }
+    };
+    let second = secondN > 0;
+    if (firstN > 0) spawnWave(waveA, firstN, 0.4);
+    else if (second) {
+      spawnWave(waveB, secondN, 1.2);
+      second = false;
+    }
+    let t = 0;
+    api.onTick((dt) => {
+      if (!second) return;
+      const p = pl(c);
+      if (!p) return;
+      const dx = p.pos.x - WAVE_AT.x;
+      const dz = p.pos.z - WAVE_AT.z;
+      if (dx * dx + dz * dz < 250 * 250) t += dt;
+      let alive = 0;
+      const enemies = c.ents.list('enemy');
+      for (let i = 0; i < enemies.length; i++) {
+        const e = enemies[i];
+        if (e.alive && e.questTag === 'mq4_wave' && (!e.combat || e.combat.state !== 'dead')) alive++;
+      }
+      if (alive > 1 && t < WAVE_SECONDS) return;
+      second = false;
+      spawnWave(waveB, secondN, 1.2);
+      c.bus.emit('ui:toast', { key: 'rpg.toast.wave', args: null, kind: 'warn' });
+    });
+    api.onEvent('quest:step', (p) => {
+      if (p.questId === 'mq4') api.done();
+    });
   });
 
   // MQ7 step 4: the Spire relights, the credits card.

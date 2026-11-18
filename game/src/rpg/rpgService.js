@@ -467,17 +467,72 @@ export function createRpg(ctx) {
     dropLoot(tableId, level, x, y, z) {
       dropFrom(tableId, level, x, y, z, null, 1);
     },
-    /** @param {string} tableId @param {number} level */
+    /**
+     * Roll a loot table into the bag. Rows report what was really added (`count`); stackables over the carry cap
+     * are sold at once at the sell price (`soldCount`, `soldShells`), and quest items over the cap wait as a pickup
+     * at the player (`dropped`).
+     * @param {string} tableId @param {number} level
+     */
     giveLoot(tableId, level) {
       const t = ctx.defs.find('lootTable', tableId);
       rollLoot(t, level, ctx.rng.sim, gear(), { difficulty: PL().difficulty }, lootOut);
       const out = [];
       for (const r of lootOut) {
-        if (r.kind === 'shells') rpg.addShells(r.count, 'loot');
-        else rpg.addItem(r.itemId, r.count, { level: r.level });
-        out.push({ kind: r.kind, itemId: r.itemId, count: r.count });
+        if (r.kind === 'shells') {
+          rpg.addShells(r.count, 'loot');
+          out.push({ kind: r.kind, itemId: r.itemId, count: r.count, soldCount: 0, soldShells: 0, dropped: 0 });
+          continue;
+        }
+        const g = rpg.grantItem(r.itemId, r.count, { level: r.level });
+        out.push({ kind: r.kind, itemId: r.itemId, count: g.added, soldCount: g.soldCount, soldShells: g.soldShells, dropped: g.dropped });
       }
       return out;
+    },
+
+    /**
+     * Give items without losing any: what the bag cannot hold is sold at once at the sell price (Shells), except
+     * quest items, which wait as a pickup at the player until there is room.
+     * @param {string} itemId @param {number} [count=1] @param {{ level?:number }} [opts]
+     * @returns {{ added:number, soldCount:number, soldShells:number, dropped:number }}
+     */
+    grantItem(itemId, count = 1, opts) {
+      const res = { added: 0, soldCount: 0, soldShells: 0, dropped: 0 };
+      const def = ctx.defs.find('item', itemId);
+      if (!def) return res;
+      const n = Math.max(1, Math.floor(count || 1));
+      const level = opts && typeof opts.level === 'number' ? opts.level : PL().level;
+      const before = def.type === 'gear' ? 0 : I.countOf(INV(), itemId);
+      const uid = rpg.addItem(itemId, n, opts);
+      res.added = def.type === 'gear' ? (uid ? n : 0) : Math.max(0, I.countOf(INV(), itemId) - before);
+      const over = n - res.added;
+      if (over <= 0) return res;
+      if (def.type === 'quest') {
+        const e = ent();
+        if (e) spawnPickup('item', itemId, over, level, null, e.pos.x, e.pos.y, e.pos.z, 0);
+        res.dropped = over;
+        return res;
+      }
+      res.soldCount = over;
+      res.soldShells = I.sellValue(def, { level }, PL().level, over);
+      if (res.soldShells > 0) rpg.addShells(res.soldShells, 'sell');
+      return res;
+    },
+
+    /**
+     * The toasts of a grantItem result: what was added, and what was sold or left on the ground.
+     * @param {string} itemId @param {{ added:number, soldCount:number, soldShells:number, dropped:number }} g
+     */
+    toastGrant(itemId, g) {
+      const item = ctx.i18n.t('item.' + itemId + '.name');
+      if (g.added > 0) {
+        ctx.bus.emit('ui:toast', g.added === 1 ? { key: 'rpg.toast.itemOne', args: { item }, kind: 'good' }
+          : { key: 'rpg.toast.item', args: { item, count: g.added }, kind: 'good' });
+      }
+      if (g.soldCount > 0) {
+        ctx.bus.emit('ui:toast', g.soldCount === 1 ? { key: 'rpg.toast.bagFullOne', args: { item, n: g.soldShells }, kind: 'info' }
+          : { key: 'rpg.toast.bagFull', args: { item, count: g.soldCount, n: g.soldShells }, kind: 'info' });
+      }
+      if (g.dropped > 0) ctx.bus.emit('ui:toast', { key: 'rpg.toast.bagFullDrop', args: { item }, kind: 'warn' });
     },
 
     /** @param {string} key */

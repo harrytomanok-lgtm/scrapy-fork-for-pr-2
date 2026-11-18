@@ -14,7 +14,7 @@ function harness(quests, opts = {}) {
   const entered = [];
   const items = Object.assign({}, opts.items || {});
   const h = {
-    s, events, actions, entered, items, level: 1, siphons: 0,
+    s, events, actions, entered, items, level: 1, siphons: 0, resumes: [],
     host: {
       q: () => s.quests,
       quest: (id) => quests.find((q) => q.id === id) || null,
@@ -25,7 +25,8 @@ function harness(quests, opts = {}) {
       count: (id) => items[id] || 0,
       removeItem: (id, n) => ((items[id] || 0) >= n ? ((items[id] -= n), true) : false),
       emit: (type, p) => events.push([type, Object.assign({}, p)]),
-      run: (acts) => {
+      run: (acts, resume) => {
+        if (resume) h.resumes.push(resume);
         for (const a of acts) {
           actions.push(a);
           if (a.op === 'startQuest') h.engine.start(a.quest);
@@ -183,7 +184,8 @@ test('quest engine: tagged kills count through questTag; resume re-runs only wor
   h2.engine.resume();
   assert.equal(h2.engine.current('mq2').id, 's3');
   assert.equal(h2.engine.active()[0].count, 3);
-  assert.deepEqual(h2.actions.map((a) => a.op), ['spawnGroup'], 'only the world op of onStart re-runs');
+  assert.deepEqual(h2.actions.map((a) => a.op), ['script', 'spawnGroup'], 'the world ops and free scripts of onStart re-run');
+  assert.deepEqual(h2.resumes, [{ resumed: true, left: 1 }], 'with the kills the step still needs');
   assert.deepEqual(h2.entered.at(-1), ['mq2', 's3', true]);
   h2.engine.onDied({ kind: 'enemy', defId: 'choir_caster', questTag: 'mq2_raid' }, true, null);
   assert.equal(h2.engine.current('mq2').id, 's4');

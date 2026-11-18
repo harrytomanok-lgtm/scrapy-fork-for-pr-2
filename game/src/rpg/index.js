@@ -44,6 +44,7 @@ export const pkg = {
     bus.on('actor:died', r.on.died);
     bus.on('actor:died', q.on.died);
     bus.on('player:died', r.on.playerDied);
+    bus.on('player:died', q.activities.playerDied);
     bus.on('combat:form', r.on.recompute);
     bus.on('combat:gather', r.on.gather);
     bus.on('boss:start', r.on.bossStart);
