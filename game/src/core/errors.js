@@ -3,7 +3,8 @@
  *
  * Traps: `window` error and unhandledrejection, and `console.error`, all recorded through `log` (so they appear
  * in `__GAME__.errors`) and reported as `error { message, fatal:false }` once a context exists.
- * WebGL context loss pauses the sim (pause reason 'context') and `render.restore()` runs on restore.
+ * WebGL context loss pauses the sim (pause reason 'context'), shows a 'restoring' toast and `render.restore()` runs
+ * on restore; when no restore comes within CONTEXT_RESTORE_MS the fatal screen replaces the frozen canvas.
  * Fatal errors: the ui package's `fatal` screen once it is installed; before that, or when `ui.open` throws,
  * the foundation's own fatal layer in `dom.layer('fatal')`.
  * @module core/errors
@@ -13,6 +14,8 @@ import { STRINGS } from './strings.js';
 
 /** Pause reason used while the WebGL context is lost. */
 export const CONTEXT_PAUSE = 'context';
+/** How long a lost WebGL context may stay lost before the fatal screen is shown (ms). */
+export const CONTEXT_RESTORE_MS = 8000;
 /**
  * Optional string key of the fatal layer's "try low quality" button (ART_UX 7.2). The button is shown only when a
  * string table defines it, so the fallback layer works with any foundation string set.
@@ -42,7 +45,8 @@ export function errorMessage(err) {
 
 /**
  * Install the error traps.
- * @param {{ log:import('./log.js').Log, dom:import('./dom.js').Dom|null, lang?:'he'|'en', win?:any }} opts
+ * @param {{ log:import('./log.js').Log, dom:import('./dom.js').Dom|null, lang?:'he'|'en', win?:any, restoreMs?:number }} opts
+ *   restoreMs: overrides CONTEXT_RESTORE_MS (tests)
  * @returns {ErrorService}
  */
 export function createErrors(opts) {
@@ -164,6 +168,7 @@ export function createErrors(opts) {
       if (realUi) {
         try {
           ctx.ui.open('fatal', { message });
+          service.fatalShown = true;
           return;
         } catch (e) {
           log.error('fatal', 'ui.open(fatal) threw:', errorMessage(e));
@@ -173,12 +178,30 @@ export function createErrors(opts) {
     },
 
     watchContext(canvas) {
+      /** @type {any} */
+      let giveUp = null;
+      const restoreMs = typeof opts.restoreMs === 'number' ? opts.restoreMs : CONTEXT_RESTORE_MS;
       const onLost = (e) => {
         e.preventDefault();
         log.warn('webgl', 'context lost');
         if (ctx && ctx.time) ctx.time.pause(CONTEXT_PAUSE);
+        if (ctx && ctx.bus) {
+          try {
+            ctx.bus.emit('ui:toast', { key: 'core.fatal.contextLost', args: null, kind: 'warn' });
+          } catch (err) {
+            // the toast is a courtesy; the restore below does not depend on it
+          }
+        }
+        if (giveUp === null) {
+          giveUp = setTimeout(() => {
+            giveUp = null;
+            if (!service.fatalShown) service.fatal(t('core.fatal.contextGone'));
+          }, restoreMs);
+        }
       };
       const onRestored = () => {
+        if (giveUp !== null) clearTimeout(giveUp);
+        giveUp = null;
         log.warn('webgl', 'context restored');
         try {
           if (ctx && ctx.render) ctx.render.restore();
@@ -191,6 +214,7 @@ export function createErrors(opts) {
       canvas.addEventListener('webglcontextlost', onLost, false);
       canvas.addEventListener('webglcontextrestored', onRestored, false);
       undo.push(() => {
+        if (giveUp !== null) clearTimeout(giveUp);
         canvas.removeEventListener('webglcontextlost', onLost, false);
         canvas.removeEventListener('webglcontextrestored', onRestored, false);
       });

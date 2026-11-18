@@ -141,6 +141,14 @@ export function createDom(opts = {}) {
       if (existing) return existing;
       const z = LAYERS.indexOf(name);
       if (z < 0) throw new Error(`dom.layer: unknown layer '${name}' (one of ${LAYERS.join(', ')})`);
+      // Adopt a layer the HTML shell already contains (the static boot splash of tools/build.mjs).
+      for (let c = dom.root.firstElementChild; c; c = c.nextElementSibling) {
+        const el = /** @type {HTMLElement} */ (c);
+        if (el.dataset && el.dataset.layer === name) {
+          layers[name] = el;
+          return el;
+        }
+      }
       const node = doc.createElement('div');
       node.className = 'k-layer k-layer-' + name;
       node.dataset.layer = name;

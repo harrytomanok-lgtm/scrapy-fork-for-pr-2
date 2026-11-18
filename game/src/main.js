@@ -5,6 +5,7 @@
  * @module main
  */
 
+import { markBoot } from './core/bootclock.js';
 import { readFlags } from './core/flags.js';
 import { createLog } from './core/log.js';
 import { createErrors } from './core/errors.js';
@@ -17,12 +18,14 @@ const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0';
 // @ts-ignore defined by tools/build.mjs
 const DEV = typeof __DEV__ !== 'undefined' && !!__DEV__;
 
+markBoot('modules');
 const flags = readFlags();
 const log = createLog({ dev: DEV || flags.test });
 const dom = createDom({ storage: createSafeStorage({ backing: browserStorage, memoryOnly: flags.nosave }) });
 const errors = createErrors({ log, dom, lang: flags.lang || 'he' });
 applyTheme(dom);
 const loading = createLoadingLayer(dom, flags.lang || 'he');
+markBoot('loading');
 
 boot({ flags, log, dom, errors, loading, version: VERSION }).catch((err) => {
   loading.hide();

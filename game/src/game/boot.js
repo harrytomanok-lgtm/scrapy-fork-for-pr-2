@@ -12,12 +12,15 @@ import { createI18n } from '../core/i18n.js';
 import { STRINGS } from '../core/strings.js';
 import { createFx } from '../core/fx.js';
 import { createDebug } from '../core/debug.js';
-import { setTextScale } from '../core/theme.js';
+import { setTextScale, RING_LEN } from '../core/theme.js';
 import { createSession } from './session.js';
+import { markBoot } from '../core/bootclock.js';
 import { installStandins, installPackages, installGlue } from './game.js';
 
 /** Circumference of the loading ring (r = 42). */
-const RING = 2 * Math.PI * 42;
+const RING = RING_LEN;
+/** Longest wait for a paint opportunity between boot stages (rAF does not run in hidden pages). */
+const PAINT_WAIT_MS = 50;
 
 /** Boot progress per phase: [start, end] of the overall 0..1 bar. */
 const PHASES = Object.freeze({
@@ -33,6 +36,8 @@ const PHASES = Object.freeze({
 
 /**
  * The fallback loading layer: an ink background with a ring that fills and one line of text.
+ * It adopts the static splash of the HTML shell (theme.splashMarkup, painted before the script loads) when
+ * present, and builds the same markup otherwise.
  * @param {import('../core/dom.js').Dom} dom
  * @param {'he'|'en'} lang  language used until i18n exists
  * @returns {LoadingLayer}
@@ -43,28 +48,55 @@ export function createLoadingLayer(dom, lang) {
   let t = (key) => table[key] || '';
   const NS = 'http://www.w3.org/2000/svg';
   const layer = dom.layer('overlay');
-  const node = dom.el('div', 'k-loading', layer);
-  node.setAttribute('role', 'status');
-  const title = dom.el('div', 'k-loading-title', node, t('core.game.title'));
-  const svg = dom.doc.createElementNS(NS, 'svg');
-  svg.setAttribute('class', 'k-loading-ring');
-  svg.setAttribute('viewBox', '0 0 96 96');
-  const circle = (cls) => {
-    const c = dom.doc.createElementNS(NS, 'circle');
-    c.setAttribute('class', cls);
-    c.setAttribute('cx', '48');
-    c.setAttribute('cy', '48');
-    c.setAttribute('r', '42');
-    svg.appendChild(c);
-    return c;
-  };
-  circle('k-loading-track');
-  const fill = circle('k-loading-fill');
-  fill.setAttribute('transform', 'rotate(-90 48 48)');
-  fill.setAttribute('stroke-dasharray', String(RING));
+  const splash = /** @type {HTMLElement|null} */ (layer.querySelector('.k-loading'));
+  const splashTitle = splash && splash.querySelector('.k-loading-title');
+  const splashSvg = splash && splash.querySelector('.k-loading-ring');
+  const splashFill = splash && splash.querySelector('.k-loading-fill');
+  const splashText = splash && splash.querySelector('.k-loading-text');
+  /** @type {HTMLElement} */
+  let node;
+  /** @type {HTMLElement} */
+  let title;
+  /** @type {Element} */
+  let svg;
+  /** @type {Element} */
+  let fill;
+  /** @type {HTMLElement} */
+  let text;
+  if (splash && splashTitle && splashSvg && splashFill && splashText) {
+    node = splash;
+    title = /** @type {HTMLElement} */ (splashTitle);
+    title.textContent = t('core.game.title');
+    svg = splashSvg;
+    fill = splashFill;
+    text = /** @type {HTMLElement} */ (splashText);
+  } else {
+    if (splash) splash.remove();
+    node = dom.el('div', 'k-loading', layer);
+    node.setAttribute('role', 'status');
+    title = dom.el('div', 'k-loading-title', node, t('core.game.title'));
+    svg = dom.doc.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'k-loading-ring');
+    svg.setAttribute('viewBox', '0 0 96 96');
+    const circle = (cls) => {
+      const c = dom.doc.createElementNS(NS, 'circle');
+      c.setAttribute('class', cls);
+      c.setAttribute('cx', '48');
+      c.setAttribute('cy', '48');
+      c.setAttribute('r', '42');
+      svg.appendChild(c);
+      return c;
+    };
+    circle('k-loading-track');
+    fill = circle('k-loading-fill');
+    fill.setAttribute('transform', 'rotate(-90 48 48)');
+    fill.setAttribute('stroke-dasharray', String(RING));
+    node.appendChild(svg);
+    text = dom.el('div', 'k-loading-text', node);
+  }
+  // From here on the ring shows the real progress.
+  svg.classList.remove('k-spin');
   fill.setAttribute('stroke-dashoffset', String(RING));
-  node.appendChild(svg);
-  const text = dom.el('div', 'k-loading-text', node);
   let phase = 'boot';
   let progress = 0;
 
@@ -90,6 +122,28 @@ export function createLoadingLayer(dom, lang) {
       node.remove();
     },
   };
+}
+
+/**
+ * Let the browser paint the loading screen between two blocking boot stages: resolves after the next animation
+ * frame, or after PAINT_WAIT_MS when no frame comes (hidden page). Never rejects.
+ * @returns {Promise<void>}
+ */
+export function paintYield() {
+  return new Promise((resolve) => {
+    let done = false;
+    const go = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    setTimeout(go, PAINT_WAIT_MS);
+    try {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(go, 0));
+    } catch (e) {
+      // no animation frames here; the timeout resolves
+    }
+  });
 }
 
 /**
@@ -142,13 +196,16 @@ export async function boot(env) {
   loading.setTranslator((key) => (ctx.i18n.has(key) ? ctx.i18n.t(key) : ''));
   installGlue(ctx, { hideLoading: () => loading.hide() });
   progress(ctx, 'boot', 1);
+  markBoot('context');
 
   try {
     // (3) stand-ins, then the discovered packages; no slot changes after this
     installStandins(ctx);
     const ids = installPackages(ctx);
     log.info('boot', 'packages:', ids.length ? ids.join(', ') : '(none, stand-ins only)');
+    markBoot('installs');
     progress(ctx, 'content', 1);
+    await paintYield();
 
     // (4) renderer, world bake, boot hooks, program warm-up
     if (typeof window !== 'undefined' && typeof /** @type {any} */ (window).WebGL2RenderingContext === 'undefined') {
@@ -158,16 +215,23 @@ export async function boot(env) {
     await ctx.render.init();
     const canvas = ctx.three.renderer && ctx.three.renderer.domElement;
     if (canvas) errors.watchContext(canvas);
+    markBoot('render');
     progress(ctx, 'world', 0);
     await ctx.world.bake((p) => progress(ctx, 'world', p));
+    markBoot('world');
     progress(ctx, 'hooks', 0);
+    await paintYield();
     await ctx.runBootHooks();
+    markBoot('hooks');
     progress(ctx, 'compile', 0);
+    await paintYield();
     await ctx.render.compile();
+    markBoot('compile');
 
     // (5) cross-references
     const v = ctx.defs.validate();
     if (v && !v.ok) log.warn('defs', `${v.errors.length} dangling reference(s):`, v.errors.slice(0, 20).join('; '));
+    markBoot('validate');
 
     // (6) title, or a fresh journey in test mode
     if (flags.test) {
@@ -176,10 +240,12 @@ export async function boot(env) {
       ctx.ui.open('title');
     }
 
+    markBoot(flags.test ? 'session' : 'title');
     // (7) ready
     progress(ctx, 'ready', 1);
     ctx.bus.emit('game:ready', {});
     ctx.loop.renderNow();
+    markBoot('firstFrame');
     loading.hide();
     debug.markReady();
     ctx.loop.start();

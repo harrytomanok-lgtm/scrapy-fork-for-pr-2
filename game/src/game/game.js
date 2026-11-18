@@ -94,9 +94,13 @@ export function installGlue(ctx, hooks) {
     });
   });
   if (!ctx.flags.test && typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
+    const sync = () => {
       if (document.visibilityState === 'hidden') ctx.time.pause('hidden');
       else ctx.time.resume('hidden');
-    });
+    };
+    document.addEventListener('visibilitychange', sync);
+    // A page restored from the back-forward cache or opened in a background tab starts in the right state.
+    if (typeof window !== 'undefined') window.addEventListener('pageshow', sync);
+    sync();
   }
 }
