@@ -22,7 +22,7 @@ const API_MEMBERS = [
   'press', 'hold', 'move', 'look', 'clearInput', 'use', 'lock', 'setCamera',
   'startQuest', 'completeStep', 'questState', 'setFlag', 'open', 'closeAll', 'top', 'setLang', 'setDevice', 'setTier',
   'save', 'load', 'state', 'exportCode', 'importCode',
-  'stats', 'bench', 'events', 'cmd',
+  'stats', 'bench', 'bootTimes', 'events', 'cmd',
 ];
 
 /**
@@ -782,6 +782,265 @@ export const scenarios = [
         assert.deepEqual(bad, [], tag + 'no network request except Google Fonts');
         assert.ok(requests.some((u) => u.startsWith('https://fonts.googleapis.com/css2')), tag + 'the fonts stylesheet is requested');
       }
+    },
+  },
+  {
+    // The published page on a phone: dist/index.html in a sandboxed iframe (allow-scripts only: storage throws,
+    // pointer lock is refused), portrait with a touch screen, normal mode with audio. Checks the boot budget
+    // (loading screen within 1 s, progress), the storage fallback and its warning, audio unlock on the first tap,
+    // the network rule, a refused pointer lock, visibility pause, WebGL context loss (restore, then give-up to the
+    // fatal screen), and resize and rotation without reload.
+    name: 'foundation-platform',
+    width: 400,
+    height: 800,
+    touch: true,
+    async run({ page, assert }) {
+      const origin = new URL(page.url()).origin;
+      const host = await page.context().newPage();
+      const requests = [];
+      const consoleErrors = [];
+      // The browser itself reports each refused pointer lock request on the console; counted, not an error.
+      let lockBlocked = 0;
+      host.on('request', (rq) => requests.push(rq.url()));
+      host.on('console', (m) => {
+        if (m.type() !== 'error' || /fonts\.(googleapis|gstatic)\.com|ERR_FAILED/.test(m.text() + JSON.stringify(m.location()))) return;
+        if (/^Blocked pointer lock/.test(m.text())) lockBlocked++;
+        else consoleErrors.push(m.text());
+      });
+      host.on('pageerror', (e) => consoleErrors.push(String(e && e.message)));
+      host.on('dialog', (d) => {
+        consoleErrors.push('[dialog] ' + d.type());
+        d.dismiss().catch(() => {});
+      });
+      await host.route('**/*', (route) => (route.request().url().startsWith(origin) ? route.continue() : route.abort()));
+      // Probe in the game frame (init scripts run in every frame): when the splash first exists, and the boot,
+      // toast and pause events from the moment the bus exists (boot assigns window.__GAME__ right after it).
+      await host.addInitScript(() => {
+        if (!/index\.html$/.test(location.pathname)) return;
+        const P = { splashAt: -1, boot: [], toasts: [], paused: [], err: '' };
+        /** @type {any} */ (window).__PROBE__ = P;
+        const mo = new MutationObserver(() => {
+          if (P.splashAt < 0 && document.querySelector('.k-loading .k-loading-ring')) {
+            P.splashAt = performance.now();
+            mo.disconnect();
+          }
+        });
+        mo.observe(document, { childList: true, subtree: true });
+        let g;
+        Object.defineProperty(window, '__GAME__', {
+          configurable: true,
+          enumerable: true,
+          get: () => g,
+          set(v) {
+            g = v;
+            try {
+              v.ctx.bus.on('game:boot', (p) => P.boot.push([p.phase, p.progress, performance.now()]), 'probe');
+              v.ctx.bus.on('ui:toast', (p) => P.toasts.push(p.key), 'probe');
+              v.ctx.bus.on('game:paused', (p) => P.paused.push(p.reason + ':' + p.paused), 'probe');
+            } catch (e) {
+              P.err = String(e);
+            }
+          },
+        });
+      });
+      await host.setViewportSize({ width: 400, height: 800 });
+      await host.setContent('<!doctype html><html><head><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style></head>'
+        + '<body><iframe id="f" sandbox="allow-scripts"></iframe></body></html>');
+      await host.evaluate((src) => {
+        /** @type {HTMLIFrameElement} */ (document.getElementById('f')).src = src;
+      }, origin + '/index.html?quality=low&res=0.5&lang=en&tutorial=0');
+      let frame = null;
+      for (let i = 0; i < 100 && !frame; i++) {
+        frame = host.frames().find((f) => f !== host.mainFrame() && f.url() !== 'about:blank') || null;
+        if (!frame) await host.waitForTimeout(100);
+      }
+      assert.ok(frame, 'the iframe exists');
+      await frame.waitForFunction(() => {
+        const g = window.__GAME__;
+        return !!g && (g.isReady() || g.errors.length > 0);
+      }, null, { timeout: 180000, polling: 250 });
+      const shotPath = (n) => join(GAME_ROOT, 'tools', 'out', 'shots', n + '.png');
+
+      // 1. Boot: the splash is in the HTML, painted well within 1 s; the progress is reported in order up to 1.
+      const boot = await frame.evaluate(() => {
+        const g = window.__GAME__;
+        const P = window.__PROBE__;
+        let storageThrows = false;
+        try {
+          void window.localStorage.length;
+        } catch (e) {
+          storageThrows = true;
+        }
+        return {
+          ready: g.isReady(), errors: g.errors.slice(), top: g.top(), times: g.bootTimes(), probe: P ? { splashAt: P.splashAt, boot: P.boot, err: P.err } : null,
+          storageThrows, memoryOnly: g.ctx.save.memoryOnly, test: !!g.flags.test,
+        };
+      });
+      assert.deepEqual(boot.errors, [], 'no errors after boot');
+      assert.equal(boot.ready, true);
+      assert.equal(boot.test, false, 'normal mode');
+      assert.equal(boot.top, 'title');
+      assert.ok(boot.probe && !boot.probe.err, 'the probe runs in the game frame ' + (boot.probe && boot.probe.err));
+      console.log('  boot (ms since navigation): ' + boot.times.stages.map((s) => `${s.stage} ${Math.round(s.at)}`).join(', ')
+        + `; splash ${Math.round(boot.probe.splashAt)}, first contentful paint ${boot.times.firstContentfulPaint}`);
+      // The splash is part of the HTML (parsed before the script is even evaluated), so it is in the first paint.
+      // Paint timing itself is only logged: on this shared machine the compositor of a background page is noisy.
+      assert.ok(boot.probe.splashAt >= 0 && boot.probe.splashAt < 1000, 'the loading splash exists within 1 s (' + boot.probe.splashAt + ')');
+      assert.ok(boot.probe.splashAt < boot.times.stages[0].at, 'the splash comes with the HTML, before the script runs');
+      const prog = boot.probe.boot.map((b) => b[1]);
+      assert.ok(prog.length >= 6, 'boot progress is reported (' + prog.length + ' events)');
+      for (let i = 1; i < prog.length; i++) assert.ok(prog[i] >= prog[i - 1], 'boot progress never goes back');
+      assert.equal(prog[prog.length - 1], 1);
+      for (const ph of ['world', 'hooks', 'compile', 'ready']) assert.ok(boot.probe.boot.some((b) => b[0] === ph), 'boot phase ' + ph);
+      assert.deepEqual(boot.times.stages.map((s) => s.stage),
+        ['script', 'modules', 'loading', 'context', 'installs', 'render', 'world', 'hooks', 'compile', 'validate', 'title', 'firstFrame']);
+
+      // 2. Storage throws in the sandbox: memory fallback, and the session-only warning once a journey starts.
+      assert.equal(boot.storageThrows, true, 'the sandbox blocks localStorage');
+      assert.equal(boot.memoryOnly, true, 'storage failure falls back to memory');
+      const started = await frame.evaluate(async () => {
+        const g = window.__GAME__;
+        g.closeAll();
+        const ok = g.ctx.session.start({ slot: 1, newGame: true });
+        await new Promise((r) => setTimeout(r, 600));
+        return { ok, toasts: window.__PROBE__.toasts.slice(), player: !!g.player(), audioReady: !!g.ctx.audio.ready, saved: g.save() };
+      });
+      assert.equal(started.ok, true, 'the journey starts');
+      assert.ok(started.player, 'the player exists');
+      assert.ok(started.toasts.includes('core.save.memoryOnly'), 'the session-only warning toast fires: ' + started.toasts.join(', '));
+
+      // 3. Audio unlocks on the first tap.
+      assert.equal(started.audioReady, false, 'audio is locked before any gesture');
+      await host.touchscreen.tap(200, 140);
+      await host.waitForTimeout(400);
+      const audio = await frame.evaluate(() => window.__GAME__.ctx.audio.ready);
+      assert.equal(audio, true, 'the first tap unlocks audio');
+
+      // 4. A refused pointer lock (no allow-pointer-lock in the sandbox) changes nothing.
+      const lock = await frame.evaluate(async () => {
+        const g = window.__GAME__;
+        g.ctx.input.requestPointerLock();
+        const canvas = g.ctx.three.renderer.domElement;
+        try {
+          const r = canvas.requestPointerLock();
+          if (r && r.catch) r.catch(() => {});
+        } catch (e) {
+          // refused synchronously in some browsers
+        }
+        const t0 = g.tick();
+        for (let i = 0; i < 80 && g.tick() === t0; i++) await new Promise((r) => setTimeout(r, 100));
+        return { locked: document.pointerLockElement !== null, advanced: g.tick() - t0, errors: g.errors.slice(), reasons: g.ctx.time.reasons(), top: g.top(), vis: document.visibilityState, fps: g.ctx.loop.stats.fps, running: g.ctx.loop.running };
+      });
+      for (let i = 0; i < 3; i++) await host.mouse.click(200, 400 + i * 10);
+      await host.waitForTimeout(300);
+      // 2 explicit requests above; after a refusal, clicks no longer ask (no console spam on every click)
+      assert.ok(lockBlocked <= 2, 'clicks after a refused pointer lock do not ask again (' + lockBlocked + ' refusals)');
+      assert.equal(lock.locked, false, 'pointer lock is refused');
+      assert.ok(lock.advanced > 0, 'the game keeps running ' + JSON.stringify(lock));
+      assert.deepEqual(lock.errors, [], 'a refused pointer lock records no error');
+
+      // 5. Hidden page: pause reason 'hidden' and no sim steps; visible again: the reason is cleared.
+      const vis = await frame.evaluate(async () => {
+        const g = window.__GAME__;
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        g.closeAll();
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        const pausedHidden = g.ctx.time.isPaused('hidden');
+        const t0 = g.tick();
+        await wait(500);
+        const hiddenSteps = g.tick() - t0;
+        delete /** @type {any} */ (document).visibilityState;
+        delete /** @type {any} */ (document).hidden;
+        document.dispatchEvent(new Event('visibilitychange'));
+        const cleared = !g.ctx.time.isPaused('hidden');
+        const top = g.top();
+        g.closeAll();
+        const t1 = g.tick();
+        for (let i = 0; i < 80 && g.tick() === t1; i++) await wait(100);
+        return { pausedHidden, hiddenSteps, cleared, top, resumedSteps: g.tick() - t1, events: window.__PROBE__.paused.slice(), reasons: g.ctx.time.reasons() };
+      });
+      assert.equal(vis.pausedHidden, true, 'hidden pauses the game');
+      assert.equal(vis.hiddenSteps, 0, 'no sim steps while hidden');
+      assert.equal(vis.cleared, true, 'visible again clears the hidden pause');
+      assert.ok(vis.resumedSteps > 0, 'the sim runs again ' + JSON.stringify(vis));
+      assert.ok(vis.events.includes('hidden:true') && vis.events.includes('hidden:false'), 'game:paused reports the hidden pause: ' + vis.events.join(', '));
+
+      // 6. WebGL context loss and restore: paused while lost, then drawing again.
+      const ctxLoss = await frame.evaluate(async () => {
+        const g = window.__GAME__;
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const gl = g.ctx.three.renderer.getContext();
+        const ext = gl.getExtension('WEBGL_lose_context');
+        if (!ext) return { skipped: true };
+        ext.loseContext();
+        for (let i = 0; i < 60 && !g.ctx.time.isPaused('context'); i++) await wait(50);
+        const pausedLost = g.ctx.time.isPaused('context');
+        await wait(1500);
+        const toast = window.__PROBE__.toasts.includes('core.fatal.contextLost');
+        ext.restoreContext();
+        for (let i = 0; i < 100 && (g.ctx.time.isPaused('context') || gl.isContextLost()); i++) await wait(50);
+        const restored = !g.ctx.time.isPaused('context') && !gl.isContextLost();
+        const t0 = g.tick();
+        for (let i = 0; i < 80 && g.tick() === t0; i++) await wait(100);
+        g.ctx.loop.renderNow();
+        const info = g.ctx.three.renderer.info.render;
+        return { pausedLost, toast, restored, steps: g.tick() - t0, calls: info.calls, errors: g.errors.slice(), top: g.top() };
+      });
+      if (!ctxLoss.skipped) {
+        assert.equal(ctxLoss.pausedLost, true, 'context loss pauses the game');
+        assert.equal(ctxLoss.toast, true, 'a context lost for more than a second shows the restoring toast');
+        assert.equal(ctxLoss.restored, true, 'the context is restored and the pause cleared');
+        assert.ok(ctxLoss.steps > 0, 'the sim runs after the restore');
+        assert.ok(ctxLoss.calls > 0, 'the renderer draws after the restore');
+        assert.deepEqual(ctxLoss.errors, [], 'context loss and restore record no error');
+        await host.screenshot({ path: shotPath('foundation-platform-restored') });
+      }
+
+      // 7. Resize and rotation re-lay out without a reload.
+      await frame.evaluate(() => {
+        /** @type {any} */ (window).__keep = 42;
+      });
+      /** @param {number} w @param {number} h */
+      const layout = async (w, h) => {
+        await host.setViewportSize({ width: w, height: h });
+        await host.waitForTimeout(700);
+        return frame.evaluate(() => {
+          const g = window.__GAME__;
+          const c = g.ctx.three.renderer.domElement;
+          return { keep: /** @type {any} */ (window).__keep, cw: c.clientWidth, ch: c.clientHeight, bw: c.width, bh: c.height, aspect: g.ctx.three.camera.aspect, iw: innerWidth, ih: innerHeight };
+        });
+      };
+      const land = await layout(800, 400);
+      await host.screenshot({ path: shotPath('foundation-platform-landscape') });
+      const port = await layout(400, 800);
+      for (const [l, wide] of [[land, true], [port, false]]) {
+        assert.equal(l.keep, 42, 'no reload');
+        assert.ok(Math.abs(l.cw - l.iw) < 2 && Math.abs(l.ch - l.ih) < 2, 'the canvas fills the frame ' + JSON.stringify(l));
+        assert.equal(l.bw / l.bh > 1, wide, 'the drawing buffer follows the orientation ' + JSON.stringify(l));
+        assert.ok(Math.abs(l.aspect - l.iw / l.ih) < 0.05, 'the camera aspect follows the frame ' + JSON.stringify(l));
+      }
+      const beforeGiveUp = await frame.evaluate(() => window.__GAME__.errors.slice());
+      assert.deepEqual(beforeGiveUp, [], 'no errors in the game frame');
+      assert.deepEqual(consoleErrors, [], 'no console errors');
+      const bad = requests.filter((u) => !u.startsWith(origin) && !/^(data:|blob:|about:)/.test(u) && !/^https:\/\/fonts\.(googleapis|gstatic)\.com\//.test(u));
+      assert.deepEqual(bad, [], 'no network request except Google Fonts');
+
+      // 8. A context that never comes back: the fatal screen replaces the frozen canvas.
+      if (!ctxLoss.skipped) {
+        const fatal = await frame.evaluate(async () => {
+          const g = window.__GAME__;
+          const ext = g.ctx.three.renderer.getContext().getExtension('WEBGL_lose_context');
+          ext.loseContext();
+          const t0 = performance.now();
+          while (performance.now() - t0 < 12000 && g.top() !== 'fatal' && !document.querySelector('.k-fatal')) await new Promise((r) => setTimeout(r, 200));
+          return { top: g.top(), layer: !!document.querySelector('.k-fatal'), waited: performance.now() - t0 };
+        });
+        assert.ok(fatal.top === 'fatal' || fatal.layer, 'a lost context that is not restored ends on the fatal screen ' + JSON.stringify(fatal));
+        await host.screenshot({ path: shotPath('foundation-platform-fatal') });
+      }
+      await host.close();
     },
   },
 ];

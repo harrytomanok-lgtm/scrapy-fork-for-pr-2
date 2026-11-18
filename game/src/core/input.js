@@ -458,6 +458,9 @@ export function createKbmSource(input) {
   /** Held look keys: index 2 = lookX, 3 = lookY, each summed with its sign. */
   const look = new Int32Array(4);
   let locked = false;
+  /** The page refused pointer lock before it ever succeeded (sandboxed iframe, unsupported): stop asking. */
+  let lockRefused = false;
+  let everLocked = false;
 
   /** @param {string} action @param {boolean} on */
   function count(action, on) {
@@ -516,7 +519,10 @@ export function createKbmSource(input) {
     if (isInteractive(e.target) || isEditable(e.target)) return;
     const a = /** @type {Record<number, string>} */ (KBM_MOUSE)[e.button];
     if (a) count(a, true);
-    if (e.button === 0 && !locked && input.context === 'game') input.requestPointerLock();
+    // Touch screens send compatibility mouse events: a tap never asks for pointer lock.
+    const caps = /** @type {any} */ (e).sourceCapabilities;
+    if (caps && caps.firesTouchEvents) return;
+    if (e.button === 0 && !locked && !lockRefused && input.context === 'game') input.requestPointerLock();
   }
 
   /** @param {MouseEvent} e */
@@ -539,8 +545,13 @@ export function createKbmSource(input) {
     pulse(input, e.deltaY > 0 ? KBM_WHEEL.down : KBM_WHEEL.up, ID);
   }
 
+  function onLockError() {
+    if (!everLocked) lockRefused = true;
+  }
+
   function onLockChange() {
     const now = !!document.pointerLockElement;
+    if (now) everLocked = true;
     if (locked && !now && input.context === 'game') pulse(input, 'pause', ID);
     locked = now;
   }
@@ -566,6 +577,7 @@ export function createKbmSource(input) {
     [window, 'mousemove', onMouseMove, false],
     [window, 'wheel', onWheel, { passive: true }],
     [document, 'pointerlockchange', onLockChange, false],
+    [document, 'pointerlockerror', onLockError, false],
   ];
   for (const [t, type, fn, opt] of listeners) t.addEventListener(type, fn, opt);
 

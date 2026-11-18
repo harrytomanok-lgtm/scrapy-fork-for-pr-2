@@ -11,7 +11,7 @@ import { createLog } from './core/log.js';
 import { createErrors } from './core/errors.js';
 import { createDom, createSafeStorage, browserStorage } from './core/dom.js';
 import { applyTheme } from './core/theme.js';
-import { boot, createLoadingLayer } from './game/boot.js';
+import { boot, createLoadingLayer, paintYield } from './game/boot.js';
 
 // @ts-ignore defined by tools/build.mjs
 const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0';
@@ -27,7 +27,8 @@ applyTheme(dom);
 const loading = createLoadingLayer(dom, flags.lang || 'he');
 markBoot('loading');
 
-boot({ flags, log, dom, errors, loading, version: VERSION }).catch((err) => {
+// Let the splash (title and progress) paint once before the installs block the main thread.
+paintYield().then(() => boot({ flags, log, dom, errors, loading, version: VERSION })).catch((err) => {
   loading.hide();
   errors.fatal(err);
 });

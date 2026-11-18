@@ -16,6 +16,8 @@ import { STRINGS } from './strings.js';
 export const CONTEXT_PAUSE = 'context';
 /** How long a lost WebGL context may stay lost before the fatal screen is shown (ms). */
 export const CONTEXT_RESTORE_MS = 8000;
+/** A context lost for longer than this shows the 'restoring' toast (ms). */
+export const CONTEXT_NOTICE_MS = 1000;
 /**
  * Optional string key of the fatal layer's "try low quality" button (ART_UX 7.2). The button is shown only when a
  * string table defines it, so the fallback layer works with any foundation string set.
@@ -180,28 +182,36 @@ export function createErrors(opts) {
     watchContext(canvas) {
       /** @type {any} */
       let giveUp = null;
+      /** @type {any} */
+      let notice = null;
       const restoreMs = typeof opts.restoreMs === 'number' ? opts.restoreMs : CONTEXT_RESTORE_MS;
+      const clearTimers = () => {
+        if (giveUp !== null) clearTimeout(giveUp);
+        if (notice !== null) clearTimeout(notice);
+        giveUp = null;
+        notice = null;
+      };
       const onLost = (e) => {
         e.preventDefault();
         log.warn('webgl', 'context lost');
         if (ctx && ctx.time) ctx.time.pause(CONTEXT_PAUSE);
-        if (ctx && ctx.bus) {
+        if (giveUp !== null) return;
+        // Most restores take a few frames: the 'restoring' toast appears only when the loss lasts.
+        notice = setTimeout(() => {
+          notice = null;
           try {
-            ctx.bus.emit('ui:toast', { key: 'core.fatal.contextLost', args: null, kind: 'warn' });
+            if (ctx && ctx.bus) ctx.bus.emit('ui:toast', { key: 'core.fatal.contextLost', args: null, kind: 'warn' });
           } catch (err) {
-            // the toast is a courtesy; the restore below does not depend on it
+            // the toast is a courtesy; the restore does not depend on it
           }
-        }
-        if (giveUp === null) {
-          giveUp = setTimeout(() => {
-            giveUp = null;
-            if (!service.fatalShown) service.fatal(t('core.fatal.contextGone'));
-          }, restoreMs);
-        }
+        }, CONTEXT_NOTICE_MS);
+        giveUp = setTimeout(() => {
+          giveUp = null;
+          if (!service.fatalShown) service.fatal(t('core.fatal.contextGone'));
+        }, restoreMs);
       };
       const onRestored = () => {
-        if (giveUp !== null) clearTimeout(giveUp);
-        giveUp = null;
+        clearTimers();
         log.warn('webgl', 'context restored');
         try {
           if (ctx && ctx.render) ctx.render.restore();
@@ -214,7 +224,7 @@ export function createErrors(opts) {
       canvas.addEventListener('webglcontextlost', onLost, false);
       canvas.addEventListener('webglcontextrestored', onRestored, false);
       undo.push(() => {
-        if (giveUp !== null) clearTimeout(giveUp);
+        clearTimers();
         canvas.removeEventListener('webglcontextlost', onLost, false);
         canvas.removeEventListener('webglcontextrestored', onRestored, false);
       });
