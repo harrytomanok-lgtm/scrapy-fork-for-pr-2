@@ -6,7 +6,7 @@
  */
 
 import {
-  Mesh, CylinderGeometry, SphereGeometry, BufferGeometry, BufferAttribute, ShaderMaterial, Color, Vector3, Quaternion,
+  Mesh, CylinderGeometry, SphereGeometry, PlaneGeometry, BufferGeometry, BufferAttribute, ShaderMaterial, Color, Vector3, Quaternion,
   AdditiveBlending, NormalBlending,
 } from 'three';
 import { PALETTE } from '../core/palette.js';
@@ -15,6 +15,8 @@ import { beamShaders, shellShaders, decalShaders } from './shaders.js';
 export const MAX_BEAMS = 16;
 export const MAX_SHELLS = 28;
 export const MAX_DECALS = 40;
+/** Flame auras (two camera-facing layers each: back body and front wisps). */
+export const MAX_FLAMES = 4;
 const GRID = 17;
 
 /** @param {any} g render.globals @returns {object} */
@@ -43,6 +45,8 @@ export function createMeshFx(ctx) {
   const shells = [];
   /** @type {any[]} */
   const decals = [];
+  /** @type {any[]} */
+  const flames = [];
   let built = false;
   let decalSeq = 1;
   const up = new Vector3(0, 1, 0);
@@ -50,7 +54,7 @@ export function createMeshFx(ctx) {
   const tmpQ = new Quaternion();
 
   const api = {
-    beams, shells, decals,
+    beams, shells, decals, flames,
     /** @param {any} render */
     build(render) {
       if (built) return;
@@ -101,6 +105,33 @@ export function createMeshFx(ctx) {
         mesh.name = 'gfx.shell';
         layer.add(mesh);
         shells.push({ mesh, mat, active: false, kind: 0, t: 0, seconds: 0.3, radius: 1, x: 0, y: 0, z: 0, entId: 0 });
+      }
+      // flame auras: the shell program (style 6+) on camera-facing planes, so no new program is linked
+      const flameGeo = new PlaneGeometry(2, 2, 1, 1);
+      const flameMat = () => {
+        const mat = new ShaderMaterial({
+          uniforms: Object.assign(globalUniforms(gU), {
+            uColor: { value: new Color(PALETTE.ember) }, uFringe: { value: new Color(PALETTE.ember) }, uIntensity: { value: 1.4 },
+            uAlpha: { value: 1 }, uStyle: { value: 6 }, uPhase: { value: 0 }, uFlare: { value: 0 },
+          }),
+          vertexShader: ssh.vert, fragmentShader: ssh.frag, transparent: true, depthWrite: false, blending: AdditiveBlending,
+        });
+        mat.name = 'gfx.shell';
+        return mat;
+      };
+      for (let i = 0; i < MAX_FLAMES; i++) {
+        const back = new Mesh(flameGeo, flameMat());
+        const front = new Mesh(flameGeo, flameMat());
+        for (const m of [back, front]) {
+          m.frustumCulled = false;
+          m.visible = false;
+          m.name = 'gfx.flame';
+          layer.add(m);
+        }
+        back.renderOrder = 6;
+        back.material.blending = NormalBlending;
+        front.renderOrder = 8;
+        flames.push({ back, front, active: false, entId: 0 });
       }
       // decals
       const dsh = decalShaders(render.glsl);
@@ -271,6 +302,7 @@ export function createMeshFx(ctx) {
       const all = [];
       for (const b of beams) all.push(b.mesh);
       for (const s of shells) all.push(s.mesh);
+      for (const f of flames) all.push(f.back, f.front);
       for (const d of decals) {
         all.push(d.mesh);
         d.geo.dispose();
@@ -281,6 +313,7 @@ export function createMeshFx(ctx) {
       }
       beams.length = 0;
       shells.length = 0;
+      flames.length = 0;
       decals.length = 0;
       built = false;
     },

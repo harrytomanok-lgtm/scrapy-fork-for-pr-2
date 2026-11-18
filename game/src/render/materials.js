@@ -75,6 +75,7 @@ export function createMaterials(globals, internal) {
         uNearHide: { value: 0 },
         uRimColor: { value: new Color(PALETTE.ora) },
         uRimStrength: { value: 0 },
+        uCharRim: { value: 0 },
         uDissolve: { value: 0 },
         uFlash: { value: 0 },
         uGhost: { value: 1 },

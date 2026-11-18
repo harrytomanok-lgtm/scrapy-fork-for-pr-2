@@ -191,3 +191,25 @@ test('scatter is deterministic and the tier caps hold', () => {
   assert.ok(trees > 1200 && rocks > 100, `a forest exists (${trees} trees, ${rocks} rocks)`);
   assert.equal(SCATTER_N, 56);
 });
+
+test('the Shattered Crown is one ring of large shards around the top of the Spire', async () => {
+  const { crownShards, CROWN_LARGE, CROWN_SMALL } = await import('../../src/world/gen/pois.js');
+  const base = 120;
+  const s = crownShards(7, base);
+  assert.equal(s.length, CROWN_LARGE + CROWN_SMALL);
+  assert.ok(CROWN_LARGE >= 12 && CROWN_LARGE <= 20, 'twelve to twenty large shards');
+  for (let i = 0; i < s.length; i++) {
+    const d = Math.hypot(s[i].x, s[i].z);
+    const large = i < CROWN_LARGE;
+    assert.ok(d > 110 && d < 230, `shard ${i} sits on the ring around the Spire (${d.toFixed(0)} m out)`);
+    assert.ok(s[i].y > base + 850 && s[i].y < base + 1000, `shard ${i} floats at the top of the Spire`);
+    assert.ok(large ? s[i].r >= 15 : s[i].r < 10, `shard ${i} size`);
+  }
+  // the large shards are evenly spread around the ring (no gap wider than two slots)
+  const ang = s.slice(0, CROWN_LARGE).map((q) => Math.atan2(q.z, q.x)).sort((a, b) => a - b);
+  for (let i = 0; i < ang.length; i++) {
+    const gap = (i + 1 < ang.length ? ang[i + 1] : ang[0] + Math.PI * 2) - ang[i];
+    assert.ok(gap < (Math.PI * 4) / CROWN_LARGE, 'even spacing');
+  }
+  assert.deepEqual(crownShards(7, base), s);
+});

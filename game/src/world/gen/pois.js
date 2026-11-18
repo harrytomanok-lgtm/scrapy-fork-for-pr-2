@@ -41,17 +41,30 @@ export function coverSamples(q) {
   return out;
 }
 
+/** Large Crown shards (they come first in crownShards; crown chests sit on these). */
+export const CROWN_LARGE = 16;
+/** Small Crown shards after the large ones. */
+export const CROWN_SMALL = 6;
+
 /**
- * Crown shard layout around the Spire (GDD 3.3): about 40 floating rocks at 500-900 m, 300-700 m out.
- * @param {number} seed @returns {Array<{x:number,y:number,z:number,r:number,yaw:number,tilt:number}>}
+ * Crown shard layout (GDD 3.3, visual pass 2): a deliberate ring around the top of the Spire, 16 large floating
+ * rocks evenly spaced on a gently waving ring 170 m out, then 6 small ones just inside and outside it. Nothing else
+ * in the sky. `baseY` is the Spire's base height (structures and POIs both pass heightAt(0, 0) - 6).
+ * @param {number} seed @param {number} [baseY] @returns {Array<{x:number,y:number,z:number,r:number,yaw:number,tilt:number}>}
  */
-export function crownShards(seed) {
+export function crownShards(seed, baseY) {
   const rng = createStream((seed ^ hashString('world.crown')) >>> 0);
+  const y0 = (typeof baseY === 'number' ? baseY : 0) + 925;
   const out = [];
-  for (let i = 0; i < 40; i++) {
-    const a = (i / 40) * Math.PI * 2 + rng.range(-0.06, 0.06);
-    const d = 300 + ((i * 7) % 10) * 40 + rng.range(-20, 20);
-    out.push({ x: Math.cos(a) * d, y: rng.range(500, 900), z: Math.sin(a) * d, r: rng.range(14, 32), yaw: rng.range(0, Math.PI * 2), tilt: rng.range(-0.3, 0.3) });
+  for (let i = 0; i < CROWN_LARGE; i++) {
+    const a = (i / CROWN_LARGE) * Math.PI * 2 + rng.range(-0.05, 0.05);
+    const d = 170 + rng.range(-10, 10);
+    out.push({ x: Math.cos(a) * d, y: y0 + Math.sin(a * 3) * 16 + rng.range(-6, 6), z: Math.sin(a) * d, r: rng.range(17, 25), yaw: rng.range(0, Math.PI * 2), tilt: rng.range(-0.25, 0.25) });
+  }
+  for (let i = 0; i < CROWN_SMALL; i++) {
+    const a = ((i + 0.5) / CROWN_SMALL) * Math.PI * 2 + rng.range(-0.2, 0.2);
+    const d = (i % 2 === 0 ? 128 : 212) + rng.range(-8, 8);
+    out.push({ x: Math.cos(a) * d, y: y0 + rng.range(-40, 45), z: Math.sin(a) * d, r: rng.range(6, 9), yaw: rng.range(0, Math.PI * 2), tilt: rng.range(-0.3, 0.3) });
   }
   return out;
 }
@@ -166,9 +179,9 @@ export function placePois(q, seed) {
     const chests = greedy(regionId, 4, () => true, { maxSlope: 0.6 }, (x, z, h) => Math.min(60, h * 0.15));
     chests.forEach((c, i) => add(`chest_${regionId}_${i + 1}`, 'chest', c.x, c.y, c.z, { table: r.chestTable }));
   }
-  const shards = crownShards(seed);
+  const shards = crownShards(seed, q.heightAt(0, 0) - 6);
   for (let n = 1; n <= 6; n++) {
-    const s = shards[(n * 7 + 3) % shards.length];
+    const s = shards[(n * 7 + 3) % CROWN_LARGE];
     add(`crownChest_spire_${n}`, 'crownChest', s.x, s.y + s.r * 0.55, s.z, { table: 'chest_t3' });
   }
   return all;

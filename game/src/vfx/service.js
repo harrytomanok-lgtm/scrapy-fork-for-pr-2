@@ -36,7 +36,7 @@ const TOKENS = {
 const AURA_STYLE = { base: 1, ember: 2, tempest: 3, zenith: 4, enemy: 5 };
 const AURA_COLOR = { base: PALETTE.ora, ember: PALETTE.ember, tempest: PALETTE.tempest, zenith: PALETTE.zenith, enemy: PALETTE.hostile };
 /** Full-screen flashes for feel classes (fx:impact), through the flash budget. */
-const IMPACT_FLASH = { finisher: 0.12, burst: 0.06, ultimate: 0.35, transform: 0.4, bossDeath: 0.3, craterBig: 0.15, perfectGuard: 0.1, levelUp: 0.08 };
+const IMPACT_FLASH = { finisher: 0.12, burst: 0.06, ultimate: 0.35, transform: 0.16, bossDeath: 0.3, craterBig: 0.15, perfectGuard: 0.1, levelUp: 0.08 };
 const DECAL_KIND = { scorch: 0, crack: 1, ring: 2, shape: 3, shock: 4, glyph: 5, glow: 6 };
 
 /** @param {any} ctx */
@@ -54,6 +54,13 @@ export function createVfx(ctx) {
   const cFringe = new Color();
   const cTok = new Color();
   const cTmp = new Color();
+  const cFlB = new Color();
+  const cFlT = new Color();
+  /** Flame aura colours by aura style (body, tips), derived from palette tokens once. */
+  const FLAME_BODY = [new Color(PALETTE.ora), new Color(PALETTE.ora), new Color(PALETTE.scorchRim).lerp(new Color(PALETTE.flora.redLeaf), 0.7),
+    new Color(PALETTE.tempest).offsetHSL(0.015, 0.25, -0.1), new Color(PALETTE.zenith).lerp(new Color(PALETTE.structure.lantern), 0.18)];
+  const FLAME_TIP = [new Color(PALETTE.oraCore), new Color(PALETTE.oraCore).lerp(new Color(PALETTE.ora), 0.4), new Color(PALETTE.biome.meadows.accent),
+    new Color(PALETTE.biome.frostspine.accent).lerp(new Color(PALETTE.ora), 0.35), new Color(PALETTE.structure.lantern)];
   const v1 = new Vector3();
   const v2 = new Vector3();
   const v3 = new Vector3();
@@ -290,7 +297,8 @@ export function createVfx(ctx) {
     const a = {
       entId: 0, shell: /** @type {any} */ (null), cur: 0, target: 0, color: new Color(PALETTE.ora), fringe: new Color(), style: 1,
       flareT: 0, releasing: false, acc: 0, acc2: 0, dustT: 0, wasFull: false, gen: 0, handle: /** @type {any} */ (null), phase: 0,
-      glowId: 0, gx: 0, gz: 0,
+      glowId: 0, gx: 0, gz: 0, gr: 0, flame: /** @type {any} */ (null), flowT: 0, swell: 0, colK: 0, transT: 0, wasTrans: false,
+      gatherT: 0, acc3: 0, ringT: 0,
     };
     auras.push(a);
   }
@@ -882,27 +890,202 @@ export function createVfx(ctx) {
    * one persistent draped decal that follows the body, strength by aura level.
    * @param {any} a @param {number} x @param {number} z @param {number} k strength 0..1
    */
-  function auraGlow(a, x, z, k) {
+  function auraGlow(a, x, z, k, radius) {
     let d = a.glowId ? mfx.findDecal(a.glowId) : null;
     if (!d || d.out > 0) {
       decalOpts.color = a.color.getHex(); decalOpts.seconds = undefined; decalOpts.shape = 'circle';
-      a.glowId = vfx.decal('glow', x, z, 2.1, decalOpts);
+      a.glowId = vfx.decal('glow', x, z, radius, decalOpts);
       d = a.glowId ? mfx.findDecal(a.glowId) : null;
       if (!d) return;
       a.gx = x;
       a.gz = z;
+      a.gr = radius;
     }
     const dx = x - a.gx;
     const dz = z - a.gz;
-    if (dx * dx + dz * dz > 0.04) {
-      mfx.drape(d, 0, x, z, 2.1, 0, 0, 1, 0);
+    if (dx * dx + dz * dz > 0.04 || Math.abs(radius - a.gr) > 0.12) {
+      mfx.drape(d, 0, x, z, radius, 0, 0, 1, 0);
       a.gx = x;
       a.gz = z;
+      a.gr = radius;
     }
     const u = d.mat.uniforms;
-    u.uColor.value.copy(a.color).multiplyScalar(1.25);
+    u.uColor.value.copy(a.style >= 2 && a.style <= 4 ? FLAME_BODY[a.style] : a.color).multiplyScalar(1.25);
     u.uRing.value = a.style;
     d.fill = k;
+  }
+
+  /** Release an aura's flame planes. @param {any} a */
+  function flameOff(a) {
+    const f = a.flame;
+    if (!f) return;
+    f.active = false;
+    f.entId = 0;
+    f.back.visible = false;
+    f.front.visible = false;
+    a.flame = null;
+  }
+
+  /**
+   * The persistent Form (and Gather) flame aura: two camera-facing planes of the flame shader around the body,
+   * the back one behind the body (the body hides its middle), the front one with wisps and streaks only.
+   * @param {any} a @param {number} x @param {number} y feet @param {number} z @param {number} h @param {number} rad
+   * @param {number} k strength @param {number} swell 0..1+ @param {number} col transformation column 0..1 @param {boolean} low
+   */
+  function flameAura(a, x, y, z, h, rad, k, swell, col, low) {
+    let f = a.flame;
+    if (!f) {
+      const list = mfx.flames;
+      for (let i = 0; i < list.length; i++) if (!list[i].active) { f = list[i]; break; }
+      if (!f) return;
+      f.active = true;
+      f.entId = a.entId;
+      a.flame = f;
+    }
+    const cp = ctx.render && ctx.render.globals ? ctx.render.globals.uCamPos.value : null;
+    let dx = cp ? cp.x - x : 0;
+    let dz = cp ? cp.z - z : 1;
+    const dl = Math.sqrt(dx * dx + dz * dz) || 1;
+    dx /= dl;
+    dz /= dl;
+    const yaw = Math.atan2(dx, dz);
+    const st = a.style >= 1 && a.style <= 4 ? a.style : 1;
+    const gather = st === 1;
+    const hw = (rad + (gather ? 0.5 : 0.78)) * (1 + 0.22 * swell) * (1 - 0.35 * col);
+    const hh = h * (gather ? 0.72 : 0.95) * (1 + 0.14 * swell + 1.1 * col);
+    const py = y - 0.1 + hh;
+    const style = gather ? 9 : st + 4;
+    cFlB.copy(gather ? a.color : FLAME_BODY[st]);
+    cFlT.copy(FLAME_TIP[st]);
+    const inten = (low ? 1.2 : 1.35) * (1 + 0.25 * swell + 0.3 * col);
+    const alphaK = Math.min(1, k * 1.2) * (gather ? 0.8 : 1);
+    for (let l = 0; l < 2; l++) {
+      const m = l === 0 ? f.back : f.front;
+      const off = l === 0 ? -0.3 : 0.38;
+      m.position.set(x + dx * off, py, z + dz * off);
+      m.rotation.set(0, yaw, 0);
+      m.scale.set(hw, hh, 1);
+      m.visible = true;
+      const u = m.material.uniforms;
+      u.uStyle.value = style + l * 5;
+      u.uColor.value.copy(cFlB);
+      u.uFringe.value.copy(cFlT);
+      u.uIntensity.value = l === 0 ? 1 : inten;
+      u.uAlpha.value = alphaK * (l === 0 ? 1 : 0.9);
+      u.uPhase.value = a.flowT;
+      u.uFlare.value = Math.min(1.2, swell * 0.8 + col * 0.6);
+    }
+  }
+
+  /**
+   * Gather (charging Ora): energy streams inward toward the chest, small stones and motes lift around the feet.
+   * @param {any} a @param {number} dt @param {number} h @param {number} rad @param {boolean} low
+   */
+  function gatherFx(a, dt, h, rad, low) {
+    const charge = Math.min(1, a.gatherT / 2.5);
+    a.acc3 += (low ? 26 : 50) * (0.6 + 0.6 * charge) * dt;
+    let n = Math.floor(a.acc3);
+    a.acc3 -= n;
+    if (n > 6) n = 6;
+    const tx = v1.x;
+    const ty = v1.y + h * 0.55;
+    const tz = v1.z;
+    for (let q = 0; q < n; q++) {
+      const pi = pool.alloc();
+      if (pi < 0) break;
+      const ang = rnd() * TAU;
+      const r0 = rad + 1.8 + rnd() * 1.4;
+      const sx = tx + Math.cos(ang) * r0;
+      const sy = v1.y + 0.1 + rnd() * h * 1.2;
+      const sz = tz + Math.sin(ang) * r0;
+      let ex = tx - sx;
+      let ey = ty - sy;
+      let ez = tz - sz;
+      const d = Math.sqrt(ex * ex + ey * ey + ez * ez) || 1;
+      const sp = 5 + 3 * charge + rnd() * 1.5;
+      ex /= d; ey /= d; ez /= d;
+      const fr = rnd() < 0.3;
+      tokenColor(fr ? 'fringe' : 'body', cTok);
+      const hh = 1.7 * (low ? 0.85 : 1);
+      pool.px[pi] = sx; pool.py[pi] = sy; pool.pz[pi] = sz;
+      pool.vx[pi] = ex * sp; pool.vy[pi] = ey * sp; pool.vz[pi] = ez * sp;
+      pool.life[pi] = Math.max(0.1, (d - rad * 0.6) / sp);
+      pool.s0[pi] = 0.075; pool.s1[pi] = 0.03;
+      pool.rot[pi] = 0; pool.rotV[pi] = 0;
+      pool.cr[pi] = cTok.r * hh; pool.cg[pi] = cTok.g * hh; pool.cb[pi] = cTok.b * hh; pool.ca[pi] = fr ? 0.7 : 1;
+      pool.grav[pi] = 0; pool.drag[pi] = 0; pool.core[pi] = 0.6; pool.stretch[pi] = 0.11; pool.fadeIn[pi] = 0.25;
+      pool.mat[pi] = 1; pool.cell[pi] = CELL.streak; pool.frames[pi] = 1;
+    }
+    // stones lifting off the ground around the feet, higher as the charge grows
+    const stones = low ? 8 : 12;
+    const base = v1.y + 0.1 + 0.55 * charge;
+    for (let q = 0; q < stones; q++) {
+      const ang = a.phase * 0.8 + (q * TAU) / stones;
+      const rr = rad + 0.9 + 0.35 * Math.sin(q * 2.1 + a.phase * 0.5);
+      const yy = base + 0.4 * Math.sin(q * 1.7 + a.phase * 1.6) * charge + (q % 3) * 0.15 * charge;
+      parts.sprite(2, v1.x + Math.cos(ang) * rr, yy, v1.z + Math.sin(ang) * rr, 0.1 + 0.05 * (q % 3), ang * 3, CELL.pebble,
+        0.75, 0.68, 0.6, Math.min(1, a.gatherT * 2), 0, 0, 0, 0, 0);
+    }
+    // a growing ring of light on the ground and a dust ring pushed out every 0.5-0.8 s
+    auraGlow(a, v1.x, v1.z, 0.6 + 0.4 * charge, 1.6 + 1.6 * charge);
+    a.dustT -= dt;
+    if (a.dustT <= 0) {
+      a.dustT = 0.8 - 0.3 * charge;
+      waveOpts.radius = rad + 2 + 1.5 * charge; waveOpts.seconds = 0.5; waveOpts.color = PALETTE.paper; waveOpts.sphere = false; waveOpts.ground = true;
+      vfx.shockwave(v1.x, v1.y, v1.z, waveOpts);
+    }
+  }
+
+  /**
+   * The transformation (about 1-1.5 s, ART_UX 3.2 without the screen white-out): debris and motes lift around the
+   * hero inside a rising column of the Form flame and a growing ground light; transformEnd throws them outward.
+   * @param {any} a @param {number} dt @param {number} rad @param {boolean} low
+   */
+  function transformFx(a, dt, rad, low) {
+    const e = Math.min(1, a.transT / 1.1);
+    a.acc3 += (low ? 22 : 40) * dt;
+    let n = Math.floor(a.acc3);
+    a.acc3 -= n;
+    if (n > 5) n = 5;
+    for (let q = 0; q < n; q++) {
+      const pi = pool.alloc();
+      if (pi < 0) break;
+      const ang = rnd() * TAU;
+      const rr = rad + 0.5 + rnd() * (1.5 + 2 * e);
+      const stone = rnd() < 0.5;
+      pool.px[pi] = v1.x + Math.cos(ang) * rr; pool.py[pi] = v1.y + 0.05; pool.pz[pi] = v1.z + Math.sin(ang) * rr;
+      pool.vx[pi] = (rnd() - 0.5) * 0.4; pool.vy[pi] = stone ? 1.2 + rnd() * 1.6 : 2.5 + rnd() * 3; pool.vz[pi] = (rnd() - 0.5) * 0.4;
+      pool.life[pi] = stone ? 1.0 + rnd() * 0.5 : 0.6 + rnd() * 0.5;
+      pool.rot[pi] = rnd() * TAU; pool.rotV[pi] = stone ? (rnd() - 0.5) * 4 : 0; pool.fadeIn[pi] = 0.1; pool.frames[pi] = 1;
+      pool.grav[pi] = stone ? -0.3 : -0.8; pool.drag[pi] = 0.6; pool.stretch[pi] = 0;
+      if (stone) {
+        pool.mat[pi] = 2; pool.cell[pi] = CELL.pebble; pool.s0[pi] = 0.12 + rnd() * 0.1; pool.s1[pi] = 0.1; pool.core[pi] = 0;
+        pool.cr[pi] = 0.72; pool.cg[pi] = 0.64; pool.cb[pi] = 0.56; pool.ca[pi] = 1;
+      } else {
+        const hh = 1.8 * (low ? 0.85 : 1);
+        pool.mat[pi] = 0; pool.cell[pi] = CELL.spark; pool.s0[pi] = 0.16; pool.s1[pi] = 0.04; pool.core[pi] = 0.6;
+        pool.cr[pi] = cFlT.r * hh; pool.cg[pi] = cFlT.g * hh; pool.cb[pi] = cFlT.b * hh; pool.ca[pi] = 1;
+      }
+    }
+    auraGlow(a, v1.x, v1.z, 0.7 + 0.3 * e, 1.8 + 2.6 * e);
+  }
+
+  /** The end of the transformation: a dust ring and the lifted debris thrown outward. @param {number} rad */
+  function transformEnd(rad) {
+    waveOpts.radius = rad + 7; waveOpts.seconds = 0.6; waveOpts.color = PALETTE.paper; waveOpts.sphere = false; waveOpts.ground = true;
+    vfx.shockwave(v1.x, v1.y, v1.z, waveOpts);
+    for (let q = 0; q < 16; q++) {
+      const pi = pool.alloc();
+      if (pi < 0) break;
+      const ang = (q / 16) * TAU + rnd() * 0.3;
+      const sp = 7 + rnd() * 5;
+      pool.px[pi] = v1.x + Math.cos(ang) * (rad + 0.6); pool.py[pi] = v1.y + 0.3 + rnd() * 0.8; pool.pz[pi] = v1.z + Math.sin(ang) * (rad + 0.6);
+      pool.vx[pi] = Math.cos(ang) * sp; pool.vy[pi] = 2 + rnd() * 3; pool.vz[pi] = Math.sin(ang) * sp;
+      pool.life[pi] = 0.7 + rnd() * 0.4; pool.rot[pi] = rnd() * TAU; pool.rotV[pi] = (rnd() - 0.5) * 8; pool.fadeIn[pi] = 0; pool.frames[pi] = 1;
+      pool.grav[pi] = 12; pool.drag[pi] = 1.2; pool.stretch[pi] = 0; pool.mat[pi] = 2; pool.cell[pi] = CELL.pebble;
+      pool.s0[pi] = 0.14 + rnd() * 0.1; pool.s1[pi] = 0.12; pool.core[pi] = 0;
+      pool.cr[pi] = 0.72; pool.cg[pi] = 0.64; pool.cb[pi] = 0.56; pool.ca[pi] = 1;
+    }
   }
 
   /** @param {any} c @param {number} dt @param {number} alpha @param {boolean} low */
@@ -919,6 +1102,7 @@ export function createVfx(ctx) {
         s.active = false;
         s.mesh.visible = false;
         auraGlowOff(a);
+        flameOff(a);
         continue;
       }
       if (a.releasing) {
@@ -928,6 +1112,7 @@ export function createVfx(ctx) {
           s.active = false;
           s.mesh.visible = false;
           auraGlowOff(a);
+          flameOff(a);
           continue;
         }
       } else {
@@ -936,9 +1121,14 @@ export function createVfx(ctx) {
       if (a.flareT > 0) a.flareT -= dt;
       const cur = a.cur;
       const form = a.style >= 2 && a.style <= 4;
+      const cs = ent.combat;
+      const transforming = !!(cs && cs.state === 'transform');
+      const gathering = a.style === 1 && !!(cs && cs.gathering);
       if (cur <= 0.01) {
         s.mesh.visible = false;
         auraGlowOff(a);
+        flameOff(a);
+        a.gatherT = 0;
         continue;
       }
       c.ents.renderPos(ent, alpha, v1);
@@ -946,20 +1136,41 @@ export function createVfx(ctx) {
       const rad = ent.radius > 0 ? ent.radius : 0.5;
       const flare = a.flareT > 0 ? a.flareT / 0.15 : 0;
       const grow = 1 + flare * 0.25;
-      // Forms have no shell at rest (ART_UX 2.3): the shell only flashes in on the transformation flare.
-      // Gather (base) and the enemy aura keep the shell.
-      if (form && flare <= 0) {
+      // Forms and the player's Gather wear the flame aura instead of the shell (lead decision, overriding ART_UX
+      // 2.3's 'no shell at rest'); beam charge and the enemy aura keep the cheap shell.
+      const flameOn = form || gathering;
+      if (flameOn) {
         s.mesh.visible = false;
+        const attacking = !!(cs && (cs.state === 'windup' || cs.state === 'active'));
+        a.swell += ((attacking ? 1 : 0) - a.swell) * Math.min(1, dt * (attacking ? 14 : 3));
+        const surgeK = cs && cs.surge > 0 ? Math.min(1, cs.surge / 100) : 0;
+        if (transforming) {
+          if (!a.wasTrans) { a.transT = 0; a.wasTrans = true; }
+          a.transT += dt;
+          a.colK = Math.min(1, a.colK + dt * 3);
+        } else {
+          if (a.wasTrans) { a.wasTrans = false; a.swell = 1.3; transformEnd(rad); }
+          a.colK = Math.max(0, a.colK - dt * 2.5);
+        }
+        a.flowT += dt * (0.9 + 0.7 * a.swell + 0.4 * a.colK);
+        if (gathering) a.gatherT += dt; else a.gatherT = 0;
+        flameAura(a, v1.x, v1.y, v1.z, h, rad, cur, a.swell + 0.45 * surgeK, a.colK, low);
+        if (transforming) transformFx(a, dt, rad, low);
       } else {
+        flameOff(a);
+        a.gatherT = 0;
+        a.wasTrans = false;
+        a.colK = 0;
         s.mesh.position.set(v1.x, v1.y + h * 0.5, v1.z);
         s.mesh.scale.set((rad * 1.3 + 0.3) * grow, h * 0.68 * grow, (rad * 1.3 + 0.3) * grow);
-        s.mesh.visible = true;
+        // a Form or Gather fading out to nothing never flashes the shell egg on its way down
+        s.mesh.visible = a.target > 0.01 || a.releasing;
         const u = s.mat.uniforms;
         u.uStyle.value = a.style;
         u.uColor.value.copy(a.color);
         u.uFringe.value.copy(a.fringe);
         u.uIntensity.value = (1.1 + 0.9 * cur) * hdrMul;
-        u.uAlpha.value = Math.min(1, cur * 1.1) * (low ? 0.85 : 1) * (form ? flare : 1);
+        u.uAlpha.value = Math.min(1, cur * 1.1) * (low ? 0.85 : 1);
         u.uFlare.value = flare;
       }
       const speed = a.style === 3 ? 1.9 : a.style === 4 ? 0.5 : a.style === 2 ? 1.2 : 0.9;
@@ -968,7 +1179,7 @@ export function createVfx(ctx) {
       cBody.copy(a.color);
       cFringe.copy(a.fringe);
       // rising streaks (40/s on high, 15/s on low at full); Forms keep them thin and few: they are accents
-      a.acc += (low ? 15 : 40) * cur * dt * (form ? 0.6 : 1);
+      a.acc += (low ? 15 : 40) * cur * dt * (form ? 0.9 + 0.6 * a.swell : gathering ? 0.4 : 1);
       let n = Math.floor(a.acc);
       a.acc -= n;
       if (n > 8) n = 8;
@@ -992,7 +1203,7 @@ export function createVfx(ctx) {
       }
       // style accents: Ember motes rising from the body, Zenith star motes (Tempest has its ribbons instead)
       if (a.style !== 3) {
-        a.acc2 += (a.style === 2 ? (low ? 22 : 26) : a.style === 4 ? 10 : 6) * cur * dt;
+        a.acc2 += (a.style === 2 ? (low ? 26 : 32) * (1 + 0.6 * a.swell) : a.style === 4 ? 12 : 6) * cur * dt;
         let m = Math.floor(a.acc2);
         a.acc2 -= m;
         if (m > 4) m = 4;
@@ -1078,13 +1289,26 @@ export function createVfx(ctx) {
             }
           }
         }
-        auraGlow(a, v1.x, v1.z, (0.75 + 0.25 * Math.sin(a.phase * 2.3)) * k);
+        if (!transforming) {
+          auraGlow(a, v1.x, v1.z, (0.8 + 0.2 * Math.sin(a.phase * 2.3)) * Math.min(1, k * (1 + 0.3 * a.swell)), 2.9 + 0.5 * a.swell);
+          // Ember and Zenith push a soft dust ring out from the feet (Tempest has its gust ring)
+          if (a.style !== 3) {
+            a.ringT -= dt;
+            if (a.ringT <= 0 && cur > 0.3) {
+              a.ringT = a.style === 4 ? 2.2 : 1.5;
+              waveOpts.radius = rad + 2.6; waveOpts.seconds = 0.7; waveOpts.color = PALETTE.paper; waveOpts.sphere = false; waveOpts.ground = true;
+              vfx.shockwave(v1.x, v1.y, v1.z, waveOpts);
+            }
+          }
+        }
+      } else if (gathering) {
+        gatherFx(a, dt, h, rad, low);
       } else {
         auraGlowOff(a);
       }
       if (!low) {
         // orbiting pebbles and the ground dust ring every 600 ms (Gather and charge; Forms have their own)
-        if (!form) {
+        if (!form && !gathering) {
           const base = v1.y + 0.15 + 0.5 * cur;
           for (let k = 0; k < 12; k++) {
             const ang = a.phase * 1.3 + (k * TAU) / 12;
