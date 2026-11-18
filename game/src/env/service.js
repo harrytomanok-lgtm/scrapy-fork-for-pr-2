@@ -48,6 +48,11 @@ export function createEnv(ctx) {
     shadow: new Color(), night: 0, wind, layers: 1, time: 0,
   };
   const white = new Color(1, 1, 1);
+  /**
+   * Fog override (env.setFog / clearFog): a scripted weather fog (Iskra's blizzard) eased over the region fog.
+   * k eases toward `on` at 1/seconds per second.
+   */
+  const fogOv = { on: 0, k: 0, rate: 1, density: 0.0055, color: new Color(PALETTE.biome.frostspine.fog), snow: 0, sent: -1 };
   /** @type {any} */
   let sky = null;
 
@@ -126,6 +131,24 @@ export function createEnv(ctx) {
     g.uRimColor.value.copy(g.uAmbSky.value).lerp(white, 0.4);
     g.uFogDensity.value = fogDensity(h);
     g.uSunDir.value.copy(sunDir);
+    // scripted fog override: thick fog of its own colour, a dimmer flatter sun, the sky closing in
+    if (fogOv.k !== fogOv.on) {
+      const step = Math.max(0, dt) * fogOv.rate;
+      fogOv.k = fogOv.on > fogOv.k ? Math.min(fogOv.on, fogOv.k + step) : Math.max(fogOv.on, fogOv.k - step);
+    }
+    const fk = fogOv.k * fogOv.k * (3 - 2 * fogOv.k);
+    if (fk > 0) {
+      g.uFogColor.value.lerp(fogOv.color, fk);
+      g.uFogDensity.value += (fogOv.density - g.uFogDensity.value) * fk;
+      g.uSunColor.value.multiplyScalar(1 - 0.45 * fk);
+      g.uAmbSky.value.lerp(fogOv.color, 0.35 * fk);
+      g.uShadowTint.value.lerp(fogOv.color, 0.3 * fk);
+    }
+    const snowK = fogOv.snow * fk;
+    if (Math.abs(snowK - fogOv.sent) > 0.01 && ctx.vfx && typeof ctx.vfx.weather === 'function') {
+      ctx.vfx.weather(snowK > 0.01 ? 'snow' : 'none', snowK);
+      fogOv.sent = snowK;
+    }
 
     // wind: a slowly turning prevailing direction with gusts; y is the sway amplitude in metres
     windT += dt;
@@ -137,6 +160,7 @@ export function createEnv(ctx) {
     const night = nightFactor(h);
     if (sky && cam) {
       setLinear(skyIn.zenith, sample.zenith);
+      if (fk > 0) skyIn.zenith.lerp(g.uFogColor.value, 0.75 * fk);
       skyIn.horizon.copy(g.uFogColor.value);
       skyIn.sunColor.copy(g.uSunColor.value);
       skyIn.ambSky.copy(g.uAmbSky.value);
@@ -214,9 +238,33 @@ export function createEnv(ctx) {
       return settlements.spot(settlementId, spotId, out);
     },
 
+    /**
+     * Scripted fog override (an addition for boss weather such as Iskra's phase-2 blizzard): eases a thick fog of
+     * `color` (default the Frostspine fog) with `density` (exp2 per metre, default 0.0055: about 150 m of sight) over
+     * `seconds` (default 1.5), dims the sun, and with `snow` (0..1, default 0) adds blowing snow through ctx.vfx.
+     * The region fog and the day keys keep running underneath; clearFog eases back.
+     * @param {{ density?:number, color?:number, seconds?:number, snow?:number }} [o]
+     */
+    setFog(o = {}) {
+      const sec = typeof o.seconds === 'number' && o.seconds > 0 ? o.seconds : 1.5;
+      fogOv.density = typeof o.density === 'number' && o.density > 0 ? o.density : 0.0055;
+      fogOv.color.setHex(typeof o.color === 'number' ? o.color : PALETTE.biome.frostspine.fog);
+      fogOv.snow = typeof o.snow === 'number' ? Math.max(0, Math.min(1, o.snow)) : 0;
+      fogOv.rate = 1 / sec;
+      fogOv.on = 1;
+      if (typeof o.seconds === 'number' && o.seconds <= 0) fogOv.k = 1;
+    },
+
+    /** End the fog override, easing back over `seconds` (default 2; 0 = at once). @param {number} [seconds] */
+    clearFog(seconds = 2) {
+      fogOv.on = 0;
+      if (!(seconds > 0)) fogOv.k = 0;
+      else fogOv.rate = 1 / seconds;
+    },
+
     /** Diagnostics for scenarios. */
     info() {
-      return { settlements: settlements.stats(), props: props.count(), sky: !!sky, clockScale };
+      return { settlements: settlements.stats(), props: props.count(), sky: !!sky, clockScale, fog: fogOv.k };
     },
 
     dispose() {
@@ -262,6 +310,8 @@ export function createEnv(ctx) {
 
   /** Apply `flags.hour` (start hour and frozen clock) when a journey loads. */
   function onLoaded() {
+    fogOv.on = 0;
+    fogOv.k = 0;
     lastHourInt = -1;
     lastPhase = '';
     const f = ctx.flags || {};

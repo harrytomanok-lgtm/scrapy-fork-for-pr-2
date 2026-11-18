@@ -333,6 +333,13 @@ export function createVfx(ctx) {
   for (let i = 0; i < MAX_AFTER; i++) afters.push({ on: false, mesh: /** @type {any} */ (null), mat: /** @type {any} */ (null), t: 0, seconds: 0.3, x: 0, y: 0, z: 0, h: 1.8, color: new Color() });
   const lights = [];
   for (let i = 0; i < MAX_LIGHTS; i++) lights.push({ h: /** @type {any} */ (null), t: 0, seconds: 0, x: 0, y: 0, z: 0, color: 0, i: 0, r: 0 });
+  /** The player's boost stage (move:boost) for the speed streaks; the weather layer (env fog override). */
+  let pBoost = 0;
+  let speedK = 0;
+  let speedT = 0;
+  let weatherTarget = 0;
+  let weatherK = 0;
+  let weatherT = 0;
   const boostEnt = new Int32Array(MAX_BOOST);
   const boostHandle = new Int32Array(MAX_BOOST);
 
@@ -661,6 +668,15 @@ export function createVfx(ctx) {
     },
 
     /** Debug and test view of the pools. */
+    /**
+     * Weather layer (an addition for env.setFog): 'snow' draws wind-blown snow around the camera at `amount`
+     * (0..1, eased); 'none' or 0 stops it.
+     * @param {'snow'|'none'} kind @param {number} [amount]
+     */
+    weather(kind, amount = 1) {
+      weatherTarget = kind === 'snow' ? Math.max(0, Math.min(1, amount)) : 0;
+    },
+
     debugState() {
       let em = 0;
       for (let i = 0; i < emitters.length; i++) if (emitters[i].id) em++;
@@ -674,7 +690,7 @@ export function createVfx(ctx) {
       for (let i = 0; i < orbs.length; i++) if (orbs[i].on) ob++;
       let pj = 0;
       for (let i = 0; i < projs.length; i++) if (projs[i].entId) pj++;
-      return { particles: pool.live, cap: pool.cap, emitters: em, beams: bm, decals: dc, shells: sh, orbs: ob, projectiles: pj };
+      return { particles: pool.live, cap: pool.cap, emitters: em, beams: bm, decals: dc, shells: sh, orbs: ob, projectiles: pj, speed: speedK, weather: weatherK };
     },
 
     /** Remove every pooled mesh. */
@@ -1097,6 +1113,97 @@ export function createVfx(ctx) {
     }
   }
 
+  /** Fractional part of a hash of i (stable per streak). @param {number} i @param {number} k */
+  function h01(i, k) {
+    const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  /**
+   * Speed (ART_UX 3.x boost feel, FOV-independent): while the player boosts, world-space wind streaks stream past
+   * the body along its velocity, and at the sonic stage the screen speed lines (render overlay, also on low) run.
+   * @param {any} c @param {number} dt @param {number} alpha @param {boolean} low
+   */
+  function updateSpeed(c, dt, alpha, low) {
+    const p = c.player;
+    const mv = p && p.alive ? p.move : null;
+    const flying = !!mv && (mv.mode === 'fly' || mv.mode === 'air');
+    const v = p ? Math.sqrt(p.vel.x * p.vel.x + p.vel.y * p.vel.y + p.vel.z * p.vel.z) : 0;
+    const target = !p || !p.alive || pBoost === 0 || v < 8 ? 0 : pBoost === 2 ? 1 : flying ? 0.45 : 0.3;
+    speedK += (target - speedK) * Math.min(1, dt * (target > speedK ? 6 : 3));
+    if (speedK < 0.02 || !p) return;
+    if (pBoost === 2 && ctx.render && typeof ctx.render.speedLines === 'function') ctx.render.speedLines(0.35 + 0.65 * speedK);
+    speedT += dt;
+    c.ents.renderPos(p, alpha, v1);
+    const inv = 1 / Math.max(0.001, v);
+    const dx = p.vel.x * inv;
+    const dy = p.vel.y * inv;
+    const dz = p.vel.z * inv;
+    // a frame around the velocity axis
+    let ux = 0; let uy = 1; let uz = 0;
+    if (Math.abs(dy) > 0.9) { ux = 1; uy = 0; }
+    let rx = dy * uz - dz * uy; let ry = dz * ux - dx * uz; let rz = dx * uy - dy * ux;
+    const rl = Math.sqrt(rx * rx + ry * ry + rz * rz) || 1;
+    rx /= rl; ry /= rl; rz /= rl;
+    const qx = ry * dz - rz * dy; const qy = rz * dx - rx * dz; const qz = rx * dy - ry * dx;
+    const n = Math.round((low ? 34 : 56) * speedK);
+    const span = 34;
+    const cy = v1.y + (p.height || 1.8) * 0.5;
+    const rate = (v + 20) / span;
+    for (let i = 0; i < n; i++) {
+      const ph = speedT * rate * (0.8 + 0.4 * h01(i, 1)) + h01(i, 2);
+      const f = ph - Math.floor(ph);
+      const along = (0.6 - f) * span;
+      const ang = h01(i, 3) * TAU;
+      const rad = 1.6 + 5.5 * h01(i, 4);
+      const ox = Math.cos(ang) * rad;
+      const oy = Math.sin(ang) * rad;
+      const px = v1.x + dx * along + rx * ox + qx * oy;
+      const py = cy + dy * along + ry * ox + qy * oy;
+      const pz = v1.z + dz * along + rz * ox + qz * oy;
+      const fade = Math.min(1, f * 5) * Math.min(1, (1 - f) * 4) * speedK;
+      const len = (2 + 4 * h01(i, 5)) * (0.5 + 0.5 * speedK);
+      const w = 0.07 + 0.07 * h01(i, 6);
+      parts.sprite(1, px, py, pz, w, 0, CELL.streak, 1.3, 1.35, 1.4, 0.6 * fade, 0.3, len, dx, dy, dz);
+    }
+  }
+
+  /**
+   * Weather layer (driven by env.setFog's `snow`): wind-blown snow streaks in a box around the camera.
+   * @param {any} c @param {number} dt @param {boolean} low
+   */
+  function updateWeather(c, dt, low) {
+    weatherK += (weatherTarget - weatherK) * Math.min(1, dt * 1.5);
+    if (weatherK < 0.02) return;
+    const cam = c.three && c.three.camera;
+    if (!cam) return;
+    weatherT += dt;
+    const W = ctx.render && ctx.render.globals ? ctx.render.globals.uWind.value : null;
+    const wx = W ? W.x * 7 : 5;
+    const wz = W ? W.z * 7 : 2;
+    const n = Math.round((low ? 170 : 300) * weatherK);
+    const B = 26;
+    const H = 16;
+    const cx = cam.position.x;
+    const cy = cam.position.y;
+    const cz = cam.position.z;
+    const fall = 5.5;
+    for (let i = 0; i < n; i++) {
+      const sp = 0.75 + 0.5 * h01(i, 7);
+      // positions wrap inside the box around the camera, so the snow never runs out and never pops
+      let x = h01(i, 8) * B + wx * weatherT * sp - cx;
+      let y = h01(i, 9) * H - fall * weatherT * sp - cy;
+      let z = h01(i, 10) * B + wz * weatherT * sp - cz;
+      x -= Math.floor(x / B) * B; y -= Math.floor(y / H) * H; z -= Math.floor(z / B) * B;
+      const px = cx + x - B * 0.5;
+      const py = cy + y - H * 0.5;
+      const pz = cz + z - B * 0.5;
+      const edge = Math.min(1, Math.min(x, B - x, z, B - z) / 3) * Math.min(1, Math.min(y, H - y) / 2);
+      // normal-blended soft flakes: additive white would vanish against the bright fog
+      parts.sprite(2, px, py, pz, 0.07 + 0.07 * h01(i, 11), 0, CELL.dot, 1, 1, 1, 0.85 * edge * weatherK, 0.6, 0, 0, 0, 0);
+    }
+  }
+
   /** @param {any} c @param {number} dt */
   function updateShells(c, dt) {
     const shells = mfx.shells;
@@ -1106,8 +1213,19 @@ export function createVfx(ctx) {
       s.t += dt;
       const k = Math.min(1, s.t / s.seconds);
       const e = 1 - (1 - k) * (1 - k) * (1 - k);
-      s.mesh.scale.setScalar(Math.max(0.01, s.radius * e));
-      s.mat.uniforms.uAlpha.value = Math.pow(1 - k, 1.4);
+      const rr = Math.max(0.01, s.radius * e);
+      s.mesh.scale.setScalar(rr);
+      // a shockwave sphere that has swept past the camera would wash the whole screen (and hide the player in
+      // the crater): it fades out while the camera is inside it
+      let inside = 1;
+      const cp = ctx.render && ctx.render.globals ? ctx.render.globals.uCamPos.value : null;
+      if (cp) {
+        const d = cp.distanceTo(s.mesh.position);
+        if (d < rr) inside = d > rr * 0.85 ? (d - rr * 0.85) / (rr * 0.15) : 0;
+      }
+      s.mat.uniforms.uAlpha.value = Math.pow(1 - k, 1.4) * inside;
+      // fully faded spheres around the camera are not drawn at all (a screen of overdraw on the phone)
+      s.mesh.visible = inside > 0.01;
       if (k >= 1) {
         s.active = false;
         s.mesh.visible = false;
@@ -1360,6 +1478,8 @@ export function createVfx(ctx) {
       parts.clearSprites();
       updateEmitters(c, dt, alpha, low);
       updateAuras(c, dt, alpha, low);
+      updateSpeed(c, dt, alpha, low);
+      updateWeather(c, dt, low);
       updateShells(c, dt);
       updateDecals(dt);
       updateOrbs(c, dt, low);
@@ -1547,6 +1667,7 @@ export function createVfx(ctx) {
     /** @param {any} e move:boost */
     boost(e) {
       let slot = -1;
+      if (ctx.player && e.entId === ctx.player.id) pBoost = e.stage;
       for (let i = 0; i < MAX_BOOST; i++) if (boostEnt[i] === e.entId) slot = i;
       if (e.stage === 0) {
         if (slot >= 0) {

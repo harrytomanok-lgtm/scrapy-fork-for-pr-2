@@ -15,6 +15,7 @@ async function opening(game, assert) {
     g.ambient(false);
     g.unlockAll();
     g.god(true);
+    g.setLevel(25);
     g.setHour(12);
     g.killAll();
     g.step(2);
@@ -206,9 +207,103 @@ function actorScenario(tag, width, height) {
   };
 }
 
+/**
+ * Moments: the Bramblehorn arena (dry), Iskra's blizzard (env.setFog with snow), sonic boost flight (speed lines
+ * and wind streaks), and the Ringfall crater aftermath (the player must stay visible).
+ * @param {string} tag @param {number} width @param {number} height
+ */
+function momentScenario(tag, width, height) {
+  return {
+    name: 'look-moments-' + tag,
+    width,
+    height,
+    query: 'res=1',
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      // the Bramblehorn arena is dry ground all the way across
+      const arena = await game((g, src) => {
+        const lm = g.ctx.world.landmark('bramble_hollow');
+        let wet = 0;
+        let minH = 1e9;
+        for (let r = 0; r <= 90; r += 15) {
+          for (let a = 0; a < 12; a++) {
+            const x = lm.x + Math.cos(a * 0.5236) * r;
+            const z = lm.z + Math.sin(a * 0.5236) * r;
+            const h = g.ctx.world.heightAt(x, z);
+            minH = Math.min(minH, h);
+            if (h < 0.5 || g.ctx.world.waterDepthAt(x, z) > 0) wet++;
+          }
+        }
+        (0, eval)('(' + src + ')')(g, { x: lm.x + 40, z: lm.z + 30, yaw: Math.atan2(-40, -30), pitch: -0.15 });
+        return { wet, minH };
+      }, VIEW);
+      assert.equal(arena.wet, 0, `the Bramblehorn arena has no water (lowest ${arena.minH.toFixed(1)} m)`);
+      await shot(`look-${tag}-arena-bramble`);
+      // Iskra's phase-2 blizzard through the env fog override
+      const fog = await game((g, src, spotSrc) => {
+        const r = g.ctx.world.regions.find((q) => q.id === 'frostspine');
+        const p = (0, eval)('(' + spotSrc + ')')(g, r.cx, r.cz);
+        (0, eval)('(' + src + ')')(g, { x: p.x, z: p.z, yaw: Math.atan2(-p.x, -p.z), pitch: -0.1 });
+        g.ctx.env.setFog({ density: 0.0055, seconds: 0, snow: 1 });
+        for (let i = 0; i < 4; i++) g.step(15);
+        return { k: g.ctx.env.info().fog, weather: g.ctx.vfx.debugState().weather };
+      }, VIEW, SPOT);
+      assert.ok(fog.k > 0.99 && fog.weather > 0.2, `the blizzard is on (fog ${fog.k}, snow ${fog.weather})`);
+      await shot(`look-${tag}-blizzard`);
+      await game((g) => { g.ctx.env.clearFog(0); g.step(30); });
+      // sonic boost flight
+      const sonic = await game((g, src) => {
+        const r = g.ctx.world.regions.find((q) => q.id === 'meadows');
+        (0, eval)('(' + src + ')')(g, { x: r.cx, z: r.cz, alt: 70, yaw: Math.atan2(-r.cx, -r.cz), pitch: -0.15 });
+        g.move(0, 1);
+        g.hold('dash', true);
+        for (let i = 0; i < 4; i++) g.step(40);
+        const st = g.stats();
+        return { boost: g.ctx.player.move.boost, speed: g.ctx.vfx.debugState().speed, fx: g.ctx.render.screenFx ? g.ctx.render.screenFx().speed : -1, dc: st.drawCalls };
+      }, VIEW);
+      console.log(`  ${tag} sonic: ${JSON.stringify(sonic)}`);
+      assert.ok(sonic.boost === 2 && sonic.speed > 0.5, `sonic stage with wind streaks (${JSON.stringify(sonic)})`);
+      await shot(`look-${tag}-sonic`);
+      await game((g) => { g.hold('dash', false); g.move(0, 0); g.step(30); });
+      // Ringfall: after the crater forms the player stands in it, in view
+      await game((g, src, spotSrc) => {
+        const r = g.ctx.world.regions.find((q) => q.id === 'meadows');
+        const p = (0, eval)('(' + spotSrc + ')')(g, r.cx - 150, r.cz + 90);
+        (0, eval)('(' + src + ')')(g, { x: p.x, z: p.z, yaw: 2.4, pitch: -0.12 });
+        g.spawn('choir_acolyte', { dist: 4 });
+        g.setSurge(100);
+        g.setOra(9999);
+        g.use('ringfall');
+        // vfx advance at most 0.1 s per rendered frame, so step in 6-tick chunks to keep effect time in step with sim time
+        for (let i = 0; i < 40; i++) g.step(6);
+      }, VIEW, SPOT);
+      const rf = await game((g) => {
+        const p = g.ctx.player;
+        const cam = g.ctx.three.camera;
+        let minClear = 99;
+        for (let k = 1; k < 20; k++) {
+          const t = k / 20;
+          const x = cam.position.x + (p.pos.x - cam.position.x) * t;
+          const y = cam.position.y + (p.pos.y + 1.2 - cam.position.y) * t;
+          const z = cam.position.z + (p.pos.z - cam.position.z) * t;
+          minClear = Math.min(minClear, y - g.ctx.world.heightAt(x, z));
+        }
+        return { minClear, ground: p.pos.y - g.ctx.world.heightAt(p.pos.x, p.pos.z), shells: g.ctx.vfx.debugState().shells };
+      });
+      console.log(`  ${tag} ringfall: ${JSON.stringify(rf)}`);
+      assert.ok(rf.minClear > 0, `the terrain does not hide the player in the crater (${rf.minClear.toFixed(2)} m clear)`);
+      await shot(`look-${tag}-ringfall-after`);
+      const errs = await game((g) => g.errors.filter((e) => e.indexOf('[error]') === 0 || e.indexOf('[fatal]') === 0));
+      assert.equal(errs.length, 0, 'no errors: ' + errs.join(' | '));
+    },
+  };
+}
+
 export const scenarios = [
   worldScenario('portrait', 412, 915),
   worldScenario('landscape', 915, 412),
   actorScenario('portrait', 412, 915),
   actorScenario('landscape', 915, 412),
+  momentScenario('portrait', 412, 915),
+  momentScenario('landscape', 915, 412),
 ];
