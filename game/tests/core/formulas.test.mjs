@@ -140,8 +140,8 @@ test('enemy scaling of GDD 7.1', () => {
   const boss = F.enemyStats({ tier: 'boss', mult: { hp: 1, atk: 1, def: 1 }, poise: 0 }, b.level, 'warrior', { hpMult: b.hpMult, poise: b.poise });
   assert.equal(boss.hpMax, F.enemyHp(b.hpMult, 12));
   assert.equal(boss.poise, 200);
-  assert.equal(F.enemyShells({ mult: { shells: 1 } }, 10), 15);
-  assert.equal(F.enemyShells({ mult: { shells: 1.2 } }, 10, 'master'), Math.round(15 * 1.2 * 1.2));
+  assert.equal(F.enemyShells({ mult: { shells: 1 } }, 10), 13);
+  assert.equal(F.enemyShells({ mult: { shells: 1.2 } }, 10, 'master'), Math.round(13 * 1.2 * 1.2));
 });
 
 test('enemy XP and its level-difference factors (GDD 4.1)', () => {

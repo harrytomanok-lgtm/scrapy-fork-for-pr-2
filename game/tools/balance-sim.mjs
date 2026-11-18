@@ -443,6 +443,12 @@ export function spentBy(stageId, levelAt) {
   return s;
 }
 
+/** Shells per hour from kills alone at a level (the steady income of GDD 10.1). */
+export function killShellsPerHour(level) {
+  const band = level <= 10 ? B.route.bands[1] : B.route.bands[2];
+  return Math.round(band.killsPerMin * 60 * F.enemyShells({ mult: { shells: 1.1 } }, level));
+}
+
 /** Shells per hour at a level on the route (kills at the band rate plus chests), for the GDD 10.1 pacing. */
 export function shellsPerHour(level) {
   const band = level <= 10 ? B.route.bands[1] : B.route.bands[2];
@@ -483,6 +489,7 @@ export function run(diff = 'warrior', prof = MODEL.profiles.player) {
       fights, boss,
       shells: shellsBy(stage.minute, levelAt, diff, stage.id), spent: spentBy(stage.id, levelAt),
       emberSeconds: (p.stats.oraMax - ember.cost) / ember.drain,
+      tempestSeconds: (p.stats.oraMax - B.forms.tempest.cost) / B.forms.tempest.drain,
       gatherRefill: p.stats.oraMax / F.gatherRate(p.base.spr, p.mods),
     });
   }
@@ -553,10 +560,10 @@ const pad = (s, n) => String(s).padEnd(n);
 export function print(res) {
   const lines = [];
   lines.push(`\n=== ${res.diff.toUpperCase()} ===`);
-  lines.push(pad('stage', 8) + pad('min', 5) + pad('region', 11) + pad('band', 7) + pad('PL', 4) + pad('HP', 5) + pad('Ora', 5) + pad('DEF', 5) + pad('mRat', 6) + pad('TP', 7) + pad('dps', 6) + pad('Shells', 12) + 'Ember s / gather s');
+  lines.push(pad('stage', 8) + pad('min', 5) + pad('region', 11) + pad('band', 7) + pad('PL', 4) + pad('HP', 5) + pad('Ora', 5) + pad('DEF', 5) + pad('mRat', 6) + pad('TP', 7) + pad('dps', 6) + pad('Shells', 12) + 'Ember / Tempest s, gather s');
   for (const r of res.rows) {
     lines.push(pad(r.stage, 8) + pad(r.minute, 5) + pad(r.region, 11) + pad(r.band.join('-'), 7) + pad(r.level, 4) + pad(r.hp, 5) + pad(r.ora, 5) + pad(fmt(r.def), 5) + pad(r.mRating, 6)
-      + pad(r.tpSpent + '/' + r.tp, 7) + pad(fmt(r.dpsVsSameLevel), 6) + pad(r.shells + '-' + r.spent, 12) + fmt(r.emberSeconds) + ' / ' + fmt(r.gatherRefill, 1));
+      + pad(r.tpSpent + '/' + r.tp, 7) + pad(fmt(r.dpsVsSameLevel), 6) + pad(r.shells + '-' + r.spent, 12) + fmt(r.emberSeconds) + ' / ' + fmt(r.tempestSeconds) + ', ' + fmt(r.gatherRefill, 1));
     for (const f of r.fights) {
       lines.push('    ' + pad(f.id, 18) + pad('L' + f.levels, 8) + pad('x' + f.n, 4) + 'ttk1 ' + pad(fmt(f.ttkOne, 1), 6) + 'group ' + pad(fmt(f.ttkGroup, 1) + 's', 8)
         + 'in ' + pad(fmt(f.dpsIn, 1) + '/s', 9) + 'lost ' + pad(fmt(f.hpLost) + ' (' + fmt(100 * f.hpLost / r.hp) + '%)', 13) + 'ttd ' + fmt(f.ttd) + 's');
@@ -585,7 +592,7 @@ if (isMain) {
       const g = gruntTargets(L);
       console.log(`  L${L}: ` + Object.entries(g).map(([id, v]) => `${id} ${v.strings.toFixed(2)} strings, ${v.hits.toFixed(1)} hits`).join('; '));
     }
-    console.log(`\nShells per hour: L10 ${shellsPerHour(10)} (GDD ~600), L25 ${shellsPerHour(25)} (GDD ~2500)`);
+    console.log(`\nShells per hour (kills + chests): L10 ${shellsPerHour(10)}, kills only ${killShellsPerHour(10)} (GDD ~600); L25 ${shellsPerHour(25)} (GDD ~2500)`);
     console.log(`TP: total P0 node cost ${totalNodeCost()} (GDD 55); sources 39 + ${B.tp.shrines} + ${Object.values(B.quests).reduce((s, q) => s + (q.tp || 0), 0)}`);
   }
 }
