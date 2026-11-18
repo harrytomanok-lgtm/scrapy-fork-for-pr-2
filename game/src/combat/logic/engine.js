@@ -516,7 +516,7 @@ export function createCombatEngine(ctx) {
         x = ent.pos.x + dx * k;
         z = ent.pos.z + dz * k;
         if (airborne(t) && (airborne(ent) || r.def.id === 'pursuit')) y = t.pos.y + (t.height - ent.height) * 0.5;
-        else if (isPlayer(ent) && r.def.id === 'strike_string' && r.step === 0 && airborne(t)) {
+        else if (isPlayer(ent) && r.def.id === 'strike_string' && r.step === 0 && airborne(t) && (t.tags & TAG.FLYER) !== 0) {
           // The rising lunge: the opening hit of the string carries a grounded hero up to a target hovering within
           // RISE_MAX metres (wisps), and the air string continues from there with the usual hang.
           const up = t.pos.y + (t.height - ent.height) * 0.5 - ent.pos.y;
