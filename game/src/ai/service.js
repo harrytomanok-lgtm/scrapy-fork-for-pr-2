@@ -89,6 +89,8 @@ export function createAi(ctx) {
   const addQueue = [];
   let fleeT = 0;
   let bossEngaged = false;
+  /** The boss was held by a quest script while the player was outside the arena: it waits for the player to return. */
+  let bossHeld = false;
   /** The intro shot is playing (it ends with the sim-time intro, or when the boss goes). */
   let introPlaying = false;
   /** @type {number[]} */
@@ -755,6 +757,7 @@ export function createAi(ctx) {
     addsCalled = false;
     fleeT = 0;
     bossEngaged = false;
+    bossHeld = false;
     phaseDirty = false;
     pending.start(bd.id);
     pBossStart.bossId = bd.id; pBossStart.entId = ent.id;
@@ -892,8 +895,16 @@ export function createAi(ctx) {
         const dz = p.pos.z - lm.z;
         const r = bossDef.arena.radius + BALANCE.bossRules.resetExtra;
         // Only a player who has been at the fight can leave it (a boss started from afar waits).
-        if (dx * dx + dz * dz <= r * r) bossEngaged = true;
-        else if (bossEngaged) ai.resetBoss();
+        // A boss held by a quest script (the MQ7 finale: Tavi carries the threads to the Spire base, outside the
+        // Court) waits instead of resetting, and once released it waits for the player to come back.
+        const scripted = (ent.tags & TAG.SCRIPTED) !== 0;
+        if (dx * dx + dz * dz <= r * r) {
+          bossEngaged = true;
+          bossHeld = scripted;
+        } else if (scripted || bossHeld) {
+          bossEngaged = false;
+          bossHeld = true;
+        } else if (bossEngaged) ai.resetBoss();
       }
       return;
     }

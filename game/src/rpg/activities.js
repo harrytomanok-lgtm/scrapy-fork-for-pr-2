@@ -15,10 +15,14 @@ import { medalFor, gatePassed, siphonOpen } from './logic/activity.js';
 /** The Ringstone prop stands ahead of its POI so a journey (or respawn) never starts inside the stone (11). */
 const RS_DX = 4;
 const RS_DZ = 10;
+/** Interact reach of Ringstones and shrines (m). The stone's collider keeps the player about 4 m from its centre. */
+const STONE_REACH = 6.5;
 const CAMP_CHEST_DX = 5;
 const GATE_RADIUS = 10;
 const SIPHON_WAKE = 150;
 const SIPHON_CYCLE_RANGE = 600;
+/** Beyond this distance from a woken Siphon its guards are sent home (m). */
+const SIPHON_GUARD_LEASH = 400;
 const DISCOVERY_EVERY = 30;
 
 /**
@@ -85,7 +89,7 @@ export function createActivities(ctx, host) {
     const r = add({ id: poi.id, kind: 'ringstone', x: poi.x, y: poi.y, z: poi.z, state: done ? 'active' : 'idle', prop: null, entId: 0, regionId: poi.regionId, data: poi.data });
     r.prop = prop('ringstone', x, y, z, { state: r.state, yaw: Math.PI });
     if (r.prop && done) r.prop.setGlow(0.7);
-    host.quests.addInteractable({ id: poi.id, kind: 'ringstone', x, y: y + 1, z, radius: 4, promptKey: 'rpg.prompt.ringstone', onUse: () => useRingstone(r) });
+    host.quests.addInteractable({ id: poi.id, kind: 'ringstone', x, y: y + 1, z, radius: STONE_REACH, promptKey: 'rpg.prompt.ringstone', onUse: () => useRingstone(r) });
   }
 
   function useRingstone(r) {
@@ -113,7 +117,7 @@ export function createActivities(ctx, host) {
     const r = add({ id: poi.id, kind: 'shrine', x: poi.x, y: poi.y, z: poi.z, state: done ? 'claimed' : 'ready', prop: null, entId: 0, regionId: poi.regionId, data: poi.data });
     r.prop = prop('shrine', poi.x, poi.y, poi.z, { state: r.state });
     if (r.prop && !done) r.prop.setGlow(0.9);
-    host.quests.addInteractable({ id: poi.id, kind: 'shrine', x: poi.x, y: poi.y + 1, z: poi.z, radius: 4, promptKey: 'rpg.prompt.shrine', enabled: !done,
+    host.quests.addInteractable({ id: poi.id, kind: 'shrine', x: poi.x, y: poi.y + 1, z: poi.z, radius: STONE_REACH, promptKey: 'rpg.prompt.shrine', enabled: !done,
       onUse: () => claimShrine(r) });
   }
 
@@ -240,6 +244,18 @@ export function createActivities(ctx, host) {
     const dz = p.pos.z - r.z;
     const d2 = dx * dx + dz * dz;
     const e = r.entId ? ctx.ents.get(r.entId) : null;
+    // The player left a woken (or silenced) Siphon: its guards go home (they would hold the active-enemy cap from
+    // kilometres away and starve the ambient spawner) and wake again on the next approach.
+    if (d.woke && d2 > SIPHON_GUARD_LEASH * SIPHON_GUARD_LEASH) {
+      const tag = r.id + '_guard';
+      const list = ctx.ents.list('enemy');
+      for (let i = list.length - 1; i >= 0; i--) {
+        const g = list[i];
+        if (g.alive && g.questTag === tag && ctx.ai) ctx.ai.despawn(g.id);
+      }
+      d.woke = false;
+      d.wave2 = false;
+    }
     if (!e || !e.alive) return;
     if (!d.woke && d2 < SIPHON_WAKE * SIPHON_WAKE) {
       d.woke = true;
@@ -449,7 +465,7 @@ export function createActivities(ctx, host) {
     /** @param {any} c @param {number} dt @param {any} p */
     step(c, dt, p) {
       tickN++;
-      for (let i = 0; i < recs.length; i++) if (recs[i].kind === 'siphon' && recs[i].entId) stepSiphon(recs[i], dt, p);
+      for (let i = 0; i < recs.length; i++) if (recs[i].kind === 'siphon' && (recs[i].entId || recs[i].data.woke)) stepSiphon(recs[i], dt, p);
       if (race.active) stepRace(dt, p);
       if (tickN % DISCOVERY_EVERY === 0) stepDiscovery(p);
     },

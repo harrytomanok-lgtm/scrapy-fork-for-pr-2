@@ -17,7 +17,9 @@ import { registerOtherScreens } from './screens/other.js';
 
 const OWNER = 'ui';
 /** Screens that cover the HUD completely. */
-const BLOCKING = Object.freeze(['title', 'loading', 'newgame', 'ending', 'fatal', 'death']);
+const BLOCKING = Object.freeze(['title', 'loading', 'newgame', 'ending', 'fatal', 'death',
+  // Full-panel menus hide the HUD too, so nothing shows through their backdrop.
+  'pause', 'character', 'techniques', 'inventory', 'quests', 'map', 'settings', 'controls', 'savecode', 'shop']);
 const HUD_MENUS = Object.freeze({ map: 'map', menuQuests: 'quests', menuInventory: 'inventory', menuTechniques: 'techniques', menuCharacter: 'character' });
 
 /**

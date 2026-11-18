@@ -12,6 +12,8 @@ import { PALETTE } from '../core/palette.js';
 const POST = { x: -1645, z: 1852 };
 const RING_RADIUS = 8;
 const SPIRE_REACH = 25;
+/** MQ1 wisps: the Ora never drops below two bolts (BALANCE.techniques.ora_bolt.ora is 6). */
+const TUT_ORA_FLOOR = 12;
 
 /** @param {any} ctx */
 const pl = (ctx) => (ctx.player && ctx.player.alive ? ctx.player : null);
@@ -141,11 +143,35 @@ export function registerScripts(ctx) {
   });
 
   // MQ1 step 5 (free script): four wisps drift in; bolt them.
+  // A wisp that bursts in its own dive (or dies any other way not by the player's hand) does not count toward the
+  // kill step, so a replacement drifts in: the step can always be finished.
   Q.registerScript('mq1_wisps', (c, api) => {
     api.say('mq1_wisps');
     spawnArc(c, 'ember_wisp', 4, 28, 10, { aggro: true, level: 1, questTag: 'mq1_wisps' });
     hint(c, 'bolt', 'rpg.tut.bolt');
-    api.done();
+    let owed = 0;
+    api.onEvent('actor:died', (p) => {
+      if (p.questTag !== 'mq1_wisps' || p.kind !== 'enemy') return;
+      const me = pl(c);
+      if (!me || p.sourceId !== me.id) owed++;
+    });
+    // Gather is taught only in the next beat, so the Ora for the bolts never runs dry here (boosting through the
+    // ring line spends it and stops regen): full at the start, then a floor of two bolts.
+    const me0 = pl(c);
+    if (me0 && me0.stats) c.combat.addOra(me0, me0.stats.oraMax);
+    api.onTick(() => {
+      const me = pl(c);
+      if (me && me.stats && me.stats.ora < TUT_ORA_FLOOR) c.combat.addOra(me, TUT_ORA_FLOOR - me.stats.ora);
+    });
+    // Spawned from the script phase, not inside the death callback.
+    api.onTick(() => {
+      if (owed <= 0 || !pl(c)) return;
+      owed--;
+      spawnArc(c, 'ember_wisp', 1, 26, 10, { aggro: true, level: 1, questTag: 'mq1_wisps' });
+    });
+    api.onEvent('quest:step', (p) => {
+      if (p.questId === 'mq1') api.done();
+    });
   });
 
   // MQ1 step 6: Gather to full Ora -> the scripted Ora Awakening burst.
@@ -183,7 +209,25 @@ export function registerScripts(ctx) {
   Q.registerScript('mq1_boars', (c, api) => {
     api.say('mq1_boars');
     spawnArc(c, 'tusk_boar', 2, 18, 0, { aggro: true, level: 1, questTag: 'mq1_boars' });
-    hint(c, 'lock', 'rpg.tut.lock');
+    // The Awakening often leaves the player in the air: the boars are on the ground, so first teach landing.
+    const lockHint = () => hint(c, 'lock', c.input && c.input.device === 'touch' ? 'rpg.tut.lockTap' : 'rpg.tut.lock');
+    const me = pl(c);
+    let landing = !!(me && me.move && me.move.mode === 'fly');
+    if (landing) hint(c, 'descend', 'rpg.tut.land');
+    else lockHint();
+    let locked = false;
+    api.onTick(() => {
+      const e = pl(c);
+      if (!e || !e.move) return;
+      if (landing && e.move.mode !== 'fly') {
+        landing = false;
+        lockHint();
+      }
+      if (!locked && !landing && c.combat && c.combat.target() > 0) {
+        locked = true;
+        hint(c, 'attack', 'rpg.tut.heavy');
+      }
+    });
     let slowed = false;
     api.onEvent('combat:telegraph', (p) => {
       if (slowed || p.kind !== 'red') return;
@@ -194,7 +238,9 @@ export function registerScripts(ctx) {
       hint(c, 'dash', 'rpg.tut.flicker');
     });
     api.onEvent('quest:step', (p) => {
-      if (p.questId === 'mq1') api.done();
+      if (p.questId !== 'mq1') return;
+      hint(c, null, null);
+      api.done();
     });
   });
 
@@ -227,7 +273,10 @@ export function registerScripts(ctx) {
       c.combat.addOra(p, p.stats.oraMax);
     }
     c.rpg.setFlag('ending', true);
-    api.say('mq7_ending').then(() => {
+    // The credits card (nothing else opens the ui 'ending' screen) opens a moment after the last line, once the
+    // dialogue screen has closed; free roam resumes when it is closed.
+    api.say('mq7_ending').then(() => api.wait(0.3)).then(() => {
+      if (c.ui) c.ui.open('ending', {});
       c.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.freeRoam', args: null });
       api.done();
     });

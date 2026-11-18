@@ -413,7 +413,7 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
 
   // ------------------------------------------------------------------ shop
   reg('shop', () => {
-    const { root, body, ribbon } = shell(kit, { ribbon: 'ui.shop.title', ribbonIcon: 'shell' });
+    const { root, body, ribbon } = shell(kit, { ribbon: 'ui.shop.title', ribbonIcon: 'shell', cls: 'ui-menuscr' });
     const head = kit.el('div', 'ui-spread', body);
     const tabs = tabRow(kit, head, [{ id: 'buy', key: 'ui.shop.buy' }, { id: 'sell', key: 'ui.shop.sell' }], () => render());
     tabs.bar.classList.add('ui-grow');

@@ -21,6 +21,8 @@ import { hudMode } from './logic/layout.js';
 const TEXT_PERIOD = 1 / 15;
 const TOAST_SECONDS = 3;
 const BANNER_SECONDS = 2.2;
+/** Combat call-out banners (Break!, Perfect!) are brief. */
+const CALLOUT_SECONDS = 0.9;
 const DMG_LIFE = 0.7;
 const DMG_COUNT = 24;
 const PIP_COUNT = 10;
@@ -276,6 +278,8 @@ export function createHud(ctx, kit, ui) {
   let viewW = 0;
   let viewH = 0;
   let layoutDirty = true;
+  /** Text ticks left to retry placing the tutorial ghost (a control can appear a few frames after its prompt). */
+  let ghostRetry = 0;
   let fadeT = 0;
   let faded = false;
   let chipVal = 1;
@@ -313,6 +317,7 @@ export function createHud(ctx, kit, ui) {
 
   function relayout() {
     layoutDirty = false;
+    ghostRetry = 8;
     const w = window.innerWidth || dom.root.clientWidth;
     const h = window.innerHeight || dom.root.clientHeight;
     const dev = ctx.input.device;
@@ -354,7 +359,8 @@ export function createHud(ctx, kit, ui) {
     toastBox.appendChild(s.node);
     void s.node.offsetWidth;
     s.node.classList.add('ui-on');
-    s.until = clock + TOAST_SECONDS;
+    // A toast that arrives under a big banner gets its full time after the banner.
+    s.until = clock + TOAST_SECONDS + (bannerUntil > clock && root.classList.contains('ui-bnr') ? bannerUntil - clock : 0);
   }
 
   /** @param {string} kind @param {string} key @param {any} args */
@@ -364,7 +370,9 @@ export function createHud(ctx, kit, ui) {
     banner.className = 'ui-banner ui-k-' + kind;
     void banner.offsetWidth;
     banner.classList.add('ui-on');
-    bannerUntil = clock + BANNER_SECONDS;
+    // Big banners share the top band with the toasts outside portrait: the toasts wait out of sight meanwhile.
+    root.classList.toggle('ui-bnr', kind !== 'break' && kind !== 'perfect' && kind !== 'danger');
+    bannerUntil = clock + (kind === 'break' || kind === 'perfect' || kind === 'danger' ? CALLOUT_SECONDS : BANNER_SECONDS);
   }
   function renderBanner() {
     if (!bannerNow) return;
@@ -409,6 +417,7 @@ export function createHud(ctx, kit, ui) {
     } else promptGlyph.hidden = true;
     promptText.textContent = tutKey ? kit.t(tutKey) : kit.t('ui.action.' + tutAction);
     prompt.hidden = false;
+    ghostRetry = 8;
     placeGhost();
   }
   /** Ring the real touch control of the prompted action (layout read on events only). */
@@ -772,6 +781,7 @@ export function createHud(ctx, kit, ui) {
         bannerUntil = 0;
         bannerNow = null;
         banner.classList.remove('ui-on');
+        root.classList.remove('ui-bnr');
       }
       if (saveUntil && saveUntil <= clock) {
         saveUntil = 0;
@@ -786,6 +796,10 @@ export function createHud(ctx, kit, ui) {
       textAcc += d;
       if (textAcc < TEXT_PERIOD && dt > 0) return;
       textAcc = 0;
+      if (ghostRetry > 0 && !prompt.hidden) {
+        ghostRetry--;
+        placeGhost();
+      }
       framePips(p);
       const surge = p.combat ? Math.min(1, p.combat.surge / BALANCE.surge.max) : 0;
       if (last.surge !== surge) {

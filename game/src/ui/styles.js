@@ -141,6 +141,8 @@ export const UI_CSS = `
   display:flex;flex-direction:column;gap:6px;align-items:center}
 .ui-m-portrait .ui-toasts{inset-block-start:auto;inset-block-end:calc(32% + 64px);flex-direction:column-reverse;inline-size:min(320px,calc(100% - 32px))}
 .ui-m-desktop .ui-toasts{inset-block-start:calc(var(--safe-top) + 84px)}
+.ui-toasts{transition:opacity 200ms ease-out}
+.ui-hud.ui-bnr:not(.ui-m-portrait) .ui-toasts{opacity:0}
 .ui-toast{position:relative;max-inline-size:100%;display:flex;gap:8px;align-items:center;padding:6px 12px;background:var(--panel);
   box-shadow:0 0 0 2px var(--ink);font-size:var(--fs-small);line-height:1.3;clip-path:${CUT_S};opacity:0;transform:translateY(-6px);
   transition:opacity 180ms ease-out,transform 180ms var(--ui-ease)}
@@ -153,7 +155,7 @@ export const UI_CSS = `
 .ui-toast span{overflow:hidden;text-overflow:ellipsis}
 .ui-m-short .ui-toast span{white-space:nowrap}
 
-.ui-banner{position:absolute;top:28%;left:50%;transform:translate(-50%,-50%) scale(.92);display:flex;flex-direction:column;align-items:center;gap:2px;
+.ui-banner{position:absolute;top:24%;left:50%;transform:translate(-50%,-50%) scale(.92);display:flex;flex-direction:column;align-items:center;gap:2px;
   opacity:0;transition:opacity 220ms ease-out,transform 260ms var(--ui-ease);max-inline-size:calc(100% - 32px)}
 .ui-banner.ui-on{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .ui-banner-kicker{font-size:var(--fs-small);letter-spacing:.14em;color:var(--paper);text-shadow:${OUTLINE}}
@@ -164,6 +166,12 @@ export const UI_CSS = `
 .ui-banner.ui-k-level .ui-banner-main{background:linear-gradient(to bottom,#FFF6D8,var(--ui-crit))}
 .ui-banner.ui-k-break .ui-banner-main,.ui-banner.ui-k-danger .ui-banner-main{background:var(--danger);color:var(--paper)}
 .ui-banner.ui-k-perfect .ui-banner-main{background:var(--accent)}
+.ui-m-portrait .ui-banner{top:21%}
+/* Combat call-outs (Break!, Perfect!) are small, short and beside the action, not on it. */
+.ui-banner.ui-k-break,.ui-banner.ui-k-perfect,.ui-banner.ui-k-danger{top:31%;left:74%}
+.ui-m-portrait .ui-banner.ui-k-break,.ui-m-portrait .ui-banner.ui-k-perfect,.ui-m-portrait .ui-banner.ui-k-danger{top:24%;left:70%}
+.ui-banner.ui-k-break .ui-banner-main,.ui-banner.ui-k-perfect .ui-banner-main,.ui-banner.ui-k-danger .ui-banner-main{
+  font-size:var(--fs-body);padding:3px 16px 4px;clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,8px 100%,0 50%)}
 .ui-banner.ui-k-region .ui-banner-main{background:transparent;color:var(--paper);text-shadow:${OUTLINE};padding-inline:12px;font-size:var(--fs-title)}
 .ui-banner.ui-k-region .ui-banner-kicker::after{content:"";display:block;margin:4px auto 0;inline-size:60%;block-size:2px;background:var(--paper)}
 
@@ -223,6 +231,7 @@ export const UI_CSS = `
   padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
   background:var(--ui-dim);animation:ui-fadein 180ms ease-out;overflow:hidden}
 .ui-scr[hidden]{display:none}
+.ui-scr.ui-menuscr{background:rgba(27,22,38,.88)}
 .ui-scr.ui-solid{background:var(--ink)}
 .ui-scr.ui-clear{background:transparent}
 .ui-scr.ui-low{align-items:flex-end}
@@ -326,14 +335,15 @@ export const UI_CSS = `
   font:12px/1.4 ui-monospace,monospace;direction:ltr;text-align:left;word-break:break-all}
 
 /* title and loading */
-.ui-title{flex-direction:column;justify-content:space-between;align-items:stretch;background:linear-gradient(to bottom,rgba(27,22,38,.15),rgba(27,22,38,0) 40%,rgba(27,22,38,.75))}
-.ui-logo{display:flex;flex-direction:column;align-items:center;gap:2px;margin-block-start:4vh;text-align:center}
-.ui-logo-main{position:relative;margin:0;font:400 clamp(44px,11vw,96px)/1 var(--font-display);color:var(--paper);letter-spacing:.03em;
-  text-shadow:0 3px 0 var(--ink),0 0 24px rgba(127,242,224,.35);overflow:hidden}
+.ui-scr.ui-title{flex-direction:column;justify-content:space-between;align-items:stretch;background:linear-gradient(to bottom,rgba(27,22,38,.62),rgba(27,22,38,.3) 22%,rgba(27,22,38,0) 42%,rgba(27,22,38,.75))}
+.ui-logo{display:flex;flex-direction:column;align-items:center;gap:2px;margin-block-start:4vh;padding:10px 28px 14px;align-self:center;text-align:center;
+  background:radial-gradient(ellipse closest-side,rgba(27,22,38,.8),rgba(27,22,38,.55) 55%,rgba(27,22,38,0))}
+.ui-logo-main{position:relative;margin:0;padding:0 .12em .08em;font:700 clamp(48px,12vw,104px)/1 var(--font-display);color:var(--paper);letter-spacing:.03em;
+  text-shadow:-2px -2px 0 var(--ink),2px -2px 0 var(--ink),-2px 2px 0 var(--ink),2px 2px 0 var(--ink),0 5px 0 var(--ink),0 0 18px rgba(127,242,224,.8),0 0 40px rgba(27,22,38,.9);overflow:hidden}
 .ui-logo-main::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 35%,rgba(255,255,255,.55) 50%,transparent 65%);
   transform:translateX(-120%);animation:ui-sweep 5s ease-in-out 1s infinite;mix-blend-mode:overlay}
-.ui-logo-sub{font:400 clamp(16px,3.4vw,24px)/1.2 var(--font-display);color:var(--accent);text-shadow:0 2px 0 var(--ink);letter-spacing:.06em}
-.ui-logo-alt{font-size:var(--fs-small);color:var(--paper-dim);text-shadow:0 1px 2px var(--ink)}
+.ui-logo-sub{font:400 clamp(16px,3.4vw,24px)/1.2 var(--font-display);color:var(--accent);text-shadow:${OUTLINE},0 2px 0 var(--ink);letter-spacing:.06em}
+.ui-logo-alt{font-size:var(--fs-small);color:var(--paper);text-shadow:${OUTLINE}}
 .ui-menu{display:flex;flex-direction:column;gap:8px;inline-size:min(340px,100%);align-self:center;margin-block-end:2vh}
 .ui-langpill{align-self:center;display:flex;gap:0;border-radius:22px;overflow:hidden;box-shadow:0 0 0 2px var(--paper)}
 .ui-langpill button{min-block-size:40px;min-inline-size:56px;border:0;background:var(--panel);color:var(--paper);font:15px/1 var(--font-display);cursor:pointer}
@@ -406,10 +416,12 @@ export const UI_CSS = `
 .ui-choices .ui-btn{justify-content:flex-start;min-block-size:48px}
 
 /* death and ending */
-.ui-death{flex-direction:column;gap:20px;background:radial-gradient(ellipse at center,rgba(27,22,38,.25),rgba(27,22,38,.85));animation:ui-fadein 800ms ease-out}
+.ui-scr.ui-death{flex-direction:column;gap:20px;background:radial-gradient(ellipse at center,rgba(27,22,38,.25),rgba(27,22,38,.85));animation:ui-fadein 800ms ease-out}
 .ui-death .ui-big{color:var(--paper);text-shadow:0 3px 0 var(--ink),0 0 30px rgba(232,80,91,.4)}
-.ui-ending{flex-direction:column;gap:14px;text-align:center;background:linear-gradient(to bottom,rgba(27,22,38,.2),rgba(27,22,38,.85))}
-.ui-credits{display:flex;flex-direction:column;gap:6px;max-inline-size:520px;color:var(--paper-dim);font-size:var(--fs-small)}
+.ui-scr.ui-ending{flex-direction:column;gap:14px;text-align:center;background:radial-gradient(ellipse at center,rgba(27,22,38,.72),rgba(27,22,38,.9))}
+.ui-ending .ui-big{color:var(--paper);text-shadow:${OUTLINE},0 3px 0 var(--ink),0 0 28px rgba(127,242,224,.5)}
+.ui-ending .ui-logo-sub{text-shadow:${OUTLINE}}
+.ui-credits{display:flex;flex-direction:column;gap:6px;max-inline-size:520px;padding-inline:16px;color:var(--paper);font-size:var(--fs-small);text-shadow:${OUTLINE}}
 .ui-fatalmsg{margin:0;padding:10px;max-block-size:34vh;overflow:auto;background:var(--ink);border:1px solid var(--line);font:var(--fs-small)/1.4 ui-monospace,monospace;
   white-space:pre-wrap;word-break:break-word;direction:ltr;text-align:left}
 .ui-controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 14px}

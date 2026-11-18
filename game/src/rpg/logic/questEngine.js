@@ -27,6 +27,7 @@ export const RESUME_OPS = Object.freeze(['spawnGroup', 'startBoss', 'setHour', '
  * @property {(questId:string, step:any, index:number, resumed:boolean) => void} enter   build the step runtime
  * @property {(questId:string) => void} leave      tear the step runtime down
  * @property {(questId:string) => ({ key:string, args:any }|null)} [objective]  runtime objective override
+ * @property {(objectId:string) => boolean} [destroyed]  the object was destroyed before (a destroy step polled on it completes)
  */
 
 /**
@@ -342,6 +343,11 @@ export function createQuestEngine(host) {
             const a = host.q().active[id];
             a.counts[s.id] = needOf(s);
           }
+          engine.completeStep(id);
+        } else if (s.type === 'destroy' && s.object && host.destroyed && host.destroyed(s.object)) {
+          // Destroyed before the quest asked for it (a Siphon silenced in free roam): the step is already done.
+          const a = host.q().active[id];
+          a.counts[s.id] = needOf(s);
           engine.completeStep(id);
         }
       }

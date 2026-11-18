@@ -12,7 +12,7 @@ import { icon, itemIcon } from '../icons.js';
  * @param {{ cls?:string, size?:'wide'|'narrow'|'', ribbon?:string|null, ribbonIcon?:string|null }} [o]
  */
 export function shell(kit, o = {}) {
-  const root = kit.el('div', 'ui-scr' + (o.cls ? ' ' + o.cls : ''), null);
+  const root = kit.el('div', 'ui-scr' + (o.size === 'wide' ? ' ui-menuscr' : '') + (o.cls ? ' ' + o.cls : ''), null);
   const panel = kit.el('div', 'ui-panel' + (o.size ? ' ui-' + o.size : ''), root);
   const pin = kit.el('div', 'ui-pin', panel);
   const body = kit.el('div', 'ui-pbody', pin);
