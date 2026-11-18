@@ -119,6 +119,24 @@ function worldScenario(tag, width, height) {
   };
 }
 
+/**
+ * The player's aura ramps on rendered frames (real time), so a Form shot waits until the flame aura is up
+ * (or 15 s pass on a loaded machine). @param {any} page
+ */
+async function waitFlame(page, min = 0.85) {
+  try {
+    await page.waitForFunction((m) => {
+      const g = /** @type {any} */ (window).__GAME__;
+      const scene = g && g.ctx && g.ctx.three ? g.ctx.three.scene : null;
+      let up = false;
+      if (scene) scene.traverse((o) => { if (o.name === 'gfx.flame' && o.visible && o.material.uniforms.uAlpha.value > m) up = true; });
+      return up;
+    }, min, { timeout: 15000, polling: 250 });
+  } catch (e) {
+    // shoot anyway
+  }
+}
+
 /** @param {string} tag @param {number} width @param {number} height */
 function actorScenario(tag, width, height) {
   const portrait = height > width;
@@ -143,8 +161,7 @@ function actorScenario(tag, width, height) {
           g.cmd.actorsFollow(3.4, 0.55, 0.1);
           g.step(4);
         }, VIEW, { x: m.x, z: m.z, yaw: 2.4, pitch: -0.05 }, form);
-        // the aura ramps on rendered frames (real time): let it reach its Form level before the shot
-        await page.waitForTimeout(1200);
+        if (form) await waitFlame(page);
         await shot(`look-${tag}-hero-${form || 'base'}`);
       }
       // the same Forms through the real follow camera (how the phone sees them)
@@ -157,12 +174,12 @@ function actorScenario(tag, width, height) {
           g.setCamera({ yaw: 2.4 + 2.6, pitch: -0.1 });
           g.step(40);
         }, form);
-        await page.waitForTimeout(800);
+        await waitFlame(page);
         await shot(`look-${tag}-play-${form}`);
       }
       // Gather (charging Ora) and the transformation moment, through the follow camera
       await game((g) => { g.setForm(null); g.step(10); g.hold('gather', true); for (let i = 0; i < 12; i++) g.step(10); });
-      await page.waitForTimeout(1500);
+      await waitFlame(page, 0.6);
       await shot(`look-${tag}-gather`);
       const tf = await game((g) => {
         g.hold('gather', false);

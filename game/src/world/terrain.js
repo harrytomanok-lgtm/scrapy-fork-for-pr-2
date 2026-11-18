@@ -140,11 +140,11 @@ void main() {
     vec2 cp = wq * 1.40625;
     vec2 cell = floor(cp);
     float hs = th(cell);
-    if (hs > 0.84) {
+    if (hs > 0.86) {
       vec2 off = vec2(th(cell + 7.1), th(cell + 3.3)) * 0.6 - 0.3;
       float dd = length(fract(cp) - 0.5 - off);
       float isFlower = step(0.91, hs) * (1.0 - pk);
-      float d0 = smoothstep(0.15, 0.1, dd);
+      float d0 = smoothstep(0.11, 0.07, dd);
       vec3 pebble = mix(uPathColor, vec3(0.9), 0.25) * (0.75 + 0.5 * th(cell + 1.9));
       vec3 flower = hs > 0.965 ? vec3(1.0, 0.95, 0.88) : vAccent;
       base = mix(base, mix(pebble, flower, isFlower), d0 * dotK);

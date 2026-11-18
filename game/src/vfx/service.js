@@ -57,7 +57,7 @@ export function createVfx(ctx) {
   const cFlB = new Color();
   const cFlT = new Color();
   /** Flame aura colours by aura style (body, tips), derived from palette tokens once. */
-  const FLAME_BODY = [new Color(PALETTE.ora), new Color(PALETTE.ora), new Color(PALETTE.scorchRim).lerp(new Color(PALETTE.flora.redLeaf), 0.4),
+  const FLAME_BODY = [new Color(PALETTE.ora), new Color(PALETTE.ora), new Color(PALETTE.scorchRim).lerp(new Color(PALETTE.flora.redLeaf), 0.7),
     new Color(PALETTE.tempest).offsetHSL(0.015, 0.25, -0.1), new Color(PALETTE.zenith).lerp(new Color(PALETTE.structure.lantern), 0.18)];
   const FLAME_TIP = [new Color(PALETTE.oraCore), new Color(PALETTE.oraCore).lerp(new Color(PALETTE.ora), 0.4), new Color(PALETTE.biome.meadows.accent),
     new Color(PALETTE.biome.frostspine.accent).lerp(new Color(PALETTE.ora), 0.35), new Color(PALETTE.structure.lantern)];
