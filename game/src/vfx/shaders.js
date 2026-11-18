@@ -245,7 +245,8 @@ void main() {
   vec3 c = uColor;
   float a = 0.0;
   if (uKind < 0.5) {
-    float n = gfxNoise(vec3(p * 3.2, uSeed)) * 0.7 + gfxNoise(vec3(p * 9.0, uSeed + 3.0)) * 0.3;
+    // one noise octave plus a cheap angular ripple: a scorch can fill the screen (camera in the crater)
+    float n = gfxNoise(vec3(p * 3.2, uSeed)) * 0.85 + (sin(ang * 9.0 + uSeed * 3.0) * 0.5 + 0.5) * 0.15;
     float e = r + (n - 0.5) * 0.42;
     a = (1.0 - smoothstep(0.62, 0.95, e)) * 0.92;
     float rimBand = smoothstep(0.42, 0.7, e) * (1.0 - smoothstep(0.72, 0.9, e));

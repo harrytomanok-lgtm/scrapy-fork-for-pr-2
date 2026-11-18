@@ -1182,8 +1182,8 @@ export function createVfx(ctx) {
     const wx = W ? W.x * 7 : 5;
     const wz = W ? W.z * 7 : 2;
     const n = Math.round((low ? 170 : 300) * weatherK);
-    const B = 26;
-    const H = 16;
+    const B = 20;
+    const H = 14;
     const cx = cam.position.x;
     const cy = cam.position.y;
     const cz = cam.position.z;
@@ -1200,7 +1200,7 @@ export function createVfx(ctx) {
       const pz = cz + z - B * 0.5;
       const edge = Math.min(1, Math.min(x, B - x, z, B - z) / 3) * Math.min(1, Math.min(y, H - y) / 2);
       // normal-blended soft flakes: additive white would vanish against the bright fog
-      parts.sprite(2, px, py, pz, 0.07 + 0.07 * h01(i, 11), 0, CELL.dot, 1, 1, 1, 0.85 * edge * weatherK, 0.6, 0, 0, 0, 0);
+      parts.sprite(2, px, py, pz, 0.12 + 0.12 * h01(i, 11), 0, CELL.dot, 1, 1, 1, 0.95 * edge * weatherK, 0.8, 0, 0, 0, 0);
     }
   }
 

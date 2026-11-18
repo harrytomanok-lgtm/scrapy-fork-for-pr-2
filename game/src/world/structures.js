@@ -132,7 +132,7 @@ export function createStructures(ctx, grid, colliders, seed) {
     hexCol(C, s.x, s.z, s.y + r * 0.3, r * 0.6, s.y + r * (0.8 + (i % 3) * 0.3), 0, 0, sp.cliff, sp.ground, tilt, -tilt * 0.5);
     colliders.add({ shape: 'sphere', x: s.x, y: s.y, z: s.z, r: r * 0.95, flags: COLLIDER.SOLID });
   }
-  const crownMat = ctx.render.materials.toon({ vertexColors: true, emissive: PALETTE.biome.spire.ground, emissiveIntensity: 0.05, fogScale: 5.5 });
+  const crownMat = ctx.render.materials.toon({ vertexColors: true, emissive: PALETTE.biome.spire.ground, emissiveIntensity: 0.05, fogScale: 9 });
   const crown = new Mesh(C.geometry(), crownMat);
   crown.matrixAutoUpdate = false;
   crown.frustumCulled = false;

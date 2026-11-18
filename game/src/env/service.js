@@ -52,7 +52,7 @@ export function createEnv(ctx) {
    * Fog override (env.setFog / clearFog): a scripted weather fog (Iskra's blizzard) eased over the region fog.
    * k eases toward `on` at 1/seconds per second.
    */
-  const fogOv = { on: 0, k: 0, rate: 1, density: 0.0055, color: new Color(PALETTE.biome.frostspine.fog), snow: 0, sent: -1 };
+  const fogOv = { on: 0, k: 0, rate: 1, density: 0.0055, color: new Color(PALETTE.biome.frostspine.shade), snow: 0, sent: -1 };
   /** @type {any} */
   let sky = null;
 
@@ -240,7 +240,7 @@ export function createEnv(ctx) {
 
     /**
      * Scripted fog override (an addition for boss weather such as Iskra's phase-2 blizzard): eases a thick fog of
-     * `color` (default the Frostspine fog) with `density` (exp2 per metre, default 0.0055: about 150 m of sight) over
+     * `color` (default the Frostspine shade, a blue-grey storm) with `density` (exp2 per metre, default 0.0055: about 150 m of sight) over
      * `seconds` (default 1.5), dims the sun, and with `snow` (0..1, default 0) adds blowing snow through ctx.vfx.
      * The region fog and the day keys keep running underneath; clearFog eases back.
      * @param {{ density?:number, color?:number, seconds?:number, snow?:number }} [o]
@@ -248,7 +248,7 @@ export function createEnv(ctx) {
     setFog(o = {}) {
       const sec = typeof o.seconds === 'number' && o.seconds > 0 ? o.seconds : 1.5;
       fogOv.density = typeof o.density === 'number' && o.density > 0 ? o.density : 0.0055;
-      fogOv.color.setHex(typeof o.color === 'number' ? o.color : PALETTE.biome.frostspine.fog);
+      fogOv.color.setHex(typeof o.color === 'number' ? o.color : PALETTE.biome.frostspine.shade);
       fogOv.snow = typeof o.snow === 'number' ? Math.max(0, Math.min(1, o.snow)) : 0;
       fogOv.rate = 1 / sec;
       fogOv.on = 1;

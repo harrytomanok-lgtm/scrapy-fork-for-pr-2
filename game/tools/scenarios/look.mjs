@@ -292,7 +292,9 @@ function momentScenario(tag, width, height) {
       });
       console.log(`  ${tag} ringfall: ${JSON.stringify(rf)}`);
       assert.ok(rf.minClear > 0, `the terrain does not hide the player in the crater (${rf.minClear.toFixed(2)} m clear)`);
-      await shot(`look-${tag}-ringfall-after`);
+      assert.ok(rf.ground < 0.5, 'the player stands on the crater floor');
+      // No screenshot here: with the camera inside a fresh crater the scorch layers fill the screen and SwiftShader
+      // under load takes the page screenshot past its 30 s timeout. The check above is the regression guard.
       const errs = await game((g) => g.errors.filter((e) => e.indexOf('[error]') === 0 || e.indexOf('[fatal]') === 0));
       assert.equal(errs.length, 0, 'no errors: ' + errs.join(' | '));
     },
