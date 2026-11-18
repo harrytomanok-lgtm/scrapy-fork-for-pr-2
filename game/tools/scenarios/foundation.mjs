@@ -291,6 +291,82 @@ export const scenarios = [
     },
   },
   {
+    // Android discards background tabs: the journey is saved synchronously on visibilitychange to hidden and on
+    // pagehide, in the middle of a boss fight and its intro cinematic too, and that save loads at a safe place.
+    name: 'foundation-lifecycle-save',
+    async run({ game, assert }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        const c = g.ctx;
+        const written = [];
+        let cine = 0;
+        c.bus.on('save:written', (p) => written.push(p.ok), 'probe');
+        c.bus.on('cine:start', () => cine++, 'probe');
+        g.grantXp(25);
+        g.step(10);
+        const rs = g.pois('ringstone').find((q) => q.id === 'ringstone_sparkstead');
+        // A boss fight away from the Ringstone, with its intro cinematic running, and a grunt on the player.
+        g.teleport(rs.x + 70, rs.z + 40);
+        g.step(5);
+        const boss = g.startBoss('durn');
+        const grunt = g.spawn('tusk_boar', { dist: 5, aggro: true });
+        for (let i = 0; i < 6; i++) {
+          g.press('attack');
+          g.step(10);
+        }
+        if (grunt) g.damage(grunt, 1);
+        g.step(2);
+        const during = { inCombat: !!c.combat.inCombat, cineBusy: !!c.cam.busy, cine, boss: !!boss, hp: g.player().hp };
+        const quests = JSON.stringify(g.state().quests);
+        const xp = g.player().xp;
+        // Hidden: written at once, synchronously (not at the end of the tick, not after combat).
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        const afterHidden = written.slice();
+        window.dispatchEvent(new Event('pagehide'));
+        const afterPagehideHidden = written.length;
+        delete /** @type {any} */ (document).visibilityState;
+        delete /** @type {any} */ (document).hidden;
+        document.dispatchEvent(new Event('visibilitychange'));
+        // pagehide without a hidden page first (tab closed) also writes.
+        window.dispatchEvent(new Event('pagehide'));
+        const afterPagehide = written.slice();
+        // Reload the saved journey (memory storage in test mode keeps the slot for this page).
+        const loaded = g.load(1);
+        g.step(30);
+        const p = g.player();
+        const s = g.state();
+        const bosses = c.ents.list('boss').filter((e) => e.alive).length;
+        const enemiesNear = c.ents.list('enemy').filter((e) => e.alive && Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < 20).length;
+        return {
+          during, afterHidden, afterPagehideHidden, afterPagehide, loaded,
+          dist: Math.hypot(p.x - rs.x, p.z - rs.z), hp: p.hp, hpMax: p.hpMax, xp: p.xp, xpBefore: xp,
+          questsSame: JSON.stringify(s.quests) === quests, inCombat: !!c.combat.inCombat, cineBusy: !!c.cam.busy,
+          reasons: c.time.reasons(), context: c.input.context, top: g.top(), bosses, enemiesNear,
+        };
+      });
+      assert.ok(r.during.boss, 'the boss fight started');
+      assert.ok(r.during.inCombat, 'the player is in combat when the page is hidden ' + JSON.stringify(r.during));
+      assert.ok(r.during.cine > 0, 'the boss intro cinematic started');
+      assert.deepEqual(r.afterHidden, [true], 'hidden in combat: one synchronous save');
+      assert.equal(r.afterPagehideHidden, 1, 'pagehide right after a hidden save does not write twice');
+      assert.deepEqual(r.afterPagehide, [true, true], 'pagehide on a visible page writes');
+      assert.equal(r.loaded, true, 'the lifecycle save loads');
+      assert.ok(r.dist < 3, 'the player comes back at the respawn Ringstone (' + r.dist.toFixed(1) + ' m)');
+      assert.ok(r.hp > 0, 'alive after load');
+      assert.equal(r.xp, r.xpBefore, 'progress made before the hide is kept');
+      assert.equal(r.questsSame, true, 'the quest steps are intact');
+      assert.equal(r.inCombat, false, 'not inside a half-running fight');
+      assert.equal(r.cineBusy, false, 'no half-running cinematic');
+      assert.equal(r.bosses, 0, 'no boss entity carried over');
+      assert.equal(r.enemiesNear, 0, 'no enemy at the Ringstone');
+      assert.deepEqual(r.reasons, [], 'no pause reason left behind');
+      assert.equal(r.context, 'game');
+      assert.equal(r.top, 'hud');
+    },
+  },
+  {
     name: 'foundation-lang-pause',
     async run({ game, assert, shot }) {
       await opening(game, assert);
