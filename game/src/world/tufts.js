@@ -67,8 +67,9 @@ export function createTufts(ctx, grid, seed) {
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.name = 'world.tufts';
-  // clumps right under the lens would fill the screen with giant blades: hide those within ~2.5 m of the camera
-  if (mat.uniforms.uNearHide) mat.uniforms.uNearHide.value = 2.8;
+  // clumps right under the lens would fill the screen with giant blades: they shrink toward the root within ~6 m of
+  // the camera (negative uNearHide) instead of leaving a bare band
+  if (mat.uniforms.uNearHide) mat.uniforms.uNearHide.value = -6;
   ctx.render.layers.props.add(mesh);
   const tmp = new Color();
   let lastI = -1e9;
@@ -106,8 +107,8 @@ export function createTufts(ctx, grid, seed) {
         const v = ((h >>> 26) & 63) / 63;
         tmp.copy(foliage[ri]).lerp(ground[ri], 0.18 + 0.25 * v).multiplyScalar(0.92 + 0.22 * v);
         const fsel = (h >>> 4) & 63;
-        if (ri === 0 && fsel < 4) tmp.copy(fsel < 2 ? flowerA : flowerC);
-        else if (ri === 2 && fsel < 3) tmp.copy(flowerB);
+        if (ri === 0 && fsel < 7) tmp.copy(fsel < 4 ? flowerA : flowerC);
+        else if (ri === 2 && fsel < 4) tmp.copy(flowerB);
         const s = 0.6 + 0.55 * (((h >>> 12) & 63) / 63);
         const yaw = ((h >>> 6) & 255) * 0.0245;
         const c = Math.cos(yaw) * s;

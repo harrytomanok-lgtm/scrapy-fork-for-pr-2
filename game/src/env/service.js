@@ -16,6 +16,25 @@ import { createSettlements } from './settlements.js';
 import { createProps } from './props.js';
 
 /** Region fog colours in linear space, by region id. */
+/**
+ * Night ambient floor (visual pass 2): at dusk and night the light never drops below a moonlit blue, so the
+ * settlement ground, the hero and the HUD stay readable (night is blue and moody, not black-brown). Linear rgb,
+ * derived from the night key of the palette.
+ */
+const NIGHT_KEY = PALETTE.day.find((k) => k.key === 'night');
+const scaled = (hex, k) => hexToLinear(hex).map((v) => v * k);
+const FLOOR_SUN = scaled(NIGHT_KEY.sun, 0.55);
+const FLOOR_SKY = scaled(NIGHT_KEY.ambSky, 4.5);
+const FLOOR_GROUND = scaled(NIGHT_KEY.ambGround, 6);
+const FLOOR_SHADOW = scaled(NIGHT_KEY.sun, 0.34);
+
+/** Raise a colour toward at least `floor` per channel, by weight k. @param {any} c @param {number[]} floor @param {number} k */
+function liftTo(c, floor, k) {
+  c.r += (Math.max(c.r, floor[0]) - c.r) * k;
+  c.g += (Math.max(c.g, floor[1]) - c.g) * k;
+  c.b += (Math.max(c.b, floor[2]) - c.b) * k;
+}
+
 const REGION_FOG = Object.fromEntries(Object.keys(PALETTE.biome).map((id) => [id, hexToLinear(PALETTE.biome[id].fog)]));
 
 /**
@@ -128,6 +147,17 @@ export function createEnv(ctx) {
     setLinear(g.uAmbGround.value, sample.ambGround);
     setLinear(g.uShadowTint.value, sample.shadow);
     setLinear(g.uFogColor.value, sample.fog);
+    // the night floor fades in as the sun's luminance drops (dusk and night), never by day
+    const sc = g.uSunColor.value;
+    const lum = 0.2126 * sc.r + 0.7152 * sc.g + 0.0722 * sc.b;
+    const fl0 = Math.min(1, Math.max(0, (0.6 - lum) / 0.4));
+    const fl = fl0 * fl0 * (3 - 2 * fl0);
+    if (fl > 0) {
+      liftTo(g.uSunColor.value, FLOOR_SUN, fl);
+      liftTo(g.uAmbSky.value, FLOOR_SKY, fl);
+      liftTo(g.uAmbGround.value, FLOOR_GROUND, fl);
+      liftTo(g.uShadowTint.value, FLOOR_SHADOW, fl);
+    }
     g.uRimColor.value.copy(g.uAmbSky.value).lerp(white, 0.4);
     g.uFogDensity.value = fogDensity(h);
     g.uSunDir.value.copy(sunDir);

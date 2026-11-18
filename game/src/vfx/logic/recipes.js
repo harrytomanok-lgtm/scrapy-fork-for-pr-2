@@ -143,7 +143,7 @@ export const RECIPES = {
     { m: 0, cell: dot, rate: 8, lo: 4, sp: [0, 0.3], life: [0.2, 0.35], sz: [1.6, 0.6], col: 'core', sh: 'still', hdr: 1.6, k: 1 },
   ] },
   transform_burst: { body: 'ember', shock: { r: 40, t: 0.5, ground: true, sphere: true, col: 'body' }, light: { r: 25, i: 3, t: 0.6 }, layers: [
-    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.25, 0.25], sz: [5, 9], col: 'core', sh: 'still', hdr: 2.6, k: 1 },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.22, 0.22], sz: [2.4, 4.2], col: 'core', sh: 'still', hdr: 2.0, k: 1 },
     { m: 1, cell: streak, n: 40, lo: 20, sp: [22, 34], life: [0.3, 0.5], sz: [0.12, 0.03], col: 'body', sh: 'ring', st: 0.05, dr: 3, hdr: 2.2, k: 0.4 },
     { m: 1, cell: streak, n: 18, lo: 8, sp: [14, 24], life: [0.3, 0.5], sz: [0.1, 0.03], col: 'fringe', sh: 'sphere', st: 0.05, dr: 3, hdr: 1.4 },
     { m: 2, cell: pebble, n: 24, lo: 12, sp: [10, 18], life: [0.6, 1.0], sz: [0.2, 0.12], col: 'path', sh: 'disc', r: 2, g: 14, rv: 8 },

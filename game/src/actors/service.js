@@ -212,6 +212,8 @@ export function createActors(ctx) {
       const o = opts || {};
       const formKey = o.formKey && rig.spec.forms && rig.spec.forms[o.formKey] ? o.formKey : null;
       const mat = render.materials.toonSkinned({ palette: true });
+      // character rim and shadow floor (render toon): readable at dusk and night
+      if (mat.uniforms.uCharRim) mat.uniforms.uCharRim.value = 1;
       const mesh = new SkinnedMesh(geometryFor(rig, formKey), mat);
       mesh.add(bones[0]);
       mesh.updateMatrixWorld(true);

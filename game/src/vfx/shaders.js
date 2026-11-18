@@ -173,6 +173,58 @@ void main() {
     a = (rim * 0.65 + 0.015) * (0.6 + 0.6 * nz);
     c = mix(uFringe, uColor, rim);
     c = mix(c, vec3(1.0), smoothstep(0.75, 1.0, rim) * 0.6);
+  } else if (uStyle > 5.5) {
+    // Flame aura (camera-facing plane, vLocal.xy in [-1, 1]): a soft additive silhouette of energy rising off the
+    // body, widest at the feet and thinning into flickering tongues above the head. uStyle 6 ember, 7 tempest,
+    // 8 zenith, 9 gather; +5 is the front layer (wisps and streaks only, so the body stays readable).
+    // uColor = body, uFringe = tips, uPhase = flow time, uFlare = swell.
+    float front = step(10.5, uStyle);
+    float st = uStyle - front * 5.0;
+    float y01 = vLocal.y * 0.5 + 0.5;
+    float ax = abs(vLocal.x);
+    float spd = st > 7.5 && st < 8.5 ? 0.45 : st > 6.5 && st < 7.5 ? 1.6 : 1.0;
+    float t = uPhase;
+    float n1 = gfxNoise(vec3(vLocal.x * 2.3, vLocal.y * 1.5 - t * 1.1 * spd, st * 3.1 + front * 7.0));
+    float n2 = gfxNoise(vec3(vLocal.x * 5.5, vLocal.y * 3.2 - t * 2.3 * spd, 4.0 + st));
+    float prof = mix(0.95, 0.16, pow(y01, 0.85)) * (1.0 + uFlare * 0.3);
+    // separate tongues in the upper half: the width breathes with a slow noise across x
+    float tong = gfxNoise(vec3(vLocal.x * 3.2, y01 * 1.3 - t * 1.4 * spd, 11.0 + st));
+    prof *= mix(1.0, 0.4 + 1.0 * tong, smoothstep(0.3, 0.85, y01));
+    float wob = (n1 - 0.5) * 0.55 * (0.25 + y01) + (n2 - 0.5) * 0.26 * y01;
+    float edge = prof + wob - ax;
+    float body = smoothstep(0.0, 0.28, edge);
+    float top = 1.0 - smoothstep(0.55 + 0.3 * n1, 1.0, y01);
+    float bottom = smoothstep(0.0, 0.1, y01);
+    float rimK = 1.0 - smoothstep(0.02, 0.36, edge);
+    float mask = body * top * bottom;
+    float tipK = smoothstep(0.5, 1.0, y01 + (n2 - 0.5) * 0.35);
+    c = mix(uColor, uFringe, tipK);
+    float streak = 0.0;
+    if (st > 6.5 && st < 7.5) {
+      // Tempest: wind streaks spiralling up (opposite slant on the front layer reads as a helix)
+      float sl = mix(1.1, -1.1, front);
+      float s = fract(vLocal.y * 2.4 + vLocal.x * sl - t * 1.9);
+      streak = smoothstep(0.09, 0.0, abs(s - 0.5) - 0.02) * smoothstep(1.0, 0.2, ax) * smoothstep(0.02, 0.2, y01);
+      c = mix(c, uFringe * 1.3, streak);
+    } else if (st > 7.5 && st < 8.5) {
+      // Zenith: slow vertical light rays
+      float ray = gfxNoise(vec3(vLocal.x * 7.0, y01 * 0.6 - t * 0.2, 9.0));
+      streak = smoothstep(0.62, 0.9, ray) * 0.8;
+      c = mix(c, vec3(1.0), 0.3 + streak * 0.4);
+    } else {
+      // Ember and Gather: hot licks climbing the flame
+      float lick = gfxNoise(vec3(vLocal.x * 3.0, vLocal.y * 2.0 - t * 2.8 * spd, 2.0 + front));
+      streak = smoothstep(0.6, 0.85, lick);
+      c = mix(c, uFringe * 1.2, streak * 0.5);
+    }
+    float hot = (1.0 - y01) * smoothstep(0.25, 0.75, edge);
+    c = mix(c, vec3(1.0), hot * 0.2);
+    if (front > 0.5) {
+      a = mask * (rimK * 0.22 + streak * 0.55) * (0.7 + 0.6 * n2);
+    } else {
+      // back layer is alpha-blended (true hue on any ground): a soft body, a stronger rim, flowing licks
+      a = mask * (0.36 + 0.5 * rimK + streak * 0.3) * (0.6 + 0.6 * n2);
+    }
   } else {
     float y01 = vLocal.y * 0.5 + 0.5;
     float rim = pow(fres, 1.7);
@@ -324,7 +376,11 @@ void main() {
     // colour plus the Form's own pattern, so a Form reads on the phone without bloom.
     float pool = 1.0 - smoothstep(0.0, 1.0, r);
     pool *= pool;
-    if (uRing < 2.5) {
+    if (uRing < 1.5) {
+      // Gather: rings of light drawn inward toward the feet, faster as the charge grows
+      float rr = fract(r * 2.4 + uTime * 0.9);
+      a = pool * 0.35 + smoothstep(0.08, 0.0, abs(rr - 0.5) - 0.02) * (1.0 - smoothstep(0.7, 1.0, r)) * 0.7 + ringLine(r, 0.93, 0.04) * 0.8;
+    } else if (uRing < 2.5) {
       float n = gfxNoise(vec3(p * 3.0, uTime * 1.5));
       float lick = gfxNoise(vec3(ang * 2.0, r * 4.0 - uTime * 2.2, 1.7));
       float heat = smoothstep(0.35, 0.0, abs(r - 0.62 - (lick - 0.5) * 0.25)) * (0.55 + 0.45 * n);

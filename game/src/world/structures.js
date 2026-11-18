@@ -1,7 +1,8 @@
 /**
  * The Wellspring Spire (a 900 m hexagonal crystal pillar with a slow inner pulse, root shards and a ringed
- * foot) and the Shattered Crown (about 40 floating crystal-rock shards), with their colliders (GDD 3.3,
- * ART_UX 1.10). Each is one merged mesh with baked vertex colours: two draw calls.
+ * foot) and the Shattered Crown (a ring of 16 large and 6 small floating crystal-rock shards around the top of the
+ * Spire, each slowly turning about its own axis), with their colliders (GDD 3.3, ART_UX 1.10). Each is one merged
+ * mesh with baked vertex colours: two draw calls.
  * @module world/structures
  */
 
@@ -23,6 +24,10 @@ function soup() {
         c.set(h);
         col.push(c.r, c.g, c.b);
       }
+    },
+    /** @returns {number} triangles so far */
+    count() {
+      return pos.length / 9;
     },
     geometry() {
       const g = new BufferGeometry();
@@ -118,30 +123,80 @@ export function createStructures(ctx, grid, colliders, seed) {
   ctx.render.layers.world.add(spire);
   colliders.add({ shape: 'capsule', x: 0, y: baseY, z: 0, r: 60, h: 990, flags: COLLIDER.SOLID });
 
-  // ---- the Crown
+  // ---- the Crown: a ring around the top of the Spire, each shard a rock body (dark underside, cliff flank) with
+  // two crystal points; the shards turn slowly about their own vertical axes (gameplay positions stay fixed)
   const C = soup();
-  const shards = crownShards(seed);
+  const shards = crownShards(seed, baseY);
+  const shardTri = [];
   for (let i = 0; i < shards.length; i++) {
     const s = shards[i];
     const r = s.r;
     const tilt = s.tilt * r;
-    // Rock underside (inverted cone), crystal top (short hex column with an apex).
-    // Rock reads as rock (shade underside, cliff body); only the short crystal crown keeps the pale spire colour.
-    hexCol(C, s.x, s.z, s.y - r * 1.5, 0.0001, s.y, r, s.yaw, k(sp.shade, 0.7), k(sp.shade, 1.05));
-    hexCol(C, s.x, s.z, s.y, r, s.y + r * 0.3, r * 0.86, 0.1, k(sp.shade, 1.05), sp.cliff);
-    hexCol(C, s.x, s.z, s.y + r * 0.3, r * 0.6, s.y + r * (0.8 + (i % 3) * 0.3), 0, 0, sp.cliff, sp.ground, tilt, -tilt * 0.5);
+    const t0 = C.count();
+    hexCol(C, s.x, s.z, s.y - r * 1.6, 0.0001, s.y - r * 0.2, r * 0.8, s.yaw, k(sp.shade, 0.55), k(sp.shade, 0.85));
+    hexCol(C, s.x, s.z, s.y - r * 0.2, r * 0.8, s.y + r * 0.25, r, s.yaw + 0.25, k(sp.shade, 0.85), k(sp.cliff, 0.9));
+    hexCol(C, s.x, s.z, s.y + r * 0.25, r, s.y + r * 0.35, r * 0.82, s.yaw + 0.3, k(sp.cliff, 0.9), sp.cliff);
+    hexCol(C, s.x + r * 0.15, s.z, s.y + r * 0.3, r * 0.5, s.y + r * (1.0 + (i % 3) * 0.3), 0, s.yaw, sp.cliff, sp.ground, tilt, -tilt * 0.5);
+    hexCol(C, s.x - r * 0.35, s.z + r * 0.2, s.y + r * 0.3, r * 0.3, s.y + r * 0.75, 0, s.yaw + 0.5, sp.cliff, sp.accent, -tilt * 0.6, tilt * 0.3);
+    shardTri.push(t0, C.count());
     colliders.add({ shape: 'sphere', x: s.x, y: s.y, z: s.z, r: r * 0.95, flags: COLLIDER.SOLID });
   }
-  const crownMat = ctx.render.materials.toon({ vertexColors: true, emissive: PALETTE.biome.spire.ground, emissiveIntensity: 0.05, fogScale: 9 });
-  const crown = new Mesh(C.geometry(), crownMat);
+  const crownMat = ctx.render.materials.toon({ vertexColors: true, emissive: PALETTE.biome.spire.ground, emissiveIntensity: 0.06, fogScale: 2.2 });
+  const crownGeo = C.geometry();
+  const crown = new Mesh(crownGeo, crownMat);
   crown.matrixAutoUpdate = false;
   crown.frustumCulled = false;
   ctx.render.layers.world.add(crown);
+  // spin data: rest positions and normals relative to each shard centre, and the shard of every vertex
+  const cPos = crownGeo.attributes.position.array;
+  const cNor = crownGeo.attributes.normal.array;
+  const restP = new Float32Array(cPos.length);
+  const restN = new Float32Array(cNor.length);
+  const vShard = new Uint8Array(cPos.length / 3);
+  for (let i = 0; i < shards.length; i++) {
+    const s = shards[i];
+    for (let v = shardTri[i * 2] * 3; v < shardTri[i * 2 + 1] * 3; v++) {
+      vShard[v] = i;
+      restP[v * 3] = cPos[v * 3] - s.x; restP[v * 3 + 1] = cPos[v * 3 + 1] - s.y; restP[v * 3 + 2] = cPos[v * 3 + 2] - s.z;
+      restN[v * 3] = cNor[v * 3]; restN[v * 3 + 1] = cNor[v * 3 + 1]; restN[v * 3 + 2] = cNor[v * 3 + 2];
+    }
+  }
+  const spinC = new Float32Array(shards.length);
+  const spinS = new Float32Array(shards.length);
+  const bob = new Float32Array(shards.length);
+  let lastSpin = -1;
 
   return {
     /** Slow inner pulse of the Spire. @param {number} t seconds */
     update(t) {
       spireMat.uniforms.uEmissiveIntensity.value = 0.08 + 0.06 * (0.5 + 0.5 * Math.sin(t * 0.7));
+      // the Crown turns: each shard spins slowly about its own axis and bobs (rewritten at about 8 Hz)
+      if (lastSpin >= 0 && Math.abs(t - lastSpin) < 0.12) return;
+      lastSpin = t;
+      for (let i = 0; i < shards.length; i++) {
+        const w = (i % 2 === 0 ? 0.05 : -0.04) * (i >= 16 ? 2 : 1);
+        const a = t * w + i * 1.7;
+        spinC[i] = Math.cos(a);
+        spinS[i] = Math.sin(a);
+        bob[i] = Math.sin(t * 0.21 + i * 2.3) * (i >= 16 ? 2.5 : 1.5);
+      }
+      for (let v = 0; v < vShard.length; v++) {
+        const i = vShard[v];
+        const s = shards[i];
+        const c = spinC[i];
+        const sn = spinS[i];
+        const px = restP[v * 3];
+        const pz = restP[v * 3 + 2];
+        cPos[v * 3] = s.x + px * c - pz * sn;
+        cPos[v * 3 + 1] = s.y + restP[v * 3 + 1] + bob[i];
+        cPos[v * 3 + 2] = s.z + px * sn + pz * c;
+        const nx = restN[v * 3];
+        const nz = restN[v * 3 + 2];
+        cNor[v * 3] = nx * c - nz * sn;
+        cNor[v * 3 + 2] = nx * sn + nz * c;
+      }
+      crownGeo.attributes.position.needsUpdate = true;
+      crownGeo.attributes.normal.needsUpdate = true;
     },
     dispose() {
       for (const m of [spire, crown]) {

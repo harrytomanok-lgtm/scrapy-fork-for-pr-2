@@ -153,6 +153,15 @@ void main() {
   wn = mat3(instanceMatrix) * wn;
   #endif
   wp = modelMatrix * wp;
+  #ifdef USE_INSTANCING
+  // negative uNearHide (ground tufts): instances shrink toward their root as they near the camera instead of
+  // vanishing, so the foreground keeps its texture without giant blades across the lens
+  if (uNearHide < 0.0) {
+    vec4 io0 = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    float k = smoothstep(-uNearHide * 0.2, -uNearHide, length(io0.xz - uCamPos.xz));
+    wp.xyz = io0.xyz + (wp.xyz - io0.xyz) * (0.3 + 0.7 * k);
+  }
+  #endif
   if (uWindOn > 0.5) {
     float wt = uTime;
     float ph = wt * 2.513 + wp.x * 0.07 + wp.z * 0.05;
@@ -187,6 +196,7 @@ uniform float uEmissiveIntensity;
 uniform float uGlossy;
 uniform vec3 uRimColor;
 uniform float uRimStrength;
+uniform float uCharRim;
 uniform float uDissolve;
 uniform float uFlash;
 uniform float uGhost;
@@ -228,6 +238,15 @@ void main() {
     c += smoothstep(0.905, 0.935, dot(n, hv)) * step(-0.05, dot(n, uSunDir)) * min(uSunColor, vec3(1.0)) * 0.6;
   }
   c = min(c, vec3(1.0));
+  if (uCharRim > 0.0) {
+    // characters never sink into the dark: a lifted shadow floor and a cool moonlit rim that grow as the light drops
+    float lum = dot(uSunColor, vec3(0.3, 0.55, 0.15)) + dot(uAmbSky, vec3(0.3, 0.55, 0.15));
+    float dark = 1.0 - smoothstep(0.25, 0.9, lum);
+    float fr = smoothstep(0.45, 0.72, 1.0 - max(dot(n, v), 0.0));
+    vec3 rimC = mix(vec3(1.0, 0.95, 0.86), vec3(0.62, 0.74, 1.0), dark);
+    c = max(c, vBase * (0.14 + 0.26 * dark) * uCharRim);
+    c += rimC * fr * (0.08 + 0.42 * dark) * uCharRim;
+  }
   if (uRimStrength > 0.0) c += smoothstep(0.55, 0.7, 1.0 - max(dot(n, v), 0.0)) * uRimColor * uRimStrength;
   c += vBase * vEmis + uEmissiveColor * uEmissiveIntensity;
   c += uRimColor * edge * 2.5;

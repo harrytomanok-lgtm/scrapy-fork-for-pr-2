@@ -11,7 +11,7 @@
 import { BufferGeometry, BufferAttribute, Mesh, ShaderMaterial, Color, Sphere, Vector3, DoubleSide } from 'three';
 import { PALETTE } from '../core/palette.js';
 import { WORLD_HALF } from '../core/constants.js';
-import { REGIONS } from './gen/layout.js';
+import { REGIONS, FLAG } from './gen/layout.js';
 
 const CHUNK = 256;
 const CN = 28;
@@ -35,11 +35,14 @@ uniform float uSink;
 uniform float uSinkRadius;
 uniform float uCanopyNear;
 uniform float uCanopyFar;
+uniform vec3 uAccent[7];
 varying vec3 vGround;
 varying vec3 vCanopy;
 varying vec3 vShade;
+varying vec3 vAccent;
 varying float vCanopyAmt;
 varying float vDens;
+varying float vPath;
 varying vec3 vNormalW;
 varying vec3 vPosW;
 void main() {
@@ -48,9 +51,13 @@ void main() {
   p.y -= uSink * 70.0 * (1.0 - smoothstep(uSinkRadius - 140.0, uSinkRadius, dist));
   vec3 g = pow(aColor.rgb, vec3(2.2));
   float dens = aColor.a;
-  int ri = int(clamp(aNormal.w * 127.0 + 0.5, 0.0, 6.0));
+  // aNormal.w: region index, +8 on path vertices (near chunks only)
+  float wv = aNormal.w * 127.0 + 0.5;
+  vPath = step(8.0, wv);
+  int ri = int(clamp(wv - vPath * 8.0, 0.0, 6.0));
   vCanopy = uFoliage[ri];
   vShade = uShade[ri];
+  vAccent = uAccent[ri];
   vGround = g * (1.0 - 0.16 * dens);
   vDens = dens;
   vCanopyAmt = dens * smoothstep(uCanopyNear, uCanopyFar, dist);
@@ -67,8 +74,11 @@ ${glsl.fog}
 varying vec3 vGround;
 varying vec3 vCanopy;
 varying vec3 vShade;
+varying vec3 vAccent;
 varying float vCanopyAmt;
 varying float vDens;
+varying float vPath;
+uniform vec3 uPathColor;
 varying vec3 vNormalW;
 varying vec3 vPosW;
 float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -90,11 +100,44 @@ void main() {
   float dark = smoothstep(0.56, 0.64, bump) * 0.3 * flat01;
   float lite = smoothstep(0.36, 0.28, bump) * 0.09 * flat01;
   vec3 ground = mix(vGround, vShade, dark) * (1.0 + lite);
+  // painted colour patches at play scale (about 6 m): warm dry patches and cool lush ones
+  float pv = tn(vPosW.xz * 0.16 + 3.0) * 0.7 + tn(vPosW.xz * 0.45 + 9.0) * 0.3;
+  float dryP = smoothstep(0.55, 0.78, pv) * flat01;
+  float lushP = smoothstep(0.42, 0.22, pv) * flat01;
+  ground = mix(ground, ground * vec3(1.16, 1.06, 0.8), dryP * 0.6);
+  ground = mix(ground, mix(ground, vShade, 0.45), lushP * 0.5);
+  // paths: a crisp, slightly wobbly edge with a darker rim, from the path flag carried on the near chunks
+  float pn = tn(vPosW.xz * 0.7) - 0.5;
+  float pathV = vPath + pn * 0.3;
+  float pk = smoothstep(0.5, 0.6, pathV) * flat01;
+  float pRim = smoothstep(0.1, 0.0, abs(pathV - 0.55)) * flat01;
+  ground = mix(ground, uPathColor * (0.92 + 0.16 * tn(vPosW.xz * 1.3)), pk * 0.7);
+  ground *= 1.0 - pRim * 0.16;
   vec3 base = mix(ground, canopy, amt);
   float grain = tn(vPosW.xz * 0.33) - 0.5;
   float fine = tn(vPosW.xz * 1.9 + grain) - 0.5;
   float nearK = 1.0 - smoothstep(40.0, 180.0, dist);
-  base *= 1.0 + grain * 0.16 * nearK + fine * 0.13 * (1.0 - smoothstep(6.0, 45.0, dist));
+  float close = 1.0 - smoothstep(5.0, 40.0, dist);
+  // directional brush strokes near the camera so the foreground ground reads as painted grass, not a flat fill
+  vec2 sp = vec2(vPosW.x * 0.8 - vPosW.z * 0.6, vPosW.x * 0.6 + vPosW.z * 0.8);
+  float stroke = tn(vec2(sp.x * 3.2, sp.y * 0.75)) - 0.5;
+  base *= 1.0 + grain * 0.2 * nearK + fine * 0.14 * close + stroke * 0.24 * close * (1.0 - pk);
+  // flowers and pebbles: sparse dots on a 0.7 m lattice, fading out before they can shimmer
+  float dotK = (1.0 - smoothstep(9.0, 24.0, dist)) * flat01 * (1.0 - amt);
+  if (dotK > 0.01) {
+    vec2 cp = vPosW.xz * 1.4;
+    vec2 cell = floor(cp);
+    float hs = th(cell);
+    if (hs > 0.84) {
+      vec2 off = vec2(th(cell + 7.1), th(cell + 3.3)) * 0.6 - 0.3;
+      float dd = length(fract(cp) - 0.5 - off);
+      float isFlower = step(0.91, hs) * (1.0 - pk);
+      float d0 = smoothstep(0.15, 0.1, dd);
+      vec3 pebble = mix(uPathColor, vec3(0.9), 0.25) * (0.75 + 0.5 * th(cell + 1.9));
+      vec3 flower = hs > 0.965 ? vec3(1.0, 0.95, 0.88) : vAccent;
+      base = mix(base, mix(pebble, flower, isFlower), d0 * dotK);
+    }
+  }
   vec3 ln = normalize(n + vec3(bump - 0.5, 0.0, tn(vPosW.xz * 0.085 + 5.0) - 0.5) * amt * 0.9);
   // Terrain takes no rim light: the view vector is the normal itself.
   vec3 c = toonLight(base, ln, ln);
@@ -114,6 +157,8 @@ export function createTerrain(ctx, grid) {
   const foliage = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].foliage).multiplyScalar(0.88));
   // region shade colours for the painted ground patches (Color stores linear values, like the foliage)
   const shade = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].shade));
+  // region accent colours for the scattered flower dots of the near ground
+  const accent = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].accent));
 
   /** @param {boolean} far */
   function material(far) {
@@ -124,6 +169,8 @@ export function createTerrain(ctx, grid) {
         uRimColor: g.uRimColor, uCamPos: g.uCamPos, uWind: g.uWind,
         uFoliage: { value: foliage },
         uShade: { value: shade },
+        uAccent: { value: accent },
+        uPathColor: { value: new Color(PALETTE.path) },
         uSink: { value: far ? 1 : 0 },
         uSinkRadius: { value: 1152 },
         uCanopyNear: { value: 300 },
@@ -285,7 +332,7 @@ export function createTerrain(ctx, grid) {
         const ny = 2 * e;
         const l = 127 / Math.sqrt(nx * nx + ny * ny + nz * nz);
         nor[k * 4] = Math.round(nx * l); nor[k * 4 + 1] = Math.round(ny * l); nor[k * 4 + 2] = Math.round(nz * l);
-        nor[k * 4 + 3] = grid.regionIndexAt(x, z);
+        nor[k * 4 + 3] = grid.regionIndexAt(x, z) + (kind !== K2 && (grid.flagsAt(x, z) & FLAG.PATH) !== 0 ? 8 : 0);
         if (kind === K2) {
           const o = step * 0.25;
           col[k * 4] = 0; col[k * 4 + 1] = 0; col[k * 4 + 2] = 0;
