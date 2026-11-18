@@ -13,7 +13,9 @@
  * - Rotation: a full Strike String, a Breaker (smash), a short re-engage during which bolts are fired, and one slot
  *   technique on cooldown (Flare Barrage before Nova Ring is unlocked, then Nova Ring), all within the Ora budget of
  *   the fight (pool plus in-combat regen). Melee uptime is below 1 (spacing, dodging); in a group every enemy also
- *   costs a target switch (lock, lunge, chase; longer for ranged and flying enemies). Calibrated on the browser check.
+ *   costs a target switch (lock, lunge, chase; longest for hovering casters, short for flyers since the first string
+ *   hit rises to them). The cycle runs at MODEL.rotation.tempo of its nominal length (the input latch registers presses
+ *   made during hit-stop). Calibrated on the browser check (tools/scenarios/balance.mjs).
  * - Enemies: the weighted average of their usable techniques (power per cycle of windup + active + recover + the
  *   brain's gap), limited by the difficulty's attack tokens; a share of the hits is avoided (guard, Flicker, knock).
  * @module tools/balance-sim
@@ -33,22 +35,34 @@ export const MODEL = Object.freeze({
    * Profiles. uptime: share of time the melee rotation is landing (spacing, dodging, enemies knocked away);
    * hitRate: share of enemy hits that land; nodes: TP nodes bought. `player` is the realistic player of the table
    * (guards and dodges some hits); `bot` is the scripted rotation of tools/scenarios/balance.mjs (only attacks).
+   * The bot's hitRate is measured per fight kind: in a group its strings and smashes keep grunts in hit-stun and
+   * Hurtle (few attacks land); a boss's poise holds and most of its hits land (Durn: 88% of max HP lost in 32 s at
+   * hpMult 48, 57% in 43 s at hpMult 77: the boss's phase timing makes single runs vary).
    */
   profiles: {
     player: { uptime: { group: 0.8, boss: 0.75 }, hitRate: 0.55, nodes: true },
     /** Story is chosen by newer players (more hits land); Master by skilled ones (fewer). */
     story: { uptime: { group: 0.8, boss: 0.75 }, hitRate: 0.65, nodes: true },
     master: { uptime: { group: 0.8, boss: 0.75 }, hitRate: 0.4, nodes: true },
-    bot: { uptime: { group: 0.95, boss: 1.0 }, hitRate: 0.8, nodes: false },
+    bot: { uptime: { group: 0.95, boss: 1.0 }, hitRate: { group: 0.25, boss: 0.7 }, nodes: false },
   },
+  /**
+   * Rotation tempo: the measured length of a string-and-Breaker cycle as a share of its nominal length (hits x
+   * hitSeconds + breakerSeconds). Presses made during hit-stop register (the combat input latch), so the next hit and
+   * the Breaker cancel the recover of the hit before them. Calibrated on the browser check.
+   */
+  rotation: { tempo: 0.6 },
   /** Shortest window (s) over which a full Ora pool is spent in fights. */
   oraWindow: 40,
   /** Average extra targets hit by the string in a group (cleave). */
   cleave: 1.15,
   /** Re-engage after a Breaker smash (s), and bolts fired during it. */
   reengage: 0, boltsPerCycle: 0.5,
-  /** Seconds lost per enemy of a group to switch target (lock, lunge, chase): ground melee, ranged or flying. */
-  switchSeconds: { melee: 1.3, ranged: 1.7 },
+  /**
+   * Seconds lost per enemy of a group to switch target (lock, lunge, chase): ground melee, ranged (hovering casters)
+   * or flying (the first string hit rises to a flyer, so a flyer costs less than a caster that keeps its distance).
+   */
+  switchSeconds: { melee: 1.8, ranged: 1.7, fly: 0.5 },
   /** Breaker as a tap after the string (s). */
   breakerSeconds: 0.45,
   /** HP fraction a player loses before the first healing item of a boss fight. */
@@ -109,6 +123,9 @@ export const STAGES = [
     gear: [['copper_knuckles', 15], ['frostweave_garb', 22], ['wyrmhide_charm', 16], ['frost_charm', 22]],
     fights: [{ id: 'mq7_gate', members: [['choir_vanguard', 3]], level: 26 }], boss: 'vorrhal' },
 ];
+
+/** Enemy level of the Meadows stage (the open-world level a level-2 or level-3 player meets there). */
+export const MEADOWS_LEVEL = F.regionLevel(REGIONS.find((r) => r.id === 'meadows').levels, STAGES[1].t);
 
 /** Main quests completed before each stage (their TP and Shells are in hand). */
 const QUESTS_BEFORE = { MQ1: [], Meadows: ['mq1'], MQ2: ['mq1', 'sq1'], MQ4: ['mq1', 'mq2', 'sq1'], MQ3: ['mq1', 'mq2', 'sq1', 'mq4'],
@@ -204,7 +221,7 @@ export function playerDps(p, target, oraPerSec, unlocks, uptime, frontMult = 1) 
   let strHits = ss.hits.length;
   if (rS >= 1) { strPower += ss.ranks[1].extraHit.power; strHits++; }
   if (rS >= 2) strPower *= ss.ranks[2].powerMult;
-  const cycle = strHits * ss.hitSeconds + MODEL.breakerSeconds + MODEL.reengage;
+  const cycle = (strHits * ss.hitSeconds + MODEL.breakerSeconds + MODEL.reengage) * MODEL.rotation.tempo;
   const melee = (strPower + B.tech.breaker.power) * perPower(p, 'melee', target) * frontMult;
   // Slot technique on cooldown, paid first from the Ora budget.
   let area = 0;
@@ -301,7 +318,7 @@ function stageLevel(stage, fight, enemyId, playerLevel) {
  * @returns {object}
  */
 export function groupFight(p, stage, fight, diff, prof = MODEL.profiles.player) {
-  const hitRate = prof.hitRate;
+  const hitRate = typeof prof.hitRate === 'number' ? prof.hitRate : prof.hitRate.group;
   const row = F.difficultyRow(diff);
   const members = [];
   for (const [id, n] of fight.members) {
@@ -317,7 +334,7 @@ export function groupFight(p, stage, fight, diff, prof = MODEL.profiles.player) 
   let dps = 0;
   let ttkOne = 0;
   let switchT = 0;
-  for (const m of members) switchT += m.def.brain === 'ranged' || m.def.movement === 'fly' ? MODEL.switchSeconds.ranged : MODEL.switchSeconds.melee;
+  for (const m of members) switchT += m.def.movement === 'fly' ? MODEL.switchSeconds.fly : m.def.brain === 'ranged' ? MODEL.switchSeconds.ranged : MODEL.switchSeconds.melee;
   for (let it = 0; it < 4; it++) {
     const ora = oraBudget(p, T);
     let sum = 0;
@@ -367,7 +384,7 @@ export function groupFight(p, stage, fight, diff, prof = MODEL.profiles.player) 
 
 /** A boss fight: fight length, damage taken and the healing items it costs. */
 export function bossFight(p, stage, bossId, diff, prof = MODEL.profiles.player) {
-  const hitRate = prof.hitRate;
+  const hitRate = typeof prof.hitRate === 'number' ? prof.hitRate : prof.hitRate.boss;
   const bd = BOSS[bossId];
   const def = ENEMY[bossId];
   const extraHp = bossId === 'vorrhal' ? 1 + bd.hpPerSiphonStanding * 1 : 1;

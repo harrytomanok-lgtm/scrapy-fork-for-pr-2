@@ -6,10 +6,15 @@
  * must be inside the bands of tools/balance-sim.mjs (`checks()`, bot profile) within 35 percent.
  * Run with `node tools/scenarios.mjs balance`.
  */
-import { checks } from '../balance-sim.mjs';
+import { MEADOWS_LEVEL, checks } from '../balance-sim.mjs';
 
 /** Tolerance against the simulated value (GDD balance task: within 35 percent). */
 const TOL = 0.35;
+/**
+ * Absolute floor of the HP-lost tolerance, in percent of max HP: one enemy hit at the check points costs 3-6 percent,
+ * so a measurement cannot resolve HP lost more finely than about one hit (a short fight may end before a hit lands).
+ */
+const LOST_ABS = 6;
 
 /** In the page: set up the player for a check point. */
 function setup(g, a) {
@@ -35,6 +40,7 @@ function setup(g, a) {
   const S = { t0: g.simTime(), lost: 0, last: p.stats.hp, heals: 0, presses: 0, techT: -99, done: false, end: 0, chunks: 0, firstHit: -1 };
   window.__bal = S;
   S.dealt = 0;
+  S.hpMin = p.stats.hp;
   S.hits = 0;
   S.techs = {};
   if (window.__balOff) window.__balOff();
@@ -69,7 +75,7 @@ function setup(g, a) {
           const d = (e.pos.x - p.pos.x) ** 2 + (e.pos.z - p.pos.z) ** 2;
           if (d < best) { best = d; target = e; }
         }
-        g.lock(target ? target.id : 0);
+        if (!a.noLock) g.lock(target ? target.id : 0);
       }
       if (target) {
         const dx = target.pos.x - p.pos.x;
@@ -83,14 +89,15 @@ function setup(g, a) {
           g.press('bolt');
         } else {
           S.presses++;
-          if (S.presses % 6 === 0) g.press('attack', 24); else g.press('attack');
+          if (S.presses % 6 === 0 && !a.tapOnly) g.press('attack', 24); else g.press('attack');
         }
       }
-      g.ctx.loop.stepSim(S.presses % 6 === 0 ? 26 : 15);
+      g.ctx.loop.stepSim(S.presses % 6 === 0 && !a.tapOnly ? 26 : 15);
       if (++S.chunks % 25 === 0) g.render();
       if (p.stats.hp < S.last) S.lost += S.last - p.stats.hp;
+      if (p.stats.hp < S.hpMin) S.hpMin = p.stats.hp;
       // A healing item (Sunfruit, 30%) whenever HP falls below 30%.
-      if (p.stats.hp > 0 && p.stats.hp < p.stats.hpMax * 0.3) {
+      if (!a.noHeal && p.stats.hp > 0 && p.stats.hp < p.stats.hpMax * 0.3) {
         g.ctx.combat.heal(p, p.stats.hpMax * 0.3);
         S.heals++;
       }
@@ -102,10 +109,22 @@ function setup(g, a) {
       S.last = p.stats.hp;
     }
     const boss = S.boss ? g.ctx.ents.get(S.boss) : null;
-    return { probe: S.probe, bossHp: boss && boss.stats ? Math.round(boss.stats.hp) + '/' + boss.stats.hpMax : '', dealt: Math.round(S.dealt), hits: S.hits, techs: S.techs,
+    return { hpMin: Math.round(S.hpMin), probe: S.probe, bossHp: boss && boss.stats ? Math.round(boss.stats.hp) + '/' + boss.stats.hpMax : '', dealt: Math.round(S.dealt), hits: S.hits, techs: S.techs,
       done: S.done, dead: !!S.dead, t: (S.done ? S.end : g.simTime()) - S.t0, lost: S.lost, heals: S.heals, hp: p.stats.hp, hpMax: p.stats.hpMax };
   };
   return { hpMax: p.stats.hpMax, level: g.ctx.rpg.level, slots: JSON.stringify(g.state().player.slots), hasNova: g.ctx.rpg.hasTech('nova_ring') };
+}
+
+/** The tap-only boar checks (balance task 3): Warrior, level 2, Meadows gear. */
+function boarChecks() {
+  const base = { difficulty: 'warrior', level: 2, gear: [['training_wraps', 1], ['apprentice_garb', 1]], x: -1150, z: 1250, attackOnly: true, tapOnly: true, noHeal: true };
+  const L = MEADOWS_LEVEL;
+  return {
+    one: { setup: base, fight: { members: ['tusk_boar'], enemyLevel: L, dist: 9 }, maxSeconds: 60, minHpLeft: 0.5 },
+    three: { setup: base, fight: { members: ['tusk_boar', 'tusk_boar', 'tusk_boar'], enemyLevel: L, dist: 9 }, maxSeconds: 90 },
+    oneFarNoLock: { setup: Object.assign({}, base, { noLock: true }), fight: { members: ['tusk_boar'], enemyLevel: L, dist: 18 }, maxSeconds: 60, minHpLeft: 0.5 },
+    threeFarNoLock: { setup: Object.assign({}, base, { noLock: true }), fight: { members: ['tusk_boar', 'tusk_boar', 'tusk_boar'], enemyLevel: L, dist: 18 }, maxSeconds: 90 },
+  };
 }
 
 /** Run the fight in 8-second slices (each slice is one page evaluation). */
@@ -119,9 +138,9 @@ async function fightLoop(game, maxSeconds) {
 }
 
 /** Compare a measurement with the simulated band. */
-function within(assert, label, measured, expected) {
-  const lo = expected * (1 - TOL);
-  const hi = expected * (1 + TOL);
+function within(assert, label, measured, expected, abs = 0) {
+  const lo = Math.min(expected * (1 - TOL), expected - abs);
+  const hi = Math.max(expected * (1 + TOL), expected + abs);
   console.log(`  ${label}: measured ${measured.toFixed(1)}, simulated ${expected.toFixed(1)} (band ${lo.toFixed(1)}-${hi.toFixed(1)})`);
   assert.ok(measured >= lo && measured <= hi, `${label}: ${measured.toFixed(1)} outside ${lo.toFixed(1)}-${hi.toFixed(1)}`);
 }
@@ -155,7 +174,7 @@ function groupScenario(key) {
       console.log(`  ${key}: ${JSON.stringify(r)}`);
       assert.ok(r.done && !r.dead, 'the bot wins the fight');
       within(assert, key + ' time to kill (s)', r.t, c.expect.ttk);
-      within(assert, key + ' HP lost (% of max)', 100 * r.lost / r.hpMax, c.expect.lostPct);
+      within(assert, key + ' HP lost (% of max)', 100 * r.lost / r.hpMax, c.expect.lostPct, LOST_ABS);
     },
   };
 }
@@ -188,6 +207,36 @@ export const scenarios = [
   },
   groupScenario('camp'),
   {
+    // The open-world report: a level-2 player who only taps Attack (no Breaker, guard, dodge or healing item) against
+    // one Tusk Boar and against three at the Meadows level wins the single boar with more than half HP and survives three.
+    name: 'balance-boar-tap',
+    width: 640, height: 360,
+    async run({ game, assert, shot }) {
+      const c = boarChecks();
+      const out = [];
+      for (const k of Object.keys(c)) {
+        const info = await game(setup, c[k].setup);
+        assert.equal(info.level, c[k].setup.level, 'player level');
+        const ids = await game((g, a) => {
+          const p = g.ctx.player;
+          const list = a.members.map((id, i) => g.spawn(id, { x: p.pos.x + Math.sin(i * 2.1 + 0.4) * a.dist, z: p.pos.z + Math.cos(i * 2.1 + 0.4) * a.dist, level: a.enemyLevel, aggro: true }));
+          window.__bal.only = list;
+          window.__bal.t0 = g.simTime();
+          return list;
+        }, c[k].fight);
+        assert.ok(ids.every((id) => id > 0), 'the boars spawn');
+        const r = await fightLoop(game, c[k].maxSeconds);
+        console.log(`  ${k}: ${JSON.stringify(r)}`);
+        out.push([k, r]);
+        if (k === 'three') await shot('balance-boar-tap');
+      }
+      for (const [k, r] of out) {
+        assert.ok(r.done && !r.dead, k + ': the tapping player wins');
+        if (c[k].minHpLeft) assert.ok(r.hpMin > c[k].minHpLeft * r.hpMax, `${k}: ${r.hpMin} of ${r.hpMax} HP left at worst`);
+      }
+    },
+  },
+  {
     name: 'balance-durn',
     width: 640, height: 360,
     async run({ game, assert, shot }) {
@@ -218,7 +267,7 @@ export const scenarios = [
       console.log(`  durn: ${JSON.stringify(r)}`);
       assert.ok(r.done && !r.dead, 'the bot beats Durn');
       within(assert, 'Durn fight length (s)', r.t, c.expect.ttk);
-      within(assert, 'Durn HP lost (% of max)', 100 * r.lost / r.hpMax, c.expect.lostPct);
+      within(assert, 'Durn HP lost (% of max)', 100 * r.lost / r.hpMax, c.expect.lostPct, LOST_ABS);
     },
   },
 ];

@@ -300,13 +300,16 @@ export const BALANCE = deepFreeze({
    * GDD 7.3 bosses. phases = HP fractions at which each phase starts. index = loot `boss` shell multiplier.
    * Balance pass: hpMult raised (GDD 6 / 14 / 18 / 16 / 24) for fights of about 55 / 85 / 100 / 110 / 170 s at
    * Warrior (measured in the browser: Durn at hpMult 6 fell in 8 s); boss ATK is 0.75 (ai/data/enemies).
+   * Re-balance after the combat input latch (presses during hit-stop register): the measured rotation deals about
+   * 1.6x the damage per second it did, so every boss hpMult was raised by that factor (48 / 80 / 72 / 88 / 100 before)
+   * to keep the fight lengths and healing items of the first pass.
    */
   bosses: {
-    durn: { index: 1, level: 4, hpMult: 48, poise: 80, phases: [1.0], addsAt: 0.5, adds: 2, fleeAtZero: true, arena: { landmarkId: 'sparkstead', radius: 60 } },
-    bramblehorn: { index: 2, level: 12, hpMult: 80, poise: 200, phases: [1.0, 0.5], craterRadius: 8, arena: { landmarkId: 'bramble_hollow', radius: 90 } },
-    gorrumaw: { index: 3, level: 18, hpMult: 72, poise: 250, phases: [1.0, 0.5], armourDefMult: 0.5, arena: { landmarkId: 'burrow_pit', radius: 110 } },
-    iskra: { index: 4, level: 22, hpMult: 88, poise: 220, phases: [1.0, 0.5], craterRadius: 12, diveHeight: 200, arena: { landmarkId: 'paleglass_summit', radius: 100 } },
-    vorrhal: { index: 5, level: 26, hpMult: 100, poise: 300, phases: [1.0, 0.6, 0.25], hpPerSiphonStanding: 0.10, adds: 2, arena: { landmarkId: 'dim_court', radius: 120 } },
+    durn: { index: 1, level: 4, hpMult: 77, poise: 80, phases: [1.0], addsAt: 0.5, adds: 2, fleeAtZero: true, arena: { landmarkId: 'sparkstead', radius: 60 } },
+    bramblehorn: { index: 2, level: 12, hpMult: 130, poise: 200, phases: [1.0, 0.5], craterRadius: 8, arena: { landmarkId: 'bramble_hollow', radius: 90 } },
+    gorrumaw: { index: 3, level: 18, hpMult: 116, poise: 250, phases: [1.0, 0.5], armourDefMult: 0.5, arena: { landmarkId: 'burrow_pit', radius: 110 } },
+    iskra: { index: 4, level: 22, hpMult: 138, poise: 220, phases: [1.0, 0.5], craterRadius: 12, diveHeight: 200, arena: { landmarkId: 'paleglass_summit', radius: 100 } },
+    vorrhal: { index: 5, level: 26, hpMult: 156, poise: 300, phases: [1.0, 0.6, 0.25], hpPerSiphonStanding: 0.10, adds: 2, arena: { landmarkId: 'dim_court', radius: 120 } },
   },
   bossRules: { resetExtra: 60, introSeconds: 3, xpMult: 6 },
 
