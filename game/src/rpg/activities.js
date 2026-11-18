@@ -21,6 +21,8 @@ const CAMP_CHEST_DX = 5;
 const GATE_RADIUS = 10;
 const SIPHON_WAKE = 150;
 const SIPHON_CYCLE_RANGE = 600;
+/** Beyond this distance from a woken Siphon its guards are sent home (m). */
+const SIPHON_GUARD_LEASH = 400;
 const DISCOVERY_EVERY = 30;
 
 /**
@@ -242,6 +244,18 @@ export function createActivities(ctx, host) {
     const dz = p.pos.z - r.z;
     const d2 = dx * dx + dz * dz;
     const e = r.entId ? ctx.ents.get(r.entId) : null;
+    // The player left a woken (or silenced) Siphon: its guards go home (they would hold the active-enemy cap from
+    // kilometres away and starve the ambient spawner) and wake again on the next approach.
+    if (d.woke && d2 > SIPHON_GUARD_LEASH * SIPHON_GUARD_LEASH) {
+      const tag = r.id + '_guard';
+      const list = ctx.ents.list('enemy');
+      for (let i = list.length - 1; i >= 0; i--) {
+        const g = list[i];
+        if (g.alive && g.questTag === tag && ctx.ai) ctx.ai.despawn(g.id);
+      }
+      d.woke = false;
+      d.wave2 = false;
+    }
     if (!e || !e.alive) return;
     if (!d.woke && d2 < SIPHON_WAKE * SIPHON_WAKE) {
       d.woke = true;
@@ -451,7 +465,7 @@ export function createActivities(ctx, host) {
     /** @param {any} c @param {number} dt @param {any} p */
     step(c, dt, p) {
       tickN++;
-      for (let i = 0; i < recs.length; i++) if (recs[i].kind === 'siphon' && recs[i].entId) stepSiphon(recs[i], dt, p);
+      for (let i = 0; i < recs.length; i++) if (recs[i].kind === 'siphon' && (recs[i].entId || recs[i].data.woke)) stepSiphon(recs[i], dt, p);
       if (race.active) stepRace(dt, p);
       if (tickN % DISCOVERY_EVERY === 0) stepDiscovery(p);
     },

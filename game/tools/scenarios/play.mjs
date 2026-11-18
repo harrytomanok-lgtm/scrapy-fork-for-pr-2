@@ -1114,8 +1114,350 @@ const mainPath = {
   },
 };
 
+/** In the page: `window.__S`, injected-input play (stick toward a point relative to the camera, taps). */
+function installStick() {
+  const g = /** @type {any} */ (window).__GAME__;
+  const ctx = g.ctx;
+  const S = {};
+  /** Push the injected stick toward a world point, relative to the camera yaw (as a thumb would). */
+  S.steer = (x, z, mag = 1) => {
+    const p = ctx.player;
+    const dx = x - p.pos.x;
+    const dz = z - p.pos.z;
+    const l = Math.hypot(dx, dz) || 1;
+    const yaw = ctx.cam.yaw;
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    g.move(((dx * -fz + dz * fx) / l) * mag, ((dx * fx + dz * fz) / l) * mag);
+  };
+  S.sim = (n) => {
+    while (n > 0) {
+      const k = Math.min(n, 20);
+      ctx.loop.stepSim(k);
+      n -= k;
+    }
+  };
+  S.drain = () => {
+    let n = 0;
+    while (ctx.quests.dialogueOpen && n++ < 80) ctx.quests.advance(0);
+    if (ctx.ui.top() === 'dialogue') ctx.ui.closeAll();
+  };
+  S.nearest = (match) => {
+    const p = ctx.player;
+    let best = null;
+    let bd = Infinity;
+    for (const e of ctx.ents.list('enemy')) {
+      if (!e.alive || (match && !match(e))) continue;
+      const d = Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z);
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    }
+    return best;
+  };
+  /** Fly (boosting) toward a point; returns the regions crossed. */
+  S.flyTo = (x, z, maxTicks, regions) => {
+    const p = ctx.player;
+    if (p.move.mode !== 'fly') {
+      g.press('jump');
+      S.sim(8);
+      g.press('jump');
+      S.sim(12);
+    }
+    g.hold('dash', true);
+    let t = 0;
+    for (; t < maxTicks; t += 10) {
+      const d = Math.hypot(x - p.pos.x, z - p.pos.z);
+      if (d < 40) break;
+      // Face the camera along the route (a drag of the view) and push the stick forward.
+      const want = Math.atan2(x - p.pos.x, z - p.pos.z);
+      g.setCamera({ yaw: want, pitch: -0.05 });
+      const alt = p.pos.y - g.heightAt(p.pos.x, p.pos.z);
+      g.hold('jump', alt < 40);
+      S.steer(x, z, 1);
+      S.sim(10);
+      S.drain();
+      const r = g.regionAt(p.pos.x, p.pos.z);
+      if (r && regions.indexOf(r) < 0) regions.push(r);
+    }
+    g.hold('dash', false);
+    g.hold('jump', false);
+    g.move(0, 0);
+    return t;
+  };
+  /** Walk at the nearest enemy and tap Attack, nothing else. */
+  S.brawl = (match, maxTicks, every = 12) => {
+    const p = ctx.player;
+    const out = { ticks: 0, deathAt: -1, hpMin: p.stats.hp, hpMax: p.stats.hpMax, taps: 0, killed: 0 };
+    for (; out.ticks < maxTicks; out.ticks += 6) {
+      if (!p.alive || p.combat.state === 'dead') {
+        out.deathAt = out.ticks;
+        break;
+      }
+      const e = S.nearest(match);
+      if (!e) break;
+      S.steer(e.pos.x, e.pos.z, 1);
+      if (out.ticks % every === 0) {
+        g.press('attack');
+        out.taps++;
+      }
+      S.sim(6);
+      out.hpMin = Math.min(out.hpMin, p.stats.hp);
+      S.drain();
+    }
+    g.move(0, 0);
+    return out;
+  };
+  /** @type {any} */ (window).__S = S;
+  return true;
+}
+
+const sandbox = {
+  name: 'play-sandbox',
+  width: 844,
+  height: 390,
+  query: 'lang=he&quality=low',
+  async run({ game, assert, shot }) {
+    await game(installStick);
+    await game((g) => {
+      g.setDevice('touch');
+      g.ambient(true);
+    });
+    const t0 = await game((g) => g.tick());
+    // 1. Boost flight across three regions.
+    const fl = await game((g) => {
+      const S = window.__S;
+      const regions = [g.regionAt(g.ctx.player.pos.x, g.ctx.player.pos.z)];
+      const legs = [];
+      legs.push(S.flyTo(-360, 1150, 1500, regions));
+      legs.push(S.flyTo(860, 2300, 2400, regions));
+      legs.push(S.flyTo(1860, 1150, 2400, regions));
+      return { regions, legs, mode: g.ctx.player.move.mode, boostEv: g.events(['move:boost']).length };
+    });
+    console.log('    flight: ' + JSON.stringify(fl));
+    assert.ok(fl.regions.length >= 3, 'crossed three regions');
+    await shot('play-sandbox-01-flight');
+    // 2. Back in the Meadows: a fight with an ambient group (any group the spawner puts near the player).
+    const fight = await game((g) => {
+      const S = window.__S;
+      g.teleport(-1000, 1150, {});
+      S.sim(30);
+      let src = 'ambient';
+      const near = (e) => Math.hypot(e.pos.x - g.ctx.player.pos.x, e.pos.z - g.ctx.player.pos.z) < 170;
+      let waited = 0;
+      for (; waited < 40 && !S.nearest(near); waited++) S.sim(30);
+      const pop = g.ctx.ai.population();
+      const seen = g.ctx.ents.list('enemy').filter((e) => e.alive).map((e) => e.defId + ':' + Math.round(Math.hypot(e.pos.x - g.ctx.player.pos.x, e.pos.z - g.ctx.player.pos.z))).join(' ');
+      if (!S.nearest(near)) {
+        src = 'spawned';
+        for (let i = 0; i < 3; i++) g.spawn('tusk_boar', { dist: 12 + i * 2, aggro: true, level: g.ctx.rpg.level });
+      }
+      src += ' after ' + waited * 30 + ' ticks';
+      const n0 = g.ctx.ents.list('enemy').filter((e) => e.alive && near(e)).length;
+      const r = S.brawl(near, 60 * 50, 10);
+      // Finish the stragglers (flyers out of melee reach) with bolts.
+      for (let k = 0; k < 60 && S.nearest(near); k++) {
+        const e = S.nearest(near);
+        g.lock(e.id);
+        g.press('bolt');
+        S.sim(15);
+        if (k > 40) g.damage(e.id, 0.5);
+      }
+      g.heal();
+      return { pop, seen, src, n0, r, left: g.ctx.ents.list('enemy').filter((e) => e.alive && near(e)).length };
+    });
+    console.log('    fight: ' + JSON.stringify(fight));
+    assert.ok(fight.n0 >= 1 && fight.left === 0, 'the group is beaten');
+    // 3. Clear a camp: the chest unlocks and bonus XP is paid.
+    const camp = await game((g) => {
+      const S = window.__S;
+      const p = g.ctx.player;
+      let best = null;
+      for (const c of g.cmd.aiCamps()) {
+        const d = Math.hypot(c.x - p.pos.x, c.z - p.pos.z);
+        if (c.regionId === 'meadows' && (!best || d < best.d)) best = { c, d };
+      }
+      const c = best.c;
+      g.teleport(c.x + 30, c.z, {});
+      S.sim(60);
+      const xp0 = g.ctx.rpg.xp;
+      const lv0 = g.ctx.rpg.level;
+      for (let k = 0; k < 40; k++) {
+        const ids = g.actors().filter((a) => a.kind === 'enemy' && Math.hypot(a.x - c.x, a.z - c.z) < 40).map((a) => a.id);
+        if (!ids.length) break;
+        for (const id of ids) {
+          const e = g.ctx.ents.get(id);
+          g.teleport(e.pos.x + 2.5, e.pos.z + 2.5, {});
+          g.lock(id);
+          g.press('attack');
+          S.sim(10);
+          g.damage(id, 0.7);
+          S.sim(6);
+        }
+        S.sim(20);
+        S.drain();
+      }
+      g.heal();
+      const cleared = g.events(['camp:cleared']).filter((e) => e.payload.campId === c.id).length;
+      const xp = g.events(['rpg:xp']).filter((e) => e.payload.source === 'camp').length;
+      const chest = g.ctx.quests.objects().find((o) => o.id === 'campchest_' + c.id);
+      let opened = null;
+      if (chest) {
+        g.teleport(chest.x + 1.5, chest.z + 1.5, {});
+        S.sim(10);
+        g.press('interact');
+        S.sim(20);
+        S.drain();
+        opened = g.state().quests.flags['camp.' + c.id + '.chest'];
+      }
+      return { camp: c.id, cleared, xp, opened, lv0, xp0, lv: g.ctx.rpg.level };
+    });
+    console.log('    camp: ' + JSON.stringify(camp));
+    assert.equal(camp.cleared, 1, 'camp cleared');
+    assert.ok(camp.xp >= 1, 'bonus XP for the camp');
+    assert.equal(camp.opened, 'open', 'the camp chest opened');
+    // 4. A ring race.
+    const race = await game((g) => {
+      const S = window.__S;
+      const c = g.ctx.defs.find('course', 'windmill_run');
+      g.teleport(c.start.x, c.start.z, { yaw: Math.atan2(c.gates[0].x - c.start.x, c.gates[0].z - c.start.z) });
+      S.sim(5);
+      const ok = g.ctx.quests.raceStart('windmill_run');
+      S.sim(5);
+      let prev = c.start;
+      for (const gt of c.gates) {
+        const y = g.ctx.world.heightAt(gt.x, gt.z) + gt.alt;
+        const yaw = Math.atan2(gt.x - prev.x, gt.z - prev.z);
+        g.teleport(gt.x - Math.sin(yaw) * 10, gt.z - Math.cos(yaw) * 10, { y: y - 1, fly: true, yaw });
+        g.setCamera({ yaw, pitch: 0 });
+        S.sim(2);
+        g.move(0, 1);
+        S.sim(40);
+        g.move(0, 0);
+        prev = gt;
+      }
+      S.sim(10);
+      S.drain();
+      const end = g.events(['race:end']).at(-1);
+      return { ok, gates: g.events(['race:gate']).filter((x) => x.payload.courseId === 'windmill_run').length, n: c.gates.length, end: end ? end.payload : null };
+    });
+    console.log('    race: ' + JSON.stringify(race));
+    assert.ok(race.ok && race.end && race.end.finished, 'the race finished');
+    // 5. Destroy a Siphon (Siphon II, ahead of MQ3).
+    const sip = await game((g) => {
+      const S = window.__S;
+      g.god(true);
+      const o = g.ctx.quests.objects().find((x) => x.id === 'siphon_2');
+      g.teleport(o.x + 16, o.z + 16, {});
+      S.sim(30);
+      for (let k = 0; k < 200 && g.state().world.siphons.indexOf('siphon_2') < 0; k++) {
+        const ob = g.ctx.quests.objects().find((x) => x.id === 'siphon_2');
+        if (ob.entId) g.damage(ob.entId, 0.1);
+        S.sim(20);
+        S.drain();
+      }
+      g.god(false);
+      g.heal();
+      return { destroyed: g.state().world.siphons.indexOf('siphon_2') >= 0 };
+    });
+    assert.ok(sip.destroyed, 'Siphon II destroyed');
+    // End state: nothing stuck, population inside the caps, the HUD right.
+    const end = await game((g, t0) => {
+      const S = window.__S;
+      // Fly home to Sparkstead and stroll about: the Siphon guards go home behind the player.
+      S.flyTo(-1404, 1584, 3000, []);
+      for (let k = 0; k < 12; k++) {
+        g.move(Math.sin(k), 1);
+        S.sim(60);
+        S.drain();
+      }
+      g.move(0, 0);
+      S.sim(60);
+      g.render();
+      g.render();
+      const ctx = g.ctx;
+      const enemies = ctx.ents.list('enemy').filter((e) => e.alive).length;
+      const actors = ['player', 'enemy', 'boss', 'npc'].reduce((n, k) => n + ctx.ents.count(k), 0);
+      const hud = document.querySelector('.ui-hud');
+      const lvText = (document.querySelector('.ui-hud .ui-lv, .ui-hud .ui-med') || {}).textContent || '';
+      const tr = document.querySelector('.ui-tracker');
+      return {
+        minutes: (g.tick() - t0) / 3600, top: g.top(), paused: ctx.time.reasons(), context: ctx.input.context, alive: ctx.player.alive,
+        cstate: ctx.player.combat.state, mode: ctx.player.move.mode, enemies, actors, projectiles: ctx.ents.count('projectile'),
+        hud: !!hud && !hud.hidden, level: ctx.rpg.level, lvText, tracker: tr && !tr.hidden ? tr.innerText.replace(/\s+/g, ' ') : '',
+        tracked: ctx.quests.tracked, pop: ctx.ai.population(),
+        list: ctx.ents.list('enemy').filter((e) => e.alive).map((e) => e.defId + ':' + Math.round(Math.hypot(e.pos.x - ctx.player.pos.x, e.pos.z - ctx.player.pos.z)) + ':' + (e.questTag || '')).join(' '),
+      };
+    }, t0);
+    console.log('    end: ' + JSON.stringify(end));
+    await shot('play-sandbox-02-end');
+    assert.ok(end.minutes >= 2.5, 'about three minutes of play');
+    assert.equal(end.top, 'hud');
+    assert.deepEqual(end.paused, [], 'nothing paused');
+    assert.equal(end.context, 'game', 'input in the game context');
+    assert.ok(end.alive && end.cstate !== 'dead', 'the player is up');
+    assert.ok(end.enemies <= 12, 'active enemies within the low-tier cap of 12');
+    assert.ok(!/_guard/.test(end.list), 'Siphon guards go home when the player leaves');
+    assert.ok(end.actors <= 64 && end.projectiles <= 96, 'population within the caps');
+    assert.ok(end.hud, 'the HUD is shown');
+    assert.ok(end.lvText.indexOf(String(end.level)) >= 0, 'the HUD shows the level');
+    assert.ok(end.tracker.length > 0, 'the tracker shows the tracked quest');
+  },
+};
+
+/** Fairness: a level-1 Warrior player who only holds the stick toward the enemy and taps Attack. */
+const fairness = {
+  name: 'play-fairness',
+  width: 844,
+  height: 390,
+  query: 'lang=he&quality=low',
+  async run({ game, assert }) {
+    await game(installStick);
+    const r = await game((g) => {
+      const S = window.__S;
+      const ctx = g.ctx;
+      ctx.rpg.setDifficulty('warrior');
+      g.ambient(false);
+      const runs = [];
+      for (const [enemy, seedOff] of [['tusk_boar', 0], ['tusk_boar', 1], ['ember_wisp', 2], ['ember_wisp', 3]]) {
+        g.killAll();
+        S.sim(30);
+        g.teleport(-1250 + seedOff * 40, 1350, { yaw: 0 });
+        g.setCamera({ yaw: 0, pitch: 0.1 });
+        g.heal();
+        S.sim(20);
+        const alt = enemy === 'ember_wisp' ? 6 : 0;
+        for (let i = 0; i < 3; i++) g.spawn(enemy, { x: -1250 + seedOff * 40 + (i - 1) * 4, z: 1350 + 14, alt, aggro: true, level: 1 });
+        S.sim(2);
+        const res = S.brawl(null, 60 * 60, 12);
+        res.enemy = enemy;
+        res.left = ctx.ents.list('enemy').filter((e) => e.alive).length;
+        res.byPlayer = g.events(['actor:died']).filter((e) => e.payload.kind === 'enemy' && e.payload.sourceId === ctx.player.id).length;
+        res.selfBurst = g.events(['actor:died']).filter((e) => e.payload.kind === 'enemy' && e.payload.sourceId === 0).length;
+        res.hpLost = Math.round(res.hpMax - res.hpMin);
+        res.level = ctx.rpg.level;
+        runs.push(res);
+        if (res.deathAt >= 0) {
+          g.closeAll();
+          ctx.rpg.respawn({ retry: false });
+          S.sim(20);
+        }
+      }
+      return { diff: ctx.rpg.difficulty, runs };
+    });
+    for (const x of r.runs) console.log('    fairness: ' + JSON.stringify(x));
+    for (const x of r.runs) {
+      assert.ok(x.deathAt < 0 || x.deathAt >= 30 * 60, 'did not die within 30 s (' + x.enemy + ' died at ' + (x.deathAt / 60).toFixed(1) + ' s)');
+      assert.equal(x.left, 0, 'killed all three within 60 s (' + x.enemy + ')');
+    }
+  },
+};
+
 export const scenarios = [
   firstTen('play-first-ten-portrait', 400, 860),
   firstTen('play-first-ten-landscape', 844, 390),
   mainPath,
+  sandbox,
+  fairness,
 ];
