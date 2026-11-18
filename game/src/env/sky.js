@@ -1,5 +1,7 @@
 /**
- * The sky dome (ART_UX 1.6): one shader drawn first. Vertical gradient (zenith, horizon = the fog colour so the far
+ * The sky dome (ART_UX 1.6): one shader, drawn LAST among the opaques with the depth test on (LessEqual) at the far
+ * plane (the vertex shader writes z = w, so depth 1.0), so early-z rejects every pixel the terrain, props and actors
+ * already cover and the fragment shader only runs on the visible sky. Transparents still draw after it. Vertical gradient (zenith, horizon = the fog colour so the far
  * land melts into the sky, below-horizon), a hard sun disc with a soft halo, a moon disc with a pale ring, painted
  * three-tone clouds sampled from one pre-baked 256 px tiling noise texture (no per-pixel fbm) with a darker rim at
  * the threshold, hash stars and the Seam (a faint violet scar above the Spire) at night. One draw call, one program.
@@ -9,7 +11,7 @@
 
 import {
   ShaderMaterial, Mesh, SphereGeometry, DataTexture, RGBAFormat, UnsignedByteType, RepeatWrapping, LinearFilter,
-  LinearMipmapLinearFilter, Color, Vector3, Vector4, BackSide,
+  LinearMipmapLinearFilter, Color, Vector3, Vector4, BackSide, LessEqualDepth,
 } from 'three';
 import { PALETTE } from '../core/palette.js';
 
@@ -243,7 +245,8 @@ export function createSky() {
     vertexShader: SKY_VERT,
     fragmentShader: SKY_FRAG,
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,
+    depthFunc: LessEqualDepth,
     side: BackSide,
   });
   material.name = 'env.sky';
@@ -251,7 +254,8 @@ export function createSky() {
   const mesh = new Mesh(geometry, material);
   mesh.name = 'env.sky';
   mesh.frustumCulled = false;
-  mesh.renderOrder = -1000;
+  // after every opaque (world, props and actors use renderOrder <= 8); three draws transparents after all opaques
+  mesh.renderOrder = 1000;
   mesh.matrixAutoUpdate = false;
 
   const base0 = new Color(tone[0]);
