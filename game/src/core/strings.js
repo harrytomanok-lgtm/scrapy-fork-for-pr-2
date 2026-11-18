@@ -38,6 +38,7 @@ const CORE = [
   ['core.fatal.reload', 'Reload', 'טעינה מחדש'],
   ['core.fatal.webgl', 'This device cannot draw the game: WebGL2 is not available.', 'המכשיר הזה לא יכול להציג את המשחק: WebGL2 אינו זמין.'],
   ['core.fatal.contextLost', 'The graphics context was lost. Restoring…', 'ההקשר הגרפי אבד. מתבצע שחזור…'],
+  ['core.fatal.contextGone', 'The graphics device stopped responding and the picture could not be restored.', 'מכשיר הגרפיקה הפסיק להגיב ולא ניתן היה לשחזר את התמונה.'],
   ['core.save.saving', 'Saving', 'שמירה'],
   ['core.save.saved', 'Journey saved', 'המסע נשמר'],
   ['core.save.failed', 'Saving failed', 'השמירה נכשלה'],

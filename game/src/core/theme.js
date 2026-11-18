@@ -75,6 +75,10 @@ export function baseCss() {
     '.k-loading-track{stroke:var(--line);}',
     '.k-loading-fill{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset 120ms linear;}',
     '.k-loading-text{font-size:var(--fs-small);line-height:1.4;min-height:1.4em;color:var(--paper-dim);}',
+    '.k-loading-title:empty{min-height:calc(var(--fs-title) * 1.2);}',
+    // indeterminate ring of the static splash, until the script reports progress
+    '.k-loading-ring.k-spin{animation:k-spin 1.1s linear infinite;}',
+    '@keyframes k-spin{to{transform:rotate(360deg);}}',
     // fallback fatal layer (3.1)
     '.k-fatal{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);',
     'background:rgba(27,22,38,0.94);}',
@@ -94,7 +98,7 @@ export function baseCss() {
     '.k-bench{position:absolute;inset:var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);display:flex;flex-direction:column;gap:8px;',
     'padding:12px;background:var(--panel);border:2px solid var(--paper);direction:ltr;}',
     '.k-bench pre{flex:1;margin:0;overflow:auto;font-family:ui-monospace,monospace;font-size:12px;line-height:1.35;}',
-    '@media (prefers-reduced-motion: reduce){.k-loading-fill{transition:none;}}',
+    '@media (prefers-reduced-motion: reduce){.k-loading-fill{transition:none;}.k-loading-ring.k-spin{animation:none;}}',
   ].join('\n');
 }
 
@@ -121,4 +125,34 @@ export function applyTheme(dom) {
 export function setTextScale(dom, scale) {
   const s = Number.isFinite(scale) ? Math.min(1.3, Math.max(0.9, scale)) : 1;
   dom.root.style.setProperty('--text-scale', String(s));
+}
+
+/** Radius of the loading ring in its 96 x 96 view box. */
+export const RING_R = 42;
+/** Circumference of the loading ring. */
+export const RING_LEN = 2 * Math.PI * RING_R;
+
+/**
+ * Markup of the static boot splash that tools/build.mjs puts inside `#app`, so the loading screen is painted with
+ * the HTML, before the script is downloaded and parsed (ARCHITECTURE 7.1 boot budget). It is the foundation's
+ * loading layer in its initial state: `dom.layer('overlay')` adopts the layer and `createLoadingLayer` the
+ * `.k-loading` node, which then shows the title and the real progress. Language-neutral (no text): the
+ * language is known only once the script reads the flags and settings. Pure.
+ * @returns {string}
+ */
+export function splashMarkup() {
+  const c = (cls, extra) => `<circle class="${cls}" cx="48" cy="48" r="${RING_R}"${extra}></circle>`;
+  const len = RING_LEN.toFixed(2);
+  return [
+    '<div class="k-layer k-layer-overlay" data-layer="overlay" style="z-index:50">',
+    '<div class="k-loading" role="status" aria-busy="true">',
+    '<div class="k-loading-title"></div>',
+    '<svg class="k-loading-ring k-spin" viewBox="0 0 96 96" aria-hidden="true">',
+    c('k-loading-track', ''),
+    c('k-loading-fill', ` transform="rotate(-90 48 48)" stroke-dasharray="${len}" stroke-dashoffset="${(RING_LEN * 0.72).toFixed(2)}"`),
+    '</svg>',
+    '<div class="k-loading-text"></div>',
+    '</div>',
+    '</div>',
+  ].join('');
 }

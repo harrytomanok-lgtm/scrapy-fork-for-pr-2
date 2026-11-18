@@ -28,23 +28,23 @@ const TITLE = 'KETHRA: Veins of Light';
  * The parts shared by the three HTML outputs.
  * @param {string} css @param {string} fontsHref
  */
-function shellParts(css, fontsHref) {
+function shellParts(css, fontsHref, splash = '') {
   return {
     title: `<title>${TITLE}</title>`,
     style: `<style>\n${css}\n</style>`,
     fonts: `<link rel="stylesheet" href="${fontsHref}">`,
-    app: '<div id="app"></div>',
+    app: `<div id="app">${splash}</div>`,
     script: '<script type="module" src="./game.js"></script>',
   };
 }
 
 /**
  * HTML text of the three outputs.
- * @param {{ css:string, fontsHref:string, bundle:string }} o
+ * @param {{ css:string, fontsHref:string, bundle:string, splash?:string }} o  splash: static loading markup inside #app
  * @returns {{ index:string, fragment:string, inline:string }}
  */
 export function htmlOutputs(o) {
-  const p = shellParts(o.css, o.fontsHref);
+  const p = shellParts(o.css, o.fontsHref, o.splash || '');
   const index = [
     '<!doctype html>',
     '<html>',
@@ -158,7 +158,7 @@ export async function build(opts = {}) {
   const bundle = readFileSync(outfile, 'utf8');
   const size = statSync(outfile).size;
   const theme = await import(pathToFileURL(join(root, 'src', 'core', 'theme.js')).href);
-  const html = htmlOutputs({ css: theme.baseCss(), fontsHref: theme.FONTS_HREF, bundle });
+  const html = htmlOutputs({ css: theme.baseCss(), fontsHref: theme.FONTS_HREF, bundle, splash: theme.splashMarkup ? theme.splashMarkup() : '' });
   const files = { 'index.html': html.index, 'artifact.html': html.fragment, 'artifact-inline.html': html.inline };
   const warnings = [];
   let ok = true;

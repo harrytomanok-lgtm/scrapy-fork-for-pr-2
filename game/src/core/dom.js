@@ -129,6 +129,13 @@ export function createDom(opts = {}) {
   }
   /** @type {Record<string, HTMLElement>} */
   const layers = Object.create(null);
+  // Adopt the layers the HTML shell already contains (the static boot splash of tools/build.mjs), so layers created
+  // later are ordered around them.
+  for (let c = root.firstElementChild; c; c = c.nextElementSibling) {
+    const el = /** @type {HTMLElement} */ (c);
+    const name = el.dataset ? el.dataset.layer : undefined;
+    if (name && LAYERS.indexOf(name) >= 0 && !layers[name]) layers[name] = el;
+  }
 
   /** @type {Dom} */
   const dom = {

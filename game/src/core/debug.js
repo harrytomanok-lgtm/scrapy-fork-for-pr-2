@@ -8,6 +8,7 @@
 
 import { TAG } from './ents.js';
 import { runBench } from './bench.js';
+import { bootTimes } from './bootclock.js';
 
 /** Events kept by the recorder. */
 export const EVENT_RING = 500;
@@ -400,6 +401,8 @@ export function createDebug(ctx, opts = {}) {
       };
     },
     bench: (o) => runBench(ctx, api, o),
+    /** Boot stage timestamps (ms since navigation start), see core/bootclock.js. */
+    bootTimes,
     events(types) {
       const out = [];
       for (let i = 0; i < ringCount; i++) {
