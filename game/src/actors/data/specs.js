@@ -28,7 +28,7 @@ const GLASS = PALETTE.hostile;
 
 /**
  * @param {string} bone @param {string} shape @param {number[]} size @param {number[]|null} pos @param {number[]|null} rot @param {string} slot
- * @param {object} [extra] seg, glossy, lod1
+ * @param {object} [extra] seg, glossy, lod1, normalUp (0..1: normals bent up and forward, the toon face trick)
  */
 function P(bone, shape, size, pos, rot, slot, extra) {
   const p = { bone, shape, size, slot };
@@ -59,14 +59,18 @@ export function person(o) {
   const limb = 5;
   const out = [];
   // head and face
-  out.push(P('head', 'sphere', [0.22 * k * hk, 0.25 * k * hk, 0.235 * k * hk], [0, 0.12 * k, 0.005 * k], null, S.skin, { seg: hero ? 9 : 8 }));
+  // hero detail: the face normals lean up so the face from the front shades like the arms (lead note: a dark patch)
+  out.push(P('head', 'sphere', [0.22 * k * hk, 0.25 * k * hk, 0.235 * k * hk], [0, 0.12 * k, 0.005 * k], null, S.skin, hero ? { seg: 8, normalUp: 0.6 } : { seg: 8 }));
   if (!o.noNeck) out.push(hero ? P('neck', 'capsule', [0.05 * k * b, 0.07 * k], [0, 0.03 * k, 0], null, S.skin, { seg: 5 }) : P('neck', 'cylinder', [0.05 * k * b, 0.12 * k], [0, 0.03 * k, 0], null, S.skin, { seg: limb }));
   if (o.face) {
     for (const s of [1, -1]) {
-      out.push(P('head', 'sphere', [0.06 * k * hk, 0.044 * k * hk, 0.026 * k], [s * 0.047 * k, 0.11 * k, 0.108 * k], [0, s * 0.42, s * -0.12], S.eye, { seg: 5 }));
-      if (S.iris) out.push(P('head', 'sphere', [0.028 * k, 0.034 * k, 0.012 * k], [s * 0.043 * k, 0.109 * k, 0.12 * k], [0, s * 0.42, 0], S.iris, { seg: 5 }));
+      out.push(P('head', 'sphere', [0.06 * k * hk, 0.044 * k * hk, 0.026 * k], [s * 0.047 * k, 0.11 * k, 0.108 * k], [0, s * 0.42, s * -0.12], S.eye, { seg: S.lid ? 4 : 5 }));
+      if (S.iris) out.push(P('head', 'sphere', [0.03 * k, 0.037 * k, 0.012 * k], [s * 0.043 * k, 0.108 * k, 0.12 * k], [0, s * 0.42, 0], S.iris, { seg: S.lid ? 4 : 5 }));
+      // an ink upper lid line over a light eye, so the eye shape reads at play distance
+      if (S.lid) out.push(P('head', 'box', [0.064 * k * hk, 0.011 * k, 0.012 * k], [s * 0.047 * k, 0.129 * k, 0.116 * k], [0, s * 0.42, s * -0.14], S.lid));
       out.push(P('head', 'box', [0.016 * k, 0.016 * k, 0.008 * k], [s * 0.038 * k, 0.12 * k, 0.126 * k], [0, s * 0.42, 0], 'glint'));
-      out.push(P('brow' + side(s), 'box', [0.064 * k, 0.019 * k, 0.018 * k], [s * 0.003 * k, 0.002 * k, 0.002 * k], [0, s * 0.35, s * 0.1], S.hair));
+      // hero brows: thicker and a little proud of the fringe so they read at medium distance
+      out.push(P('brow' + side(s), 'box', hero ? [0.07 * k, 0.025 * k, 0.022 * k] : [0.064 * k, 0.019 * k, 0.018 * k], [s * 0.003 * k, (hero ? -0.003 : 0.002) * k, (hero ? 0.008 : 0.002) * k], [0, s * 0.35, s * 0.1], S.hair));
     }
     out.push(P('head', 'box', [0.02 * k, 0.044 * k, 0.026 * k], [0, 0.083 * k, 0.118 * k], [0.28, 0, 0], S.skin));
     out.push(P('jaw', 'box', [0.042 * k, 0.011 * k, 0.012 * k], [0, -0.003 * k, 0.044 * k], null, 'ink'));
@@ -153,7 +157,7 @@ function hero(v) {
   const b = 0.7 + build.bulk * 0.55;
   const parts = person({
     build, detail: 'hero', face: true, boots: 'tall', hair: 'tail', hairLen: v === 'a' ? 0.24 : 0.4, sideLock: v === 'b', ringSlot: 'bronze',
-    slots: { top: 'coat', legs: 'trousers', shin: 'trousers', boots: 'boots', skin: 'skin', hair: 'hair', eye: 'ink', iris: 'eye', upper: 'skin', fore: 'wraps', hand: 'skin' },
+    slots: { top: 'coat', legs: 'trousers', shin: 'trousers', boots: 'boots', skin: 'skin', hair: 'hair', eye: 'sclera', iris: 'eye', lid: 'ink', upper: 'skin', fore: 'wraps', hand: 'skin' },
   });
   // a sand cuff on each (now leather) boot top: outfit detail that reads at play distance
   for (const s of [1, -1]) {
@@ -224,6 +228,8 @@ function hero(v) {
     palette: {
       coat: CHAR.coat, coatLining: CHAR.lining, sash: CHAR.sash, sashStripe: CHAR.stripe, trousers: CHAR.trousers, boots: CHAR.leather, wraps: CHAR.sand,
       bronze: CHAR.bronze, skin: CHAR.skin, hair: CHAR.hair, eye: CHAR.amber, ink: PALETTE.ink, glint: PALETTE.oraCore, seam: PALETTE.ora, ora: PALETTE.ora,
+      // light eyes with an ink lid and a deep amber iris (base form; the Forms recolour 'eye'), readable at play distance
+      sclera: PALETTE.paper,
     },
     emissive: { glint: 0.6, eye: 0.15 },
     parts,

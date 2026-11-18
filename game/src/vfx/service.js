@@ -6,7 +6,7 @@
  * @module vfx/service
  */
 
-import { Color, Vector3 } from 'three';
+import { Color, Vector3, NormalBlending, AdditiveBlending } from 'three';
 import { PALETTE } from '../core/palette.js';
 import { RECIPES, CELL } from './logic/recipes.js';
 import { createParticles } from './particles.js';
@@ -56,8 +56,11 @@ export function createVfx(ctx) {
   const cTmp = new Color();
   const cFlB = new Color();
   const cFlT = new Color();
-  /** Flame aura colours by aura style (body, tips), derived from palette tokens once. */
-  const FLAME_BODY = [new Color(PALETTE.ora), new Color(PALETTE.ora), new Color(PALETTE.scorchRim).lerp(new Color(PALETTE.flora.redLeaf), 0.7),
+  /**
+   * Flame aura colours by aura style (body, tips), derived from palette tokens once. Ember is orange-red with only
+   * the tips gold (lead note: it read golden-yellow on bright grass, like a generic golden aura).
+   */
+  const FLAME_BODY = [new Color(PALETTE.ora), new Color(PALETTE.ora), new Color(PALETTE.scorchRim).lerp(new Color(PALETTE.flora.redLeaf), 0.82),
     new Color(PALETTE.tempest).offsetHSL(0.015, 0.25, -0.1), new Color(PALETTE.zenith).lerp(new Color(PALETTE.structure.lantern), 0.18)];
   const FLAME_TIP = [new Color(PALETTE.oraCore), new Color(PALETTE.oraCore).lerp(new Color(PALETTE.ora), 0.4), new Color(PALETTE.biome.meadows.accent),
     new Color(PALETTE.biome.frostspine.accent).lerp(new Color(PALETTE.ora), 0.35), new Color(PALETTE.structure.lantern)];
@@ -959,6 +962,8 @@ export function createVfx(ctx) {
     cFlT.copy(FLAME_TIP[st]);
     const inten = (low ? 1.2 : 1.35) * (1 + 0.25 * swell + 0.3 * col);
     const alphaK = Math.min(1, k * 1.2) * (gather ? 0.8 : 1);
+    // Ember's front wisps are alpha-blended too: additive orange over bright green grass adds up to yellow
+    f.front.material.blending = st === 2 ? NormalBlending : AdditiveBlending;
     for (let l = 0; l < 2; l++) {
       const m = l === 0 ? f.back : f.front;
       const off = l === 0 ? -0.3 : 0.38;

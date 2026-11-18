@@ -197,7 +197,9 @@ void main() {
     float bottom = smoothstep(0.0, 0.1, y01);
     float rimK = 1.0 - smoothstep(0.02, 0.36, edge);
     float mask = body * top * bottom;
-    float tipK = smoothstep(0.5, 1.0, y01 + (n2 - 0.5) * 0.35);
+    float ember = 1.0 - step(6.5, st);
+    // Ember: only the tongue tips turn gold; the others blend into their tip colour over the upper half
+    float tipK = smoothstep(mix(0.5, 0.74, ember), 1.0, y01 + (n2 - 0.5) * 0.35);
     c = mix(uColor, uFringe, tipK);
     float streak = 0.0;
     if (st > 6.5 && st < 7.5) {
@@ -215,12 +217,16 @@ void main() {
       // Ember and Gather: hot licks climbing the flame
       float lick = gfxNoise(vec3(vLocal.x * 3.0, vLocal.y * 2.0 - t * 2.8 * spd, 2.0 + front));
       streak = smoothstep(0.6, 0.85, lick);
-      c = mix(c, uFringe * 1.2, streak * 0.5);
+      // Ember licks are hot orange (a little of the tip colour), Gather licks take the tip colour
+      c = mix(c, mix(uFringe, mix(uColor, uFringe, 0.3) * 1.25, ember) * 1.2, streak * 0.5);
     }
     float hot = (1.0 - y01) * smoothstep(0.25, 0.75, edge);
-    c = mix(c, vec3(1.0), hot * 0.2);
+    c = mix(c, vec3(1.0), hot * mix(0.2, 0.1, ember));
     if (front > 0.5) {
       a = mask * (rimK * 0.22 + streak * 0.55) * (0.7 + 0.6 * n2);
+    } else if (ember > 0.5) {
+      // Ember back layer: denser, so the orange-red holds its hue over green ground instead of mixing to gold
+      a = mask * (0.62 + 0.34 * rimK + streak * 0.3) * (0.8 + 0.4 * n2);
     } else {
       // back layer is alpha-blended (true hue on any ground): a soft body, a stronger rim, flowing licks
       a = mask * (0.36 + 0.5 * rimK + streak * 0.3) * (0.6 + 0.6 * n2);
