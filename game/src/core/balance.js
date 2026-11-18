@@ -239,8 +239,8 @@ export const BALANCE = deepFreeze({
 
   /** GDD 7.1 enemy scaling. HP = round(hpMult * (base + perLevel*Le + quad*Le^2) * difficultyHp). */
   enemyScale: {
-    hp: { base: 40, perLevel: 12, quad: 0.35 },
-    atk: { base: 8, perLevel: 4 },
+    hp: { base: 75, perLevel: 12, quad: 0.25 },
+    atk: { base: 9, perLevel: 3.5 },
     def: { perLevel: 2 },
     shells: { base: 3, perLevel: 1.2 },
     /** Locomotion defaults for enemies (not in the GDD): ground run speed and flight cruise in m/s. */
@@ -257,7 +257,7 @@ export const BALANCE = deepFreeze({
     tusk_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [1, 8], mult: { hp: 1.0, atk: 1.0, def: 1.0, xp: 1.0, shells: 1.0 }, poise: 20 },
     bramble_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [8, 14], mult: { hp: 1.2, atk: 1.1, def: 1.0, xp: 1.1, shells: 1.0 }, poise: 25, variantOf: 'tusk_boar' },
     choir_acolyte: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [2, 28], mult: { hp: 1.0, atk: 1.0, def: 1.0, xp: 1.0, shells: 1.2 }, poise: 25, guardChance: 0.3 },
-    choir_caster: { tier: 'grunt', movement: 'hover', brain: 'ranged', levels: [4, 28], mult: { hp: 0.8, atk: 1.2, def: 0.8, xp: 1.1, shells: 1.2 }, poise: 15, keepRange: 25 },
+    choir_caster: { tier: 'grunt', movement: 'hover', brain: 'ranged', levels: [4, 28], mult: { hp: 0.8, atk: 1.0, def: 0.8, xp: 1.1, shells: 1.2 }, poise: 15, keepRange: 25 },
     scuttlecrab: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [5, 12], mult: { hp: 1.6, atk: 0.9, def: 1.6, xp: 1.3, shells: 1.3 }, poise: 50, frontGuard: { angleDeg: 120, damageMult: 0.2 } },
     rust_golem: { tier: 'heavy', movement: 'ground', brain: 'melee', levels: [13, 22], mult: { hp: 3.0, atk: 1.5, def: 2.0, xp: 3.0, shells: 3.0 }, poise: 80 },
     frost_harrier: { tier: 'grunt', movement: 'fly', brain: 'diver', levels: [19, 28], mult: { hp: 0.9, atk: 1.3, def: 0.8, xp: 1.2, shells: 1.0 }, poise: 15 },
@@ -269,7 +269,7 @@ export const BALANCE = deepFreeze({
    * windups are not in the GDD and are tuned values inside the 0.5-1.2 s windup band.
    */
   enemyTech: {
-    wisp_spit: { telegraph: 'white', power: 0.8, windup: 0.6 },
+    wisp_spit: { telegraph: 'white', power: 0.6, windup: 0.7 },
     wisp_dive: { telegraph: 'red', power: 1.4, windup: 1.0, selfDestruct: true },
     boar_gore: { telegraph: 'white', power: 0.9, windup: 0.5 },
     boar_charge: { telegraph: 'white', power: 1.3, windup: 0.8, dist: 20, knock: { kind: 'smash', speed: 30 } },
@@ -291,11 +291,11 @@ export const BALANCE = deepFreeze({
 
   /** GDD 7.3 bosses. phases = HP fractions at which each phase starts. index = loot `boss` shell multiplier. */
   bosses: {
-    durn: { index: 1, level: 4, hpMult: 6, poise: 80, phases: [1.0], addsAt: 0.5, adds: 2, fleeAtZero: true, arena: { landmarkId: 'sparkstead', radius: 60 } },
-    bramblehorn: { index: 2, level: 12, hpMult: 14, poise: 200, phases: [1.0, 0.5], craterRadius: 8, arena: { landmarkId: 'bramble_hollow', radius: 90 } },
-    gorrumaw: { index: 3, level: 18, hpMult: 18, poise: 250, phases: [1.0, 0.5], armourDefMult: 0.5, arena: { landmarkId: 'burrow_pit', radius: 110 } },
-    iskra: { index: 4, level: 22, hpMult: 16, poise: 220, phases: [1.0, 0.5], craterRadius: 12, diveHeight: 200, arena: { landmarkId: 'paleglass_summit', radius: 100 } },
-    vorrhal: { index: 5, level: 26, hpMult: 24, poise: 300, phases: [1.0, 0.6, 0.25], hpPerSiphonStanding: 0.10, adds: 2, arena: { landmarkId: 'dim_court', radius: 120 } },
+    durn: { index: 1, level: 4, hpMult: 48, poise: 80, phases: [1.0], addsAt: 0.5, adds: 2, fleeAtZero: true, arena: { landmarkId: 'sparkstead', radius: 60 } },
+    bramblehorn: { index: 2, level: 12, hpMult: 80, poise: 200, phases: [1.0, 0.5], craterRadius: 8, arena: { landmarkId: 'bramble_hollow', radius: 90 } },
+    gorrumaw: { index: 3, level: 18, hpMult: 72, poise: 250, phases: [1.0, 0.5], armourDefMult: 0.5, arena: { landmarkId: 'burrow_pit', radius: 110 } },
+    iskra: { index: 4, level: 22, hpMult: 88, poise: 220, phases: [1.0, 0.5], craterRadius: 12, diveHeight: 200, arena: { landmarkId: 'paleglass_summit', radius: 100 } },
+    vorrhal: { index: 5, level: 26, hpMult: 100, poise: 300, phases: [1.0, 0.6, 0.25], hpPerSiphonStanding: 0.10, adds: 2, arena: { landmarkId: 'dim_court', radius: 120 } },
   },
   bossRules: { resetExtra: 60, introSeconds: 3, xpMult: 6 },
 
@@ -316,7 +316,7 @@ export const BALANCE = deepFreeze({
   /** GDD 10 items and economy. */
   economy: {
     gearPerLevel: 0.08,
-    price: { base: 40, perLevel: 0.15, rarityMult: { common: 1, fine: 2.5, rare: 6 } },
+    price: { base: 70, perLevel: 0.15, rarityMult: { common: 1, fine: 2.5, rare: 6 } },
     sellFraction: 0.25,
     carryCap: 5,
     shellsPerHour: { 10: 600, 25: 2500 },
@@ -362,7 +362,7 @@ export const BALANCE = deepFreeze({
     grunt: { shells: { chance: 1, mult: 1 }, consumable: 0.08, gear: { chance: 0.03, weights: { common: 70, fine: 27, rare: 3 } } },
     heavy: { shells: { chance: 1, mult: 2 }, consumable: 0.12, gear: { chance: 0.06, weights: { common: 50, fine: 40, rare: 10 } } },
     elite: { shells: { chance: 1, mult: 4 }, consumable: 0.30, gear: { chance: 0.25, weights: { common: 0, fine: 60, rare: 40 } } },
-    boss: { shells: { perIndex: 500 }, consumable: 1, consumableCount: 2, gear: { chance: 0, weights: { common: 0, fine: 0, rare: 0 } } },
+    boss: { shells: { perIndex: 250 }, consumable: 1, consumableCount: 2, gear: { chance: 0, weights: { common: 0, fine: 0, rare: 0 } } },
     chest_t1: { shells: { min: 60, max: 150 }, consumable: 0.60, gear: { chance: 0.25, weights: { common: 60, fine: 38, rare: 2 } } },
     chest_t2: { shells: { min: 150, max: 350 }, consumable: 0.60, gear: { chance: 0.30, weights: { common: 30, fine: 55, rare: 15 } } },
     chest_t3: { shells: { min: 350, max: 700 }, consumable: 0.60, gear: { chance: 0.35, weights: { common: 0, fine: 60, rare: 40 } } },
@@ -401,7 +401,7 @@ export const BALANCE = deepFreeze({
         camps: 10, siphons: 3, bosses: ['bramblehorn', 'gorrumaw'], discoveries: 40,
       },
       {
-        id: 'C', from: 120, to: 270, killsPerMin: 0.4, enemyLevelOffset: 0, xpMult: 1.5,
+        id: 'C', from: 120, to: 270, killsPerMin: 0.4, enemyLevelOffset: 0, xpMult: 1.0,
         quests: ['mq6'],
         camps: 6, siphons: 1, bosses: ['iskra'], discoveries: 30,
       },

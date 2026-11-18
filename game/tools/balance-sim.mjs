@@ -12,7 +12,8 @@
  *   priority order (string ranks and Iron Fists first).
  * - Rotation: a full Strike String, a Breaker (smash), a short re-engage during which bolts are fired, and one slot
  *   technique on cooldown (Flare Barrage before Nova Ring is unlocked, then Nova Ring), all within the Ora budget of
- *   the fight (pool plus in-combat regen). Melee uptime is below 1 (spacing, dodging, enemies knocked away).
+ *   the fight (pool plus in-combat regen). Melee uptime is below 1 (spacing, dodging); in a group every enemy also
+ *   costs a target switch (lock, lunge, chase; longer for ranged and flying enemies). Calibrated on the browser check.
  * - Enemies: the weighted average of their usable techniques (power per cycle of windup + active + recover + the
  *   brain's gap), limited by the difficulty's attack tokens; a share of the hits is avoided (guard, Flicker, knock).
  * @module tools/balance-sim
@@ -34,23 +35,28 @@ export const MODEL = Object.freeze({
    * (guards and dodges some hits); `bot` is the scripted rotation of tools/scenarios/balance.mjs (only attacks).
    */
   profiles: {
-    player: { uptime: { group: 0.75, boss: 0.65 }, hitRate: 0.55, nodes: true },
-    bot: { uptime: { group: 0.75, boss: 0.65 }, hitRate: 0.8, nodes: false },
+    player: { uptime: { group: 0.8, boss: 0.75 }, hitRate: 0.55, nodes: true },
+    /** Story is chosen by newer players (more hits land); Master by skilled ones (fewer). */
+    story: { uptime: { group: 0.8, boss: 0.75 }, hitRate: 0.65, nodes: true },
+    master: { uptime: { group: 0.8, boss: 0.75 }, hitRate: 0.4, nodes: true },
+    bot: { uptime: { group: 0.95, boss: 1.0 }, hitRate: 0.8, nodes: false },
   },
   /** Shortest window (s) over which a full Ora pool is spent in fights. */
   oraWindow: 40,
   /** Average extra targets hit by the string in a group (cleave). */
   cleave: 1.15,
   /** Re-engage after a Breaker smash (s), and bolts fired during it. */
-  reengage: 0.8, boltsPerReengage: 2,
+  reengage: 0, boltsPerCycle: 0.5,
+  /** Seconds lost per enemy of a group to switch target (lock, lunge, chase): ground melee, ranged or flying. */
+  switchSeconds: { melee: 1.3, ranged: 1.7 },
   /** Breaker as a tap after the string (s). */
   breakerSeconds: 0.45,
   /** HP fraction a player loses before the first healing item of a boss fight. */
   healAt: 0.7,
   /** Shrines found per minute of play (10 over the 270-minute route). */
   shrinesPerMinute: 10 / 270,
-  /** Chests opened per band (A, B, C) and mean chest Shells per tier. */
-  chests: { A: 6, B: 10, C: 8 },
+  /** Chests opened per band (A, B, C): about 60% of the 26 chests of GDD 12 by the finale. */
+  chests: { A: 3, B: 7, C: 6 },
   /** Healing items bought before each boss (counted in the spending). */
   sunfruitPerBoss: 3,
   /** Gap between enemy attacks (s): brain.afterAttack. */
@@ -226,7 +232,7 @@ export function playerDps(p, target, oraPerSec, unlocks, uptime, frontMult = 1) 
 function boltsDps(p, target, ora, cycle) {
   const b = B.tech.ora_bolt;
   const twin = (p.nodes.have.ora_bolt || 0) >= 1 ? b.ranks[1].count * b.ranks[1].powerMult : 1;
-  const rate = Math.max(0, Math.min(MODEL.boltsPerReengage / cycle, ora / b.ora));
+  const rate = Math.max(0, Math.min(MODEL.boltsPerCycle / cycle, ora / b.ora));
   return rate * b.power * twin * perPower(p, 'ora', target);
 }
 
@@ -310,6 +316,8 @@ export function groupFight(p, stage, fight, diff, prof = MODEL.profiles.player) 
   let T = 30;
   let dps = 0;
   let ttkOne = 0;
+  let switchT = 0;
+  for (const m of members) switchT += m.def.brain === 'ranged' || m.def.movement === 'fly' ? MODEL.switchSeconds.ranged : MODEL.switchSeconds.melee;
   for (let it = 0; it < 4; it++) {
     const ora = oraBudget(p, T);
     let sum = 0;
@@ -322,7 +330,7 @@ export function groupFight(p, stage, fight, diff, prof = MODEL.profiles.player) 
     }
     dps = sum / members.length;
     ttkOne = sumOne / members.length;
-    T = totalHp / Math.max(1e-6, dps);
+    T = totalHp / Math.max(1e-6, dps) + switchT;
   }
   // Damage taken: on average half the group (plus one) is alive; tokens cap the attackers.
   const tok = { melee: Math.floor(row.attackers / 2), ranged: Math.ceil(row.attackers / 2) };
@@ -342,9 +350,17 @@ export function groupFight(p, stage, fight, diff, prof = MODEL.profiles.player) 
     if (kind === 'melee') inMelee = mean * n; else inRanged = mean * n;
   }
   const dpsIn = (inMelee + inRanged) * hitRate;
+  // The last enemy of a group fights alone: one use of its `alone` move (the wisp's self-destructing dive, which
+  // usually lands: the wisp is gone either way, so it is counted in full).
+  let lastBlow = 0;
+  const last = members[members.length - 1];
+  for (const id of last.def.techs) {
+    const t = TECH[id];
+    if (t && t.ai.alone) lastBlow = Math.max(lastBlow, techPower(t) * enemyPerPower(p, last.est, diff));
+  }
   return {
     id: fight.id, levels: [...new Set(members.map((m) => m.lv))].join('/'), n: members.length,
-    ttkOne, ttkGroup: T, dpsIn, hpLost: dpsIn * T, ttd: p.stats.hpMax / Math.max(1e-6, dpsIn),
+    ttkOne, ttkGroup: T, dpsIn, hpLost: dpsIn * T + lastBlow, ttd: p.stats.hpMax / Math.max(1e-6, dpsIn),
     hitsToDie: members.map((m) => p.stats.hpMax / (B.enemyScale.referenceHitPower * enemyPerPower(p, m.est, diff)))[0],
   };
 }
@@ -439,6 +455,11 @@ export function shellsPerHour(level) {
 
 // ---------------------------------------------------------------- table
 
+/** The realistic profile of a difficulty's typical player. */
+export function profileFor(diff) {
+  return diff === 'story' ? MODEL.profiles.story : diff === 'master' ? MODEL.profiles.master : MODEL.profiles.player;
+}
+
 /** Run the main path for a difficulty. */
 export function run(diff = 'warrior', prof = MODEL.profiles.player) {
   const route = diff === 'master'
@@ -512,6 +533,9 @@ export function checks(diff = 'warrior') {
   const st = Object.fromEntries(STAGES.map((s) => [s.id, s]));
   const meadows = { id: 'check_a', minute: 8, region: 'meadows', t: 0.2, unlocks: [], gear: [['training_wraps', 1], ['apprentice_garb', 1]] };
   mk('meadows', meadows, 2, { id: 'wisps', members: [['ember_wisp', 3]], level: 2 }, { x: -1150, z: 1250 }, 90);
+  // The wisp complaint: a level-3 player who only uses Attack against higher-level wisps of the outer Meadows.
+  mk('wisps', Object.assign({}, meadows, { t: 1 }), 3, { id: 'wisps_l6', members: [['ember_wisp', 3]], level: REGION.meadows.levels[1] },
+    { x: -1150, z: 1250, attackOnly: true }, 90);
   const mq3 = Object.assign({}, st.MQ3, { unlocks: ['nova_ring'] });
   const L3 = run(diff).levelAt(mq3.minute);
   const n = B.tech.nova_ring;
@@ -551,7 +575,7 @@ if (isMain) {
   const args = process.argv.slice(2);
   const di = args.indexOf('--difficulty');
   const diffs = di >= 0 ? [args[di + 1]] : ['story', 'warrior', 'master'];
-  const out = diffs.map((d) => run(d));
+  const out = diffs.map((d) => run(d, profileFor(d)));
   if (args.includes('--json')) {
     console.log(JSON.stringify(out.map((o) => ({ diff: o.diff, rows: o.rows })), null, 1));
   } else {

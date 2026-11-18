@@ -40,7 +40,10 @@ function setup(g, a) {
   if (window.__balOff) window.__balOff();
   window.__balOff = g.ctx.bus.onAny((t, ev) => {
     if (t === 'actor:damaged' && ev.sourceId === p.id) { S.dealt += ev.amount || 0; S.hits++; }
-    if (t === 'combat:techStart' && ev.entId === p.id) S.techs[ev.techId] = (S.techs[ev.techId] || 0) + 1;
+    if (t === 'combat:techStart' && ev.entId === p.id) {
+      S.techs[ev.techId] = (S.techs[ev.techId] || 0) + 1;
+      if (ev.techId === a.slot) S.techT = g.simTime();
+    }
   });
   S.tick = (seconds) => {
     const until = g.simTime() + seconds;
@@ -74,9 +77,9 @@ function setup(g, a) {
         const dist = Math.sqrt(dx * dx + dz * dz);
         const now = g.simTime();
         if (a.slot && now - S.techT > a.slotCooldown && p.stats.ora >= a.slotOra && dist < a.slotRange) {
+          // Retried every slice until the technique starts (a press during the string is buffered briefly).
           g.press('tech1', a.slotHold || 1);
-          S.techT = now;
-        } else if (dist > 10.5) {
+        } else if (dist > 10.5 && !a.attackOnly) {
           g.press('bolt');
         } else {
           S.presses++;
@@ -102,7 +105,7 @@ function setup(g, a) {
     return { probe: S.probe, bossHp: boss && boss.stats ? Math.round(boss.stats.hp) + '/' + boss.stats.hpMax : '', dealt: Math.round(S.dealt), hits: S.hits, techs: S.techs,
       done: S.done, dead: !!S.dead, t: (S.done ? S.end : g.simTime()) - S.t0, lost: S.lost, heals: S.heals, hp: p.stats.hp, hpMax: p.stats.hpMax };
   };
-  return { hpMax: p.stats.hpMax, level: g.ctx.rpg.level };
+  return { hpMax: p.stats.hpMax, level: g.ctx.rpg.level, slots: JSON.stringify(g.state().player.slots), hasNova: g.ctx.rpg.hasTech('nova_ring') };
 }
 
 /** Run the fight in 8-second slices (each slice is one page evaluation). */
@@ -132,6 +135,7 @@ function groupScenario(key) {
       const c = checks()[key];
       const info = await game(setup, c.setup);
       assert.equal(info.level, c.setup.level, 'player level');
+      console.log('  setup', JSON.stringify(info));
       const ids = await game((g, a) => {
         const p = g.ctx.player;
         const out = [];
@@ -158,6 +162,30 @@ function groupScenario(key) {
 
 export const scenarios = [
   groupScenario('meadows'),
+  {
+    // Ember Wisps (task 4): a level-3 player pressing only Attack reaches and kills level-6 wisps.
+    name: 'balance-wisps-attack-only',
+    width: 640, height: 360,
+    async run({ game, assert, shot }) {
+      const c = checks().wisps;
+      await game(setup, c.setup);
+      const ids = await game((g, a) => {
+        const p = g.ctx.player;
+        const out = a.members.map((id, i) => g.spawn(id, { x: p.pos.x + Math.sin(i * 2.1) * a.dist, z: p.pos.z + Math.cos(i * 2.1) * a.dist, level: a.enemyLevel, aggro: true }));
+        window.__bal.only = out;
+        window.__bal.t0 = g.simTime();
+        return out;
+      }, c.fight);
+      assert.ok(ids.every((id) => id > 0), 'the wisps spawn');
+      const r = await fightLoop(game, c.maxSeconds);
+      await shot('balance-wisps-attack-only');
+      console.log(`  wisps: ${JSON.stringify(r)}`);
+      assert.ok(r.done && !r.dead, 'Attack alone clears the wisps');
+      assert.ok(r.techs.strike_string > 0 && r.hits > 0, 'the string reaches the wisps');
+      within(assert, 'wisps time to kill (s)', r.t, c.expect.ttk);
+      assert.ok(100 * r.lost / r.hpMax < 50, 'the first enemy of the game is not the most dangerous: ' + (100 * r.lost / r.hpMax).toFixed(0) + '% HP lost');
+    },
+  },
   groupScenario('camp'),
   {
     name: 'balance-durn',

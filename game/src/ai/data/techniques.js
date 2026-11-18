@@ -77,10 +77,10 @@ export function enemyTechniques() {
   return [
     // Ember Wisp
     etech('wisp_spit', 'white', {
-      rating: 'ora', cooldown: 2.2, timeline: { windup: ET.wisp_spit.windup, active: 0.1, recover: 0.6, cancelFrom: -1 },
+      rating: 'ora', cooldown: 2.8, timeline: { windup: ET.wisp_spit.windup, active: 0.1, recover: 0.6, cancelFrom: -1 },
       anim: { windup: 'ranged', active: 'ranged', recover: 'idle' }, move: { lock: 'slow', turn: true, air: true, ground: true },
       projectiles: [shot({ speed: 17, radius: 0.55, life: 3.2, homing: 0.9, power: ET.wisp_spit.power, socket: 'chest' })],
-      ai: { minRange: 4, maxRange: 26, weight: 3, cooldown: 2.2, token: 'ranged', vsAir: true },
+      ai: { minRange: 3, maxRange: 26, weight: 3, cooldown: 2.8, token: 'ranged', vsAir: true },
     }),
     etech('wisp_dive', 'red', {
       cooldown: 6, timeline: { windup: ET.wisp_dive.windup, active: 0.5, recover: 0.3, cancelFrom: -1 },
@@ -290,21 +290,21 @@ export function bossTechniques() {
       anim: { windup: 'charge_windup', active: 'hurtle', recover: 'getup' },
       telegraph: { kind: 'white', shape: 'line', radius: 34, atTarget: false },
       motion: { kind: 'charge', t: 1.0, seconds: 1.1, dist: 34 },
-      hits: [hit({ t: 0, every: 0.1, until: 1.1, f: 1.2, radius: 3.2, power: 1.2, poise: 22, knock: { kind: 'smash', speed: 26 }, feel: 'heavyHit', maxTargets: 1 })],
+      hits: [hit({ t: 0, every: 0.1, until: 1.1, f: 1.2, radius: 3.2, power: 1.0, poise: 22, knock: { kind: 'smash', speed: 26 }, feel: 'heavyHit', maxTargets: 1 })],
       ai: { minRange: 8, maxRange: 34, weight: 3, cooldown: 3.5 },
     }),
     etech('gm_quake', 'red', {
       cooldown: 5, timeline: { windup: 1.4, active: 0.2, recover: 1.0, cancelFrom: -1 },
       anim: { windup: 'roar', active: 'slam', recover: 'idle' },
       telegraph: { kind: 'red', shape: 'circle', radius: 11, atTarget: false },
-      hits: [hit({ shape: 'ring', f: 0, u: 0.4, radius: 11, power: 1.5, poise: 26, knock: { kind: 'launch', up: 12 }, feel: 'heavyHit', maxTargets: 2 })],
+      hits: [hit({ shape: 'ring', f: 0, u: 0.4, radius: 11, power: 1.3, poise: 26, knock: { kind: 'launch', up: 12 }, feel: 'heavyHit', maxTargets: 2 })],
       ai: { minRange: 0, maxRange: 9, weight: 3, cooldown: 5 },
     }),
     etech('gm_berserk', 'white', {
       cooldown: 2, timeline: { windup: 0.8, active: 1.25, recover: 0.6, cancelFrom: -1 },
       anim: { windup: 'charge_windup', active: 'slam', recover: 'idle' },
       motion: { kind: 'toTarget', t: 0.7, seconds: 0.15, dist: 7, speed: 30 },
-      hits: stringHits([0.8, 0.8, 0.9, 1.3], 0.32, { radius: 3, f: 2 }),
+      hits: stringHits([0.7, 0.7, 0.8, 1.1], 0.32, { radius: 3, f: 2 }),
       ai: { minRange: 0, maxRange: 6.5, weight: 3, cooldown: 2 },
     }),
     etech('gm_rock_rain', 'red', {
@@ -312,7 +312,7 @@ export function bossTechniques() {
       anim: { windup: 'roar', active: 'roar', recover: 'idle' },
       telegraph: { kind: 'red', shape: 'self', radius: 0, atTarget: false },
       script: 'ai_rain',
-      ai: { minRange: 0, maxRange: 60, weight: 2, cooldown: 7, power: 1.3, count: 7, radius: 4 },
+      ai: { minRange: 0, maxRange: 60, weight: 2, cooldown: 7, power: 1.1, count: 7, radius: 4 },
     }),
     // Iskra Pale-Wing
     etech('ik_blade_string', 'white', {
@@ -358,14 +358,14 @@ export function bossTechniques() {
     etech('vh_void_bolts', 'white', {
       rating: 'ora', cooldown: 2.5, timeline: { windup: 0.9, active: 0.8, recover: 0.5, cancelFrom: -1 },
       anim: { windup: 'cast', active: 'ranged', recover: 'idle' },
-      projectiles: [shot({ every: 0.16, until: 0.66, speed: 34, radius: 0.5, homing: 1.6, power: 0.7, socket: 'handR' })],
+      projectiles: [shot({ every: 0.16, until: 0.66, speed: 34, radius: 0.5, homing: 1.6, power: 0.5, socket: 'handR' })],
       ai: { minRange: 4, maxRange: 45, weight: 3, cooldown: 2.5, vsAir: true },
     }),
     etech('vh_glass_strike', 'white', {
       cooldown: 2, timeline: { windup: 0.9, active: 0.7, recover: 0.6, cancelFrom: -1 },
       anim: { windup: 'charge_windup', active: 'slam', recover: 'idle' },
       motion: { kind: 'toTarget', t: 0.75, seconds: 0.15, dist: 8, speed: 40 },
-      hits: stringHits([0.9, 0.9, 1.3], 0.3, { radius: 2.4 }),
+      hits: stringHits([0.8, 0.8, 1.1], 0.3, { radius: 2.4 }),
       ai: { minRange: 0, maxRange: 7, weight: 3, cooldown: 2, vsAir: true },
     }),
     etech('vh_spire_crystals', 'red', {
@@ -373,7 +373,7 @@ export function bossTechniques() {
       anim: { windup: 'cast', active: 'cast_loop', recover: 'idle' },
       telegraph: { kind: 'red', shape: 'self', radius: 0, atTarget: false },
       script: 'ai_rain',
-      ai: { minRange: 0, maxRange: 80, weight: 3, cooldown: 6, vsAir: true, power: 1.5, count: 8, radius: 5 },
+      ai: { minRange: 0, maxRange: 80, weight: 3, cooldown: 6, vsAir: true, power: 1.3, count: 8, radius: 5 },
     }),
   ];
 }
