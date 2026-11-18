@@ -239,6 +239,9 @@ const ROWS = [
   ['ui.ending.line4', 'Thank you for flying with us.', 'תודה שעפת איתנו.'],
   ['ui.ending.continue', 'Continue your journey', 'להמשיך במסע'],
   ['ui.fatal.low', 'Try low quality', 'לנסות איכות נמוכה'],
+  ['ui.toast.pointsOne', 'A new stat point', 'נקודה חדשה לחלוקה'],
+  ['ui.toast.boughtOne', 'Bought {name}', 'נקנה: {name}'],
+  ['ui.toast.soldOne', 'Sold {name} for 1 Shell', 'נמכר: {name} תמורת צדף אחד'],
   ['ui.code.restoreConfirm', 'Replace the saved journey with the one in this code?', 'להחליף את המסע השמור במסע שבקוד?'],
 ];
 

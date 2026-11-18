@@ -167,6 +167,8 @@ export const UI_CSS = `
 .ui-banner.ui-k-break .ui-banner-main,.ui-banner.ui-k-danger .ui-banner-main{background:var(--danger);color:var(--paper)}
 .ui-banner.ui-k-perfect .ui-banner-main{background:var(--accent)}
 .ui-m-portrait .ui-banner{top:21%}
+.ui-tgt .ui-banner:not(.ui-k-break):not(.ui-k-perfect):not(.ui-k-danger){top:calc(var(--safe-top) + 150px)}
+.ui-m-portrait.ui-tgt .ui-banner:not(.ui-k-break):not(.ui-k-perfect):not(.ui-k-danger){top:calc(var(--safe-top) + 220px)}
 /* Combat call-outs (Break!, Perfect!) are small, short and beside the action, not on it. */
 .ui-banner.ui-k-break,.ui-banner.ui-k-perfect,.ui-banner.ui-k-danger{top:31%;left:74%}
 .ui-m-portrait .ui-banner.ui-k-break,.ui-m-portrait .ui-banner.ui-k-perfect,.ui-m-portrait .ui-banner.ui-k-danger{top:24%;left:70%}
@@ -464,6 +466,10 @@ export const UI_CSS = `
   .ui-resbig{font-size:1.5rem}
 }
 @media (max-width:760px){.ui-tabs .ui-tab.ui-hasico:not(.ui-sel) span{display:none}.ui-tabs .ui-tab.ui-hasico:not(.ui-sel){flex:0 0 48px}}
+.ui-looks .ui-slot{align-items:center;min-block-size:0;padding-block:6px}
+.ui-looks .ui-li-title,.ui-looks .ui-li-sub{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.ui-looks .ui-li-sub{font-size:var(--fs-small);line-height:1.2}
+@media (max-height:440px){.ui-looks .ui-ringico{inline-size:30px;block-size:30px;flex:0 0 30px}.ui-looks{gap:6px}}
 .ui-title .ui-ghostbtn{background:var(--panel);box-shadow:inset 0 0 0 2px rgba(243,235,221,.55)}
 
 @keyframes ui-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}

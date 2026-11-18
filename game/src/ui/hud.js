@@ -612,6 +612,7 @@ export function createHud(ctx, kit, ui) {
     if (!e || !e.alive || !e.stats) {
       if (!target.hidden) {
         target.hidden = true;
+        root.classList.remove('ui-tgt');
         syncTrackerVisibility();
       }
       tId = 0;
@@ -619,6 +620,8 @@ export function createHud(ctx, kit, ui) {
     }
     if (target.hidden) {
       target.hidden = false;
+      // The nameplate owns the top band: banners drop below it (never both in the same place).
+      root.classList.add('ui-tgt');
       syncTrackerVisibility();
     }
     const isBoss = e === boss;
@@ -888,7 +891,7 @@ export function createHud(ctx, kit, ui) {
       /** @param {any} p rpg:levelUp */
       levelUp(p) {
         showBanner('level', 'ui.banner.levelUp', { level: formatInt(p.level) });
-        if (p.statPoints > 0 && ctx.store.state.player.autoStyle === 'manual') showToast('ui.toast.points', { n: formatInt(p.statPoints) }, 'good');
+        if (p.statPoints > 0 && ctx.store.state.player.autoStyle === 'manual') showToast(p.statPoints === 1 ? 'ui.toast.pointsOne' : 'ui.toast.points', { n: formatInt(p.statPoints) }, 'good');
         hud.on.badge();
       },
       badge() {

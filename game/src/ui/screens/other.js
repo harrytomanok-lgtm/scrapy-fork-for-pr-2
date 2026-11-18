@@ -496,7 +496,7 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
             const res = ctx.rpg.buy(shopId, r.index, n);
             if (res.ok) {
               kit.sound('shells');
-              ui.toast('ui.toast.bought', { name: kit.t(itemNameKey(r.itemId)), n: formatInt(n) }, 'good');
+              ui.toast(n === 1 ? 'ui.toast.boughtOne' : 'ui.toast.bought', { name: kit.t(itemNameKey(r.itemId)), n: formatInt(n) }, 'good');
               qty[r.index] = 1;
             } else {
               kit.sound('ui_error');
@@ -528,7 +528,7 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
             const res = ctx.rpg.sell(it.uid, 1);
             if (res.ok) {
               kit.sound('shells');
-              ui.toast('ui.toast.sold', { name: kit.t(itemNameKey(it.itemId)), n: formatInt(res.shells) }, 'good');
+              ui.toast(res.shells === 1 ? 'ui.toast.soldOne' : 'ui.toast.sold', { name: kit.t(itemNameKey(it.itemId)), n: formatInt(res.shells) }, 'good');
             }
             render();
           }, 'ui-sm');
