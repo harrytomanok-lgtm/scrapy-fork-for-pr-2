@@ -96,15 +96,13 @@ export function createLoop(ctx, opts = {}) {
   }
 
   /**
-   * The cap while paused: PAUSED_FPS_CAP, but never below the render tier's target frame rate, because the dynamic
-   * resolution of render/logic/dynres reads the presented rate and would lower the scale (and drop the high tier)
-   * while a menu is open.
+   * The cap while paused: PAUSED_FPS_CAP on every tier. The dynamic resolution of render/logic/dynres decides on
+   * `stats.costMs` and holds while `stats.cap` is below the tier's target, so a 30 fps menu neither lowers the scale
+   * nor drops the high tier.
    * @returns {number}
    */
   function pausedCap() {
-    const r = c.render;
-    const target = r && r.caps && typeof r.caps.targetFps === 'number' ? r.caps.targetFps : PAUSED_FPS_CAP;
-    return target > PAUSED_FPS_CAP ? Math.min(PLAY_FPS_CAP, target) : PAUSED_FPS_CAP;
+    return PAUSED_FPS_CAP;
   }
 
   /** @param {number} t rAF timestamp in ms */

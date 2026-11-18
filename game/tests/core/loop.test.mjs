@@ -233,6 +233,14 @@ test('frame cap: paused at most 30; fpscap=0 presents every vsync', () => {
   a.probe.frames = 0;
   a.vsyncs(120, 240);
   assert.ok(Math.abs(a.probe.frames - 120) <= 1, 'the debug pause (tests) keeps 60');
+  // the paused cap is 30 on every tier, the high tier (target 60) included: dynres holds while the cap is below it
+  const h = rafSetup();
+  h.ctx.render = { caps: { targetFps: 60 } };
+  h.ctx.time.pause('menu');
+  h.probe.frames = 0;
+  h.vsyncs(120, 240);
+  assert.ok(Math.abs(h.probe.frames - 60) <= 1, 'high tier paused: 30 per second (' + h.probe.frames + ')');
+  assert.equal(h.ctx.loop.stats.cap, 30);
   const b = rafSetup({ fpscap: false });
   b.probe.frames = 0;
   b.vsyncs(120, 240);
