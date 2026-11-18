@@ -902,6 +902,18 @@ export const scenarios = [
           }
         });
         mo.observe(document, { childList: true, subtree: true });
+        // Keep the game's AudioContext reachable, to suspend it the way the system does.
+        const AC = window.AudioContext;
+        const made = [];
+        /** @type {any} */ (window).__AUDIO_CONTEXTS__ = made;
+        if (AC) {
+          window.AudioContext = class extends AC {
+            constructor(o) {
+              super(o);
+              made.push(this);
+            }
+          };
+        }
         let g;
         Object.defineProperty(window, '__GAME__', {
           configurable: true,
@@ -985,12 +997,36 @@ export const scenarios = [
       assert.ok(started.player, 'the player exists');
       assert.ok(started.toasts.includes('core.save.memoryOnly'), 'the session-only warning toast fires: ' + started.toasts.join(', '));
 
-      // 3. Audio unlocks on the first tap.
+      // 3. Audio unlocks on the first tap. An untrusted pointerdown (like a touch pointerdown, it grants no user
+      // activation) may create the context but must not end the unlock: the real tap after it still runs it.
       assert.equal(started.audioReady, false, 'audio is locked before any gesture');
+      const early = await frame.evaluate(async () => {
+        window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true }));
+        await new Promise((r) => setTimeout(r, 200));
+        return { state: window.__GAME__.ctx.audio.debug().state };
+      });
+      console.log('  audio after an untrusted pointerdown: ' + early.state);
       await host.touchscreen.tap(200, 140);
       await host.waitForTimeout(400);
-      const audio = await frame.evaluate(() => window.__GAME__.ctx.audio.ready);
-      assert.equal(audio, true, 'the first tap unlocks audio');
+      const audioState = () => frame.evaluate(() => {
+        const a = window.__GAME__.ctx.audio;
+        return { ready: !!a.ready, state: a.debug().state };
+      });
+      const audio = await audioState();
+      assert.equal(audio.ready, true, 'the first tap unlocks audio');
+      assert.equal(audio.state, 'running', 'the AudioContext runs after the tap ' + JSON.stringify(audio));
+      // The system suspends the context while the page is visible (audio focus, interruption): the gesture
+      // listeners re-arm and the next tap resumes it.
+      await frame.evaluate(async () => {
+        await window.__AUDIO_CONTEXTS__[0].suspend();
+        await new Promise((r) => setTimeout(r, 100));
+      });
+      const suspended = await audioState();
+      assert.equal(suspended.state, 'suspended', 'suspended by the system');
+      await host.touchscreen.tap(200, 140);
+      await host.waitForTimeout(400);
+      const resumed = await audioState();
+      assert.equal(resumed.state, 'running', 'the next tap resumes a suspended context ' + JSON.stringify(resumed));
 
       // 4. A refused pointer lock (no allow-pointer-lock in the sandbox) changes nothing.
       const lock = await frame.evaluate(async () => {
