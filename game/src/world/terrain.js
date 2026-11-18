@@ -45,6 +45,7 @@ varying float vDens;
 varying float vPath;
 varying vec3 vNormalW;
 varying vec3 vPosW;
+varying vec2 vWq;
 void main() {
   vec3 p = position;
   float dist = length(p - uCamPos);
@@ -63,6 +64,7 @@ void main() {
   vCanopyAmt = dens * smoothstep(uCanopyNear, uCanopyFar, dist);
   vNormalW = normalize(aNormal.xyz + vec3(0.0, 0.0001, 0.0));
   vPosW = p;
+  vWq = p.xz - floor(uCamPos.xz / 256.0) * 256.0;
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }
 `;
@@ -81,7 +83,9 @@ varying float vPath;
 uniform vec3 uPathColor;
 varying vec3 vNormalW;
 varying vec3 vPosW;
-float th(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+varying vec2 vWq;
+// hash without sine: sin() of large arguments is unreliable on some GPUs (the near ground came out flat)
+float th(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float tn(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
@@ -101,31 +105,39 @@ void main() {
   float lite = smoothstep(0.36, 0.28, bump) * 0.09 * flat01;
   vec3 ground = mix(vGround, vShade, dark) * (1.0 + lite);
   // painted colour patches at play scale (about 6 m): warm dry patches and cool lush ones
-  float pv = tn(vPosW.xz * 0.16 + 3.0) * 0.7 + tn(vPosW.xz * 0.45 + 9.0) * 0.3;
+  vec2 wq = vWq;
+  float grain = tn(wq * 0.328125) - 0.5;
+  float pv = tn(wq * 0.15625 + 3.0) * 0.75 + grain * 0.25 + 0.125;
   float dryP = smoothstep(0.55, 0.78, pv) * flat01;
   float lushP = smoothstep(0.42, 0.22, pv) * flat01;
   ground = mix(ground, ground * vec3(1.16, 1.06, 0.8), dryP * 0.6);
   ground = mix(ground, mix(ground, vShade, 0.45), lushP * 0.5);
   // paths: a crisp, slightly wobbly edge with a darker rim, from the path flag carried on the near chunks
-  float pn = tn(vPosW.xz * 0.7) - 0.5;
-  float pathV = vPath + pn * 0.3;
-  float pk = smoothstep(0.5, 0.6, pathV) * flat01;
-  float pRim = smoothstep(0.1, 0.0, abs(pathV - 0.55)) * flat01;
-  ground = mix(ground, uPathColor * (0.92 + 0.16 * tn(vPosW.xz * 1.3)), pk * 0.7);
-  ground *= 1.0 - pRim * 0.16;
+  float pk = 0.0;
+  if (vPath > 0.01) {
+    float pathV = vPath + (tn(wq * 0.703125) - 0.5) * 0.3;
+    pk = smoothstep(0.5, 0.6, pathV) * flat01;
+    float pRim = smoothstep(0.1, 0.0, abs(pathV - 0.55)) * flat01;
+    ground = mix(ground, uPathColor * (0.94 + 0.2 * grain), pk * 0.7);
+    ground *= 1.0 - pRim * 0.16;
+  }
   vec3 base = mix(ground, canopy, amt);
-  float grain = tn(vPosW.xz * 0.33) - 0.5;
-  float fine = tn(vPosW.xz * 1.9 + grain) - 0.5;
   float nearK = 1.0 - smoothstep(40.0, 180.0, dist);
-  float close = 1.0 - smoothstep(5.0, 40.0, dist);
-  // directional brush strokes near the camera so the foreground ground reads as painted grass, not a flat fill
-  vec2 sp = vec2(vPosW.x * 0.8 - vPosW.z * 0.6, vPosW.x * 0.6 + vPosW.z * 0.8);
-  float stroke = tn(vec2(sp.x * 3.2, sp.y * 0.75)) - 0.5;
-  base *= 1.0 + grain * 0.2 * nearK + fine * 0.14 * close + stroke * 0.24 * close * (1.0 - pk);
+  base *= 1.0 + grain * 0.2 * nearK;
+  if (dist < 40.0) {
+    float close = 1.0 - smoothstep(5.0, 40.0, dist);
+    float fine = tn(wq * 1.875 + grain) - 0.5;
+    // directional brush strokes near the camera so the foreground ground reads as painted grass, not a flat fill
+    float stroke = tn(vec2(wq.x * 3.203125 + wq.y * 0.5, wq.y * 0.75)) - 0.5;
+    // the follow camera sits low over the ground in portrait: the first metres get blade-scale streaks
+    float lens = 1.0 - smoothstep(2.0, 9.0, dist);
+    float micro = lens > 0.0 ? tn(vec2(wq.x * 11.0 + wq.y * 2.0, wq.y * 5.5)) - 0.5 : 0.0;
+    base *= 1.0 + fine * 0.14 * close + stroke * 0.24 * close * (1.0 - pk) + micro * 0.24 * lens * (1.0 - pk * 0.6);
+  }
   // flowers and pebbles: sparse dots on a 0.7 m lattice, fading out before they can shimmer
-  float dotK = (1.0 - smoothstep(9.0, 24.0, dist)) * flat01 * (1.0 - amt);
+  float dotK = smoothstep(2.5, 4.5, dist) * (1.0 - smoothstep(9.0, 24.0, dist)) * flat01 * (1.0 - amt);
   if (dotK > 0.01) {
-    vec2 cp = vPosW.xz * 1.4;
+    vec2 cp = wq * 1.40625;
     vec2 cell = floor(cp);
     float hs = th(cell);
     if (hs > 0.84) {

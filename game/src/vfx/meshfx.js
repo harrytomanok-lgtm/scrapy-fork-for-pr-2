@@ -302,6 +302,7 @@ export function createMeshFx(ctx) {
       const all = [];
       for (const b of beams) all.push(b.mesh);
       for (const s of shells) all.push(s.mesh);
+      for (const f of flames) all.push(f.back, f.front);
       for (const d of decals) {
         all.push(d.mesh);
         d.geo.dispose();
@@ -312,6 +313,7 @@ export function createMeshFx(ctx) {
       }
       beams.length = 0;
       shells.length = 0;
+      flames.length = 0;
       decals.length = 0;
       built = false;
     },

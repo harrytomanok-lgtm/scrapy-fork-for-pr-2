@@ -159,7 +159,7 @@ void main() {
   if (uNearHide < 0.0) {
     vec4 io0 = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
     float k = smoothstep(-uNearHide * 0.2, -uNearHide, length(io0.xz - uCamPos.xz));
-    wp.xyz = io0.xyz + (wp.xyz - io0.xyz) * (0.3 + 0.7 * k);
+    wp.xyz = io0.xyz + (wp.xyz - io0.xyz) * (0.55 + 0.45 * k);
   }
   #endif
   if (uWindOn > 0.5) {

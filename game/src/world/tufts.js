@@ -67,9 +67,9 @@ export function createTufts(ctx, grid, seed) {
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.name = 'world.tufts';
-  // clumps right under the lens would fill the screen with giant blades: they shrink toward the root within ~6 m of
-  // the camera (negative uNearHide) instead of leaving a bare band
-  if (mat.uniforms.uNearHide) mat.uniforms.uNearHide.value = -6;
+  // clumps right under the lens would fill the screen with giant blades: they shrink toward the root within ~3 m of
+  // the camera (negative uNearHide, down to 55%) instead of leaving a bare band
+  if (mat.uniforms.uNearHide) mat.uniforms.uNearHide.value = -3;
   ctx.render.layers.props.add(mesh);
   const tmp = new Color();
   let lastI = -1e9;

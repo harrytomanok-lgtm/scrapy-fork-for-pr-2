@@ -127,7 +127,7 @@ function actorScenario(tag, width, height) {
     width,
     height,
     query: 'res=1',
-    async run({ game, assert, shot }) {
+    async run({ page, game, assert, shot }) {
       await opening(game, assert);
       const m = await game((g, src) => {
         const r = g.ctx.world.regions.find((q) => q.id === 'meadows');
@@ -143,6 +143,8 @@ function actorScenario(tag, width, height) {
           g.cmd.actorsFollow(3.4, 0.55, 0.1);
           g.step(4);
         }, VIEW, { x: m.x, z: m.z, yaw: 2.4, pitch: -0.05 }, form);
+        // the aura ramps on rendered frames (real time): let it reach its Form level before the shot
+        await page.waitForTimeout(1200);
         await shot(`look-${tag}-hero-${form || 'base'}`);
       }
       // the same Forms through the real follow camera (how the phone sees them)
@@ -155,9 +157,23 @@ function actorScenario(tag, width, height) {
           g.setCamera({ yaw: 2.4 + 2.6, pitch: -0.1 });
           g.step(40);
         }, form);
+        await page.waitForTimeout(800);
         await shot(`look-${tag}-play-${form}`);
       }
-      await game((g) => { g.setForm(null); g.cmd.actorsFollow(0); g.step(10); });
+      // Gather (charging Ora) and the transformation moment, through the follow camera
+      await game((g) => { g.setForm(null); g.step(10); g.hold('gather', true); for (let i = 0; i < 12; i++) g.step(10); });
+      await page.waitForTimeout(1500);
+      await shot(`look-${tag}-gather`);
+      const tf = await game((g) => {
+        g.hold('gather', false);
+        g.step(10);
+        const ok = g.ctx.combat.setForm(g.ctx.player, 'ember', { free: true });
+        for (let i = 0; i < 6; i++) g.step(6);
+        return { ok, state: g.ctx.player.combat.state };
+      });
+      console.log(`  ${tag} transform: ${JSON.stringify(tf)}`);
+      await shot(`look-${tag}-transform`);
+      await game((g) => { for (let i = 0; i < 10; i++) g.step(10); g.setForm(null); g.cmd.actorsFollow(0); g.step(10); });
       // the nine enemies in a row
       await game((g, back) => {
         g.cmd.actorsLineup({ ids: ['ember_wisp', 'tusk_boar', 'bramble_boar', 'choir_acolyte', 'choir_caster', 'scuttlecrab', 'rust_golem', 'frost_harrier', 'choir_vanguard'],
