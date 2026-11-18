@@ -7,7 +7,7 @@
 /** @type {Array<[string, string, string]>} [key, en, he] */
 const ROWS = [
   ['boss.durn.intro', 'Durn: "The Choir takes what it is owed."', 'דורן: "המקהלה לוקחת את מה שמגיע לה."'],
-  ['boss.bramblehorn.intro', 'The hollow shakes. Something huge wakes in the brambles.', 'החורשה רועדת. משהו עצום מתעורר בין הסנה.'],
+  ['boss.bramblehorn.intro', 'The hollow shakes. Something huge wakes in the brambles.', 'השקע רועד. משהו עצום מתעורר בין שיחי הסנה.'],
   ['boss.bramblehorn.phase2', 'Bramblehorn rages', 'קרן הסנה משתולל'],
   ['boss.gorrumaw.intro', 'The pit floor cracks. The Burrow King rises.', 'קרקעית הבור נסדקת. מלך המחילות עולה.'],
   ['boss.gorrumaw.phase2', 'The armour shatters', 'השריון מתנפץ'],
@@ -22,9 +22,9 @@ const ROWS = [
   ['tech.boar_charge.name', 'Tusk Charge', 'הסתערות חט'],
   ['tech.boar_charge_red.name', 'Bramble Charge', 'הסתערות סנה'],
   ['tech.acolyte_string.name', 'Choir String', 'שרשרת המקהלה'],
-  ['tech.acolyte_rush.name', 'Shoulder Rush', 'הסתערות כתף'],
+  ['tech.acolyte_rush.name', 'Shoulder Rush', 'זינוק כתף'],
   ['tech.caster_volley.name', 'Glass Volley', 'מטח זכוכית'],
-  ['tech.caster_tether.name', 'Drain Tether', 'קשר שאיבה'],
+  ['tech.caster_tether.name', 'Drain Tether', 'חוט יניקה'],
   ['tech.crab_pinch.name', 'Pinch', 'צביטה'],
   ['tech.crab_slam.name', 'Shell Slam', 'חבטת שריון'],
   ['tech.golem_hammer.name', 'Hammer Fists', 'אגרופי פטיש'],
@@ -50,10 +50,10 @@ const ROWS = [
   ['tech.ik_flicker_slash.name', 'Flicker Slash', 'חיתוך הבהוב'],
   ['tech.ik_ice_spears.name', 'Ice Spears', 'חניתות קרח'],
   ['tech.ik_shatterdive.name', 'Shatterdive', 'צלילת ניפוץ'],
-  ['tech.vh_tether.name', 'Dimming Tether', 'קשר העמעום'],
+  ['tech.vh_tether.name', 'Dimming Tether', 'חוט העמעום'],
   ['tech.vh_void_bolts.name', 'Void-Glass Bolts', 'קליעי זכוכית ריק'],
   ['tech.vh_glass_strike.name', 'Glass Strike', 'מכת זכוכית'],
-  ['tech.vh_spire_crystals.name', 'Spire Crystals', 'גבישי המעיין'],
+  ['tech.vh_spire_crystals.name', 'Spire Crystals', 'גבישי המגדל'],
 ];
 
 /** @type {{ he:Record<string, string>, en:Record<string, string> }} */
