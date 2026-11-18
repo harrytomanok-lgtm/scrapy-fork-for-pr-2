@@ -120,28 +120,28 @@ test('enemy Resonance, tint and milestones (GDD 4.4)', () => {
 });
 
 test('enemy scaling of GDD 7.1', () => {
-  assert.deepEqual([1, 10, 20, 30].map((L) => F.enemyHp(1, L)), [52, 195, 420, 715]);
-  assert.equal(F.enemyAtk(1, 1), 12);
-  assert.equal(F.enemyAtk(1.5, 10), 72);
+  assert.deepEqual([1, 10, 20, 30].map((L) => F.enemyHp(1, L)), [87, 220, 415, 660]);
+  assert.equal(F.enemyAtk(1, 1), 12.5);
+  assert.equal(F.enemyAtk(1.5, 10), 66);
   assert.equal(F.enemyDefense(1, 10), 20);
-  assert.equal(F.enemyHp(1, 10, 'story'), Math.round(195 * 0.75));
-  assert.equal(F.enemyHp(1, 10, 'master'), Math.round(195 * 1.25));
+  assert.equal(F.enemyHp(1, 10, 'story'), Math.round(220 * 0.75));
+  assert.equal(F.enemyHp(1, 10, 'master'), Math.round(220 * 1.25));
   const boar = { tier: 'grunt', mult: BALANCE.enemies.tusk_boar.mult, poise: BALANCE.enemies.tusk_boar.poise };
   const s = F.enemyStats(boar, 5);
-  assert.equal(s.hpMax, 109, 'round(40 + 12*5 + 0.35*25)');
-  assert.equal(s.hp, 109);
-  assert.equal(s.meleeRating, 28);
-  assert.equal(s.oraRating, 28);
+  assert.equal(s.hpMax, 141, 'round(75 + 12*5 + 0.25*25)');
+  assert.equal(s.hp, 141);
+  assert.equal(s.meleeRating, 26.5);
+  assert.equal(s.oraRating, 26.5);
   assert.equal(s.defense, 10);
   assert.equal(s.poise, 20);
   assert.equal(s.poiseMax, 20);
   assert.equal(s.resonance, F.enemyResonance(5, 'grunt'));
   const b = BALANCE.bosses.bramblehorn;
   const boss = F.enemyStats({ tier: 'boss', mult: { hp: 1, atk: 1, def: 1 }, poise: 0 }, b.level, 'warrior', { hpMult: b.hpMult, poise: b.poise });
-  assert.equal(boss.hpMax, F.enemyHp(14, 12));
+  assert.equal(boss.hpMax, F.enemyHp(b.hpMult, 12));
   assert.equal(boss.poise, 200);
-  assert.equal(F.enemyShells({ mult: { shells: 1 } }, 10), 15);
-  assert.equal(F.enemyShells({ mult: { shells: 1.2 } }, 10, 'master'), Math.round(15 * 1.2 * 1.2));
+  assert.equal(F.enemyShells({ mult: { shells: 1 } }, 10), 13);
+  assert.equal(F.enemyShells({ mult: { shells: 1.2 } }, 10, 'master'), Math.round(13 * 1.2 * 1.2));
 });
 
 test('enemy XP and its level-difference factors (GDD 4.1)', () => {
@@ -211,9 +211,9 @@ test('items, prices and region levels (GDD 10, 3.2)', () => {
   assert.equal(F.itemValue(2, 1), 2);
   assert.equal(F.itemValue(6, 15), Math.round(6 * 2.2));
   assert.equal(F.itemValue(20, 22), Math.round(20 * 2.76));
-  assert.equal(F.itemPrice('common', 0), 40);
-  assert.equal(F.itemPrice('fine', 3), Math.round(40 * 2.5 * 1.45));
-  assert.equal(F.itemPrice('rare', 15), 780);
+  assert.equal(F.itemPrice('common', 0), 70);
+  assert.equal(F.itemPrice('fine', 3), Math.round(70 * 2.5 * 1.45));
+  assert.equal(F.itemPrice('rare', 15), 1365);
   assert.equal(F.consumablePrice('sunfruit', 1), 32);
   assert.equal(F.consumablePrice('ora_draught', 10), 75);
   assert.equal(F.consumablePrice('nothing', 10), 0);

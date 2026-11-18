@@ -237,12 +237,18 @@ export const BALANCE = deepFreeze({
     master: { enemyDmg: 1.4, enemyHp: 1.25, telegraph: 0.85, perfectWindow: 1.0, attackers: 6, reward: 1.2, shellLoss: 0.10 },
   },
 
-  /** GDD 7.1 enemy scaling. HP = round(hpMult * (base + perLevel*Le + quad*Le^2) * difficultyHp). */
+  /**
+   * GDD 7.1 enemy scaling. HP = round(hpMult * (base + perLevel*Le + quad*Le^2) * difficultyHp).
+   * Balance pass (tools/balance-sim.mjs): HP base 40 -> 75 and quad 0.35 -> 0.25 so a same-level grunt takes 1-2
+   * Strike Strings from L1 to L30 (the GDD curve gave 0.6 strings at L1-L3 and 2.1 at L30); ATK 8 + 4 Le ->
+   * 9 + 3.5 Le so a full-HP player survives 11-17 grunt hits (10-11 before, the low edge of 9-18 once fights got
+   * longer); Shells 3 + 1.2 Le -> 3 + 1.0 Le for about 600 per hour from kills at L10 (GDD 10.1).
+   */
   enemyScale: {
-    hp: { base: 40, perLevel: 12, quad: 0.35 },
-    atk: { base: 8, perLevel: 4 },
+    hp: { base: 75, perLevel: 12, quad: 0.25 },
+    atk: { base: 9, perLevel: 3.5 },
     def: { perLevel: 2 },
-    shells: { base: 3, perLevel: 1.2 },
+    shells: { base: 3, perLevel: 1.0 },
     /** Locomotion defaults for enemies (not in the GDD): ground run speed and flight cruise in m/s. */
     move: { run: 7, fly: 16 },
     /** Mean power of the P0 grunt attacks of GDD 7.2 (about 0.98), used for the hits-to-die target. */
@@ -257,7 +263,7 @@ export const BALANCE = deepFreeze({
     tusk_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [1, 8], mult: { hp: 1.0, atk: 1.0, def: 1.0, xp: 1.0, shells: 1.0 }, poise: 20 },
     bramble_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [8, 14], mult: { hp: 1.2, atk: 1.1, def: 1.0, xp: 1.1, shells: 1.0 }, poise: 25, variantOf: 'tusk_boar' },
     choir_acolyte: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [2, 28], mult: { hp: 1.0, atk: 1.0, def: 1.0, xp: 1.0, shells: 1.2 }, poise: 25, guardChance: 0.3 },
-    choir_caster: { tier: 'grunt', movement: 'hover', brain: 'ranged', levels: [4, 28], mult: { hp: 0.8, atk: 1.2, def: 0.8, xp: 1.1, shells: 1.2 }, poise: 15, keepRange: 25 },
+    choir_caster: { tier: 'grunt', movement: 'hover', brain: 'ranged', levels: [4, 28], mult: { hp: 0.8, atk: 1.0, def: 0.8, xp: 1.1, shells: 1.2 }, poise: 15, keepRange: 25 },
     scuttlecrab: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [5, 12], mult: { hp: 1.6, atk: 0.9, def: 1.6, xp: 1.3, shells: 1.3 }, poise: 50, frontGuard: { angleDeg: 120, damageMult: 0.2 } },
     rust_golem: { tier: 'heavy', movement: 'ground', brain: 'melee', levels: [13, 22], mult: { hp: 3.0, atk: 1.5, def: 2.0, xp: 3.0, shells: 3.0 }, poise: 80 },
     frost_harrier: { tier: 'grunt', movement: 'fly', brain: 'diver', levels: [19, 28], mult: { hp: 0.9, atk: 1.3, def: 0.8, xp: 1.2, shells: 1.0 }, poise: 15 },
@@ -269,7 +275,8 @@ export const BALANCE = deepFreeze({
    * windups are not in the GDD and are tuned values inside the 0.5-1.2 s windup band.
    */
   enemyTech: {
-    wisp_spit: { telegraph: 'white', power: 0.8, windup: 0.6 },
+    // Balance pass: 0.8 -> 0.6 and a longer windup; the wisp is the first enemy of the game.
+    wisp_spit: { telegraph: 'white', power: 0.6, windup: 0.7 },
     wisp_dive: { telegraph: 'red', power: 1.4, windup: 1.0, selfDestruct: true },
     boar_gore: { telegraph: 'white', power: 0.9, windup: 0.5 },
     boar_charge: { telegraph: 'white', power: 1.3, windup: 0.8, dist: 20, knock: { kind: 'smash', speed: 30 } },
@@ -289,13 +296,17 @@ export const BALANCE = deepFreeze({
     vanguard_smash: { telegraph: 'red', power: 1.6, windup: 1.0 },
   },
 
-  /** GDD 7.3 bosses. phases = HP fractions at which each phase starts. index = loot `boss` shell multiplier. */
+  /**
+   * GDD 7.3 bosses. phases = HP fractions at which each phase starts. index = loot `boss` shell multiplier.
+   * Balance pass: hpMult raised (GDD 6 / 14 / 18 / 16 / 24) for fights of about 55 / 85 / 100 / 110 / 170 s at
+   * Warrior (measured in the browser: Durn at hpMult 6 fell in 8 s); boss ATK is 0.75 (ai/data/enemies).
+   */
   bosses: {
-    durn: { index: 1, level: 4, hpMult: 6, poise: 80, phases: [1.0], addsAt: 0.5, adds: 2, fleeAtZero: true, arena: { landmarkId: 'sparkstead', radius: 60 } },
-    bramblehorn: { index: 2, level: 12, hpMult: 14, poise: 200, phases: [1.0, 0.5], craterRadius: 8, arena: { landmarkId: 'bramble_hollow', radius: 90 } },
-    gorrumaw: { index: 3, level: 18, hpMult: 18, poise: 250, phases: [1.0, 0.5], armourDefMult: 0.5, arena: { landmarkId: 'burrow_pit', radius: 110 } },
-    iskra: { index: 4, level: 22, hpMult: 16, poise: 220, phases: [1.0, 0.5], craterRadius: 12, diveHeight: 200, arena: { landmarkId: 'paleglass_summit', radius: 100 } },
-    vorrhal: { index: 5, level: 26, hpMult: 24, poise: 300, phases: [1.0, 0.6, 0.25], hpPerSiphonStanding: 0.10, adds: 2, arena: { landmarkId: 'dim_court', radius: 120 } },
+    durn: { index: 1, level: 4, hpMult: 48, poise: 80, phases: [1.0], addsAt: 0.5, adds: 2, fleeAtZero: true, arena: { landmarkId: 'sparkstead', radius: 60 } },
+    bramblehorn: { index: 2, level: 12, hpMult: 80, poise: 200, phases: [1.0, 0.5], craterRadius: 8, arena: { landmarkId: 'bramble_hollow', radius: 90 } },
+    gorrumaw: { index: 3, level: 18, hpMult: 72, poise: 250, phases: [1.0, 0.5], armourDefMult: 0.5, arena: { landmarkId: 'burrow_pit', radius: 110 } },
+    iskra: { index: 4, level: 22, hpMult: 88, poise: 220, phases: [1.0, 0.5], craterRadius: 12, diveHeight: 200, arena: { landmarkId: 'paleglass_summit', radius: 100 } },
+    vorrhal: { index: 5, level: 26, hpMult: 100, poise: 300, phases: [1.0, 0.6, 0.25], hpPerSiphonStanding: 0.10, adds: 2, arena: { landmarkId: 'dim_court', radius: 120 } },
   },
   bossRules: { resetExtra: 60, introSeconds: 3, xpMult: 6 },
 
@@ -313,10 +324,10 @@ export const BALANCE = deepFreeze({
   /** GDD 3.1 time. */
   time: { dayMinutes: 24, startHour: 7, dayStart: 6, dayEnd: 20 },
 
-  /** GDD 10 items and economy. */
+  /** GDD 10 items and economy. Balance pass: price base 40 -> 70 so Shells still matter after MQ3 (income was 3x the spending). */
   economy: {
     gearPerLevel: 0.08,
-    price: { base: 40, perLevel: 0.15, rarityMult: { common: 1, fine: 2.5, rare: 6 } },
+    price: { base: 70, perLevel: 0.15, rarityMult: { common: 1, fine: 2.5, rare: 6 } },
     sellFraction: 0.25,
     carryCap: 5,
     shellsPerHour: { 10: 600, 25: 2500 },
@@ -362,7 +373,8 @@ export const BALANCE = deepFreeze({
     grunt: { shells: { chance: 1, mult: 1 }, consumable: 0.08, gear: { chance: 0.03, weights: { common: 70, fine: 27, rare: 3 } } },
     heavy: { shells: { chance: 1, mult: 2 }, consumable: 0.12, gear: { chance: 0.06, weights: { common: 50, fine: 40, rare: 10 } } },
     elite: { shells: { chance: 1, mult: 4 }, consumable: 0.30, gear: { chance: 0.25, weights: { common: 0, fine: 60, rare: 40 } } },
-    boss: { shells: { perIndex: 500 }, consumable: 1, consumableCount: 2, gear: { chance: 0, weights: { common: 0, fine: 0, rare: 0 } } },
+    // Boss Shells 500 -> 250 per index (the GDD lump paid more than the whole shop of the region).
+    boss: { shells: { perIndex: 250 }, consumable: 1, consumableCount: 2, gear: { chance: 0, weights: { common: 0, fine: 0, rare: 0 } } },
     chest_t1: { shells: { min: 60, max: 150 }, consumable: 0.60, gear: { chance: 0.25, weights: { common: 60, fine: 38, rare: 2 } } },
     chest_t2: { shells: { min: 150, max: 350 }, consumable: 0.60, gear: { chance: 0.30, weights: { common: 30, fine: 55, rare: 15 } } },
     chest_t3: { shells: { min: 350, max: 700 }, consumable: 0.60, gear: { chance: 0.35, weights: { common: 0, fine: 60, rare: 40 } } },
@@ -383,7 +395,8 @@ export const BALANCE = deepFreeze({
    * Discoveries are a mix of landmarks (30 XP) and minor POIs (10 XP); `discoveryXp` is the mean, with
    * about one discovery in four a landmark.
    * Tuned (GDD 4.1 tuning rule): the average xpMult of band A is 0.70 (GDD 0.85) and of band B 1.10 (GDD 1.2);
-   * with the GDD values L10 lands at minute 38 and L20 at minute 105, before the target windows.
+   * with the GDD values L10 lands at minute 38 and L20 at minute 105, before the target windows. Band C is 1.0
+   * (GDD 1.5): with 1.5 the player met Iskra (L22) at L25 and started MQ7 at L30, above the finale's 24-28.
    */
   route: {
     discoveryXp: 15,
@@ -401,7 +414,7 @@ export const BALANCE = deepFreeze({
         camps: 10, siphons: 3, bosses: ['bramblehorn', 'gorrumaw'], discoveries: 40,
       },
       {
-        id: 'C', from: 120, to: 270, killsPerMin: 0.4, enemyLevelOffset: 0, xpMult: 1.5,
+        id: 'C', from: 120, to: 270, killsPerMin: 0.4, enemyLevelOffset: 0, xpMult: 1.0,
         quests: ['mq6'],
         camps: 6, siphons: 1, bosses: ['iskra'], discoveries: 30,
       },

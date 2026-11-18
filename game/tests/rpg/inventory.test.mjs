@@ -58,10 +58,10 @@ test('item level scaling and prices (GDD 10.2, 10.3, 10.4)', () => {
   const row = inv.items.find((r) => r.uid === uid);
   const st = I.itemStats(item('meadow_garb'), row);
   assert.deepEqual(st.stats, { def: Math.round(8 * 1.24), vit: Math.round(2 * 1.24) });
-  assert.equal(I.buyPrice(item('meadow_garb'), 3, 1), Math.round(40 * 2.5 * 1.45));
+  assert.equal(I.buyPrice(item('meadow_garb'), 3, 1), Math.round(70 * 2.5 * 1.45));
   assert.equal(I.buyPrice(item('sunfruit'), 1, 7), 30 + 2 * 7);
   assert.equal(I.buyPrice(item('ora_draught'), 1, 10, 0.8), Math.round((45 + 30) * 0.8), "Talia's -20%");
-  assert.equal(I.sellValue(item('meadow_garb'), row, 1, 1), Math.floor(Math.round(40 * 2.5 * 1.45) * 0.25));
+  assert.equal(I.sellValue(item('meadow_garb'), row, 1, 1), Math.floor(Math.round(70 * 2.5 * 1.45) * 0.25));
   assert.equal(I.sellValue(item('rust_core'), { level: 1 }, 1, 1), 0, 'quest items cannot be sold');
   const dov = SHOPS.find((s) => s.id === 'dov_stall');
   const rows = I.shopRows(dov, item, 5, 40);
@@ -113,7 +113,7 @@ test('loot: boss table pays perIndex x index and two consumables; rarity picking
   const t = LOOT_TABLES.find((x) => x.id === 'boss');
   const out = rollLoot(t, 12, createStream(1), gearPool(ITEMS), { bossIndex: 2 });
   assert.equal(out[0].kind, 'shells');
-  assert.equal(out[0].count, 1000);
+  assert.equal(out[0].count, 2 * BALANCE.loot.boss.shells.perIndex);
   assert.equal(out.filter((r) => r.kind === 'item').length, 2);
   assert.equal(pickRarity({ common: 70, fine: 27, rare: 3 }, 0), 'common');
   assert.equal(pickRarity({ common: 70, fine: 27, rare: 3 }, 0.71), 'fine');

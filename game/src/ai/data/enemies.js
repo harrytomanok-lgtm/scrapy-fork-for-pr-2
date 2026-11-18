@@ -41,7 +41,7 @@ const REGIONS = {
 
 /** Brain parameters per enemy (tuning). */
 const PARAMS = {
-  ember_wisp: { sight: 40, leash: 80, engage: 14, prefer: [9, 18], strafe: 0.7, guardChance: 0, fleeHp: 0, hover: 5, jumpAtFlyer: false },
+  ember_wisp: { sight: 40, leash: 80, engage: 9, prefer: [5, 11], strafe: 0.6, guardChance: 0, fleeHp: 0, hover: 2.5, jumpAtFlyer: false },
   tusk_boar: { sight: 32, leash: 70, engage: 12, prefer: [8, 16], strafe: 0.3, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 8 },
   bramble_boar: { sight: 36, leash: 75, engage: 12, prefer: [8, 16], strafe: 0.3, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 8.5 },
   choir_acolyte: { sight: 45, leash: 80, engage: 6, prefer: [1.5, 3], strafe: 0.5, guardChance: E.choir_acolyte.guardChance, fleeHp: 0.18, jumpAtFlyer: true },
@@ -108,7 +108,7 @@ function bossEnemies() {
     for (const ph of BOSS_PHASES[id]) for (const t of ph.techs) if (all.indexOf(t.id) < 0) all.push(t.id);
     const d = {
       id, specId: id, tier: 'boss', movement: BOSS_MOVE[id], levels: [b.level, b.level],
-      mult: { hp: b.hpMult, atk: 1.2, def: 1.2, xp: BALANCE.bossRules.xpMult, shells: 0 }, poise: b.poise,
+      mult: { hp: b.hpMult, atk: 0.75, def: 1.2, xp: BALANCE.bossRules.xpMult, shells: 0 }, poise: b.poise,
       brain: 'boss', params: Object.assign({ sight: b.arena.radius + 40, leash: b.arena.radius + BALANCE.bossRules.resetExtra, strafe: 0.5, guardChance: 0, fleeHp: 0 }, BOSS_PARAMS[id]),
       techs: all, lootTable: 'boss', regions: [], tags: ['boss'], oraColor: PALETTE.hostile,
     };
