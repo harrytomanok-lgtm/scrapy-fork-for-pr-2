@@ -135,6 +135,24 @@ export function lockFraming(px, pz, tx, tz, side, portrait, out) {
 }
 
 /**
+ * Render-time camera angle between the previous and the current sim step's angle (radians), the short way round:
+ * the orbit turns in 60 Hz steps, and the frame pass shows it at `alpha` between them so dragging stays smooth at
+ * any display rate and on frames that ran 0 or 2 steps.
+ * @param {number} prev angle at the start of the last step @param {number} cur angle after it @param {number} alpha 0..1
+ * @returns {number} in (-PI, PI]
+ */
+export function interpAngle(prev, cur, alpha) {
+  const a = alpha < 0 ? 0 : alpha > 1 ? 1 : alpha;
+  let d = (cur - prev) % (2 * Math.PI);
+  if (d > Math.PI) d -= 2 * Math.PI;
+  else if (d < -Math.PI) d += 2 * Math.PI;
+  let r = (prev + d * a) % (2 * Math.PI);
+  if (r > Math.PI) r -= 2 * Math.PI;
+  else if (r <= -Math.PI) r += 2 * Math.PI;
+  return r;
+}
+
+/**
  * Pitch for camera-pitch flight when the stick is idle: back to the rest pitch over about `seconds`.
  * @param {number} pitch @param {number} rest @param {number} seconds @param {number} dt
  */
