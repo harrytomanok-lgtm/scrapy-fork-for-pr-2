@@ -330,6 +330,14 @@ const LIST = [
       for (let i = 1; i < start.phases.length; i++) {
         const r = await game((g, a) => {
           const e = g.ctx.ents.get(a.b);
+          if (a.fog && !window.__fog) {
+            window.__fog = [];
+            const env = g.ctx.env;
+            const sf = env.setFog.bind(env);
+            const cf = env.clearFog.bind(env);
+            env.setFog = (o) => { window.__fog.push('set:' + (o && o.snow)); return sf(o); };
+            env.clearFog = (s) => { window.__fog.push('clear'); return cf(s); };
+          }
           const want = (a.below - 0.03) * e.stats.hpMax;
           g.damage(a.b, Math.max(2, e.stats.hp - want));
           // Vorrhal's last phase starts the finale script, which speaks: close the dialogue before stepping.
@@ -337,9 +345,10 @@ const LIST = [
             if (g.top() !== 'hud') g.closeAll();
             g.step(20);
           }
-          return window.__aiLog.filter((x) => x.t === 'boss:phase' && x.phase === a.i).length;
-        }, { b: start.b, below: start.phases[i], i });
-        assert.equal(r, 1, 'boss:phase ' + i + ' fires once');
+          return { n: window.__aiLog.filter((x) => x.t === 'boss:phase' && x.phase === a.i).length, fog: (window.__fog || []).join(',') };
+        }, { b: start.b, below: start.phases[i], i, fog: bossId === 'iskra' });
+        assert.equal(r.n, 1, 'boss:phase ' + i + ' fires once');
+        if (bossId === 'iskra' && i === 1) assert.equal(r.fog, 'set:1', "Iskra's phase 2 blizzard sets the fog");
         await shot('ai-boss-' + bossId + '-p' + (i + 1));
       }
       const end = await game((g, a) => {
@@ -354,8 +363,10 @@ const LIST = [
         const attacks = L.filter((x) => x.t === 'combat:techStart' && x.entId === a.b);
         const tele = attacks.every((s) => L.some((x) => x.t === 'combat:telegraph' && x.entId === a.b && x.tick <= s.tick && x.tick >= s.tick - 1));
         g.god(false);
-        return { ends: L.filter((x) => x.t === 'boss:end').map((x) => x.defeated), boss: !!g.ctx.ai.boss, attacks: attacks.length, tele };
-      }, { b: start.b, flee: bossId === 'durn' });
+        return { ends: L.filter((x) => x.t === 'boss:end').map((x) => x.defeated), boss: !!g.ctx.ai.boss, attacks: attacks.length, tele,
+          fog: (window.__fog || []).join(',') };
+      }, { b: start.b, flee: bossId === 'durn', fog: bossId === 'iskra' });
+      if (bossId === 'iskra') assert.equal(end.fog, 'set:1,clear', 'the boss fog clears on boss:end');
       assert.deepEqual(end.ends, [true], 'boss:end { defeated: true } once');
       assert.equal(end.boss, false, 'the boss is gone');
       assert.ok(end.attacks >= 1, 'the boss attacked (' + end.attacks + ')');
