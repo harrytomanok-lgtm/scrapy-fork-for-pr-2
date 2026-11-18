@@ -37,6 +37,8 @@ const OUT_MAX = 64;
 const STRING_GRACE = 0.7;
 /** Seconds an air-string hit or a Pursuit arrival keeps the player hanging with the juggled target. */
 const AIR_HANG_SECONDS = 0.9;
+/** The rising lunge reaches a hovering target at most this far above a grounded hero (m, body to body). */
+const RISE_MAX = 6.5;
 /** Seconds between two hits that keep the combo counter running. */
 const COMBO_WINDOW = 2.0;
 /** Ticks between line-of-sight checks of the hard lock. */
@@ -497,6 +499,7 @@ export function createCombatEngine(ctx) {
     let z = ent.pos.z + r.dirZ * dist;
     let y = NaN;
     let seconds = m.seconds || 0.1;
+    let rising = false;
     if (m.kind === 'toTarget' || m.kind === 'behindTarget' || m.kind === 'leap') {
       if (!t || !t.alive) return;
       const dx = t.pos.x - ent.pos.x;
@@ -513,7 +516,19 @@ export function createCombatEngine(ctx) {
         x = ent.pos.x + dx * k;
         z = ent.pos.z + dz * k;
         if (airborne(t) && (airborne(ent) || r.def.id === 'pursuit')) y = t.pos.y + (t.height - ent.height) * 0.5;
-        if (typeof m.speed === 'number' && m.speed > 0) seconds = Math.max(1 / 60, Math.sqrt((x - ent.pos.x) * (x - ent.pos.x) + (z - ent.pos.z) * (z - ent.pos.z)) / m.speed);
+        else if (isPlayer(ent) && r.def.id === 'strike_string' && r.step === 0 && airborne(t) && (t.tags & TAG.FLYER) !== 0) {
+          // The rising lunge: the opening hit of the string carries a grounded hero up to a target hovering within
+          // RISE_MAX metres (wisps), and the air string continues from there with the usual hang.
+          const up = t.pos.y + (t.height - ent.height) * 0.5 - ent.pos.y;
+          if (up > 1.0 && up <= RISE_MAX) {
+            y = ent.pos.y + up;
+            rising = true;
+          }
+        }
+        if (typeof m.speed === 'number' && m.speed > 0) {
+          const hy = rising ? y - ent.pos.y : 0;
+          seconds = Math.max(1 / 60, Math.sqrt((x - ent.pos.x) * (x - ent.pos.x) + hy * hy + (z - ent.pos.z) * (z - ent.pos.z)) / m.speed);
+        }
       } else if (m.kind === 'behindTarget') {
         if (d > dist) return;
         const k = d > 1e-4 ? (d + reach) / d : 0;
@@ -554,7 +569,7 @@ export function createCombatEngine(ctx) {
     mv.dashTo(ent, x, y, z, Math.max(1 / 60, seconds));
     // Pursuit and air lunges arrive beside a juggled target: hang there so the air string can follow (GDD 6.2).
     if (isPlayer(ent) && typeof mv.hang === 'function') {
-      if (m.kind === 'toTarget' && t && t.alive && y === y && airborne(t) && (r.def.id === 'pursuit' || airborne(ent))) {
+      if (m.kind === 'toTarget' && t && t.alive && y === y && airborne(t) && (r.def.id === 'pursuit' || airborne(ent) || rising)) {
         mv.hang(ent, seconds + AIR_HANG_SECONDS, STRING.juggle.gravityScale, NaN);
       } else if (m.kind === 'dive') {
         mv.hang(ent, 0, 1, NaN); // Meteor Heel: the dive ends the air hang

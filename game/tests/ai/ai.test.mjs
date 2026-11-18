@@ -236,6 +236,29 @@ test('the pending-boss state machine: start, reset, re-enter, retry, defeat', ()
   assert.equal(s.pending, null, 'cleared on game:ended');
 });
 
+test('several bosses can be pending: a second quest boss never orphans the first (S1)', () => {
+  const s = createPendingBoss();
+  const arenas = { bramblehorn: false, gorrumaw: false };
+  const inArena = (id) => arenas[id];
+  s.start('bramblehorn');
+  s.reset(); // the player flew off: Bramblehorn waits
+  s.start('gorrumaw'); // MQ5's boss starts
+  assert.deepEqual(s.ids, ['bramblehorn', 'gorrumaw']);
+  s.reset();
+  arenas.bramblehorn = true;
+  assert.equal(s.restart(inArena, true, false), 'bramblehorn', 'back at Bramble Hollow');
+  arenas.bramblehorn = false;
+  arenas.gorrumaw = true;
+  assert.equal(s.restart(inArena, true, false), 'gorrumaw');
+  s.start('gorrumaw');
+  assert.equal(s.restart(inArena, true, false), null, 'one boss spawned at a time');
+  s.defeat('gorrumaw');
+  assert.deepEqual(s.ids, ['bramblehorn'], 'only the defeated boss is cleared');
+  assert.equal(s.restart(inArena, true, true), 'bramblehorn', 'Retry falls back to a pending boss');
+  arenas.bramblehorn = true;
+  assert.equal(s.restart(inArena, true, false), 'bramblehorn');
+});
+
 // ---------------------------------------------------------------- brains
 
 /** A harness that runs one brain against a scripted world. */

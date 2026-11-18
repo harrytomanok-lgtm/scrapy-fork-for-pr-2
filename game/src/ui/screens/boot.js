@@ -229,7 +229,7 @@ export function registerBootScreens(ctx, kit, ui, reg) {
     const colB = kit.el('div', 'ui-col', cols);
     const pick = { preset: 'hero_a', gender: /** @type {'m'|'f'} */ ('m'), difficulty: 'warrior' };
     kit.el('h3', 'ui-h3', colA, 'ui.newgame.look');
-    const looks = kit.el('div', 'ui-slots ui-eqslots', colA);
+    const looks = kit.el('div', 'ui-slots ui-eqslots ui-looks', colA);
     /** @type {Record<string, HTMLButtonElement>} */
     const lookBtns = {};
     for (const id of ['hero_a', 'hero_b']) {

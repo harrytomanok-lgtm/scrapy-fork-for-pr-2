@@ -24,7 +24,9 @@ export const pkg = {
     const engine = createCombatEngine(ctx);
     registerScripts(engine.combat);
     ctx.provide('combat', engine.combat, 'combat');
-    ctx.systems.add(createPlayerDriver(ctx, engine));
+    const driver = createPlayerDriver(ctx, engine);
+    ctx.systems.add(driver);
+    ctx.systems.add(driver.latch);
     ctx.systems.add(engine.runSystem);
     const visuals = createVisuals(ctx, engine);
     ctx.systems.add(visuals.system);

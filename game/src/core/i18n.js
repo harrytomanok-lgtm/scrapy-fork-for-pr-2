@@ -63,9 +63,11 @@ function splitTop(body) {
  * @param {string} text
  * @param {object|null|undefined} args
  * @param {'m'|'f'} gender
+ * @param {boolean} [isolate=false] right-to-left text: wrap every inserted argument in FSI (U+2068) ... PDI
+ *   (U+2069), so a Latin or number-led argument cannot reorder the Hebrew line around it
  * @returns {string}
  */
-export function formatTemplate(text, args, gender) {
+export function formatTemplate(text, args, gender, isolate) {
   if (text.indexOf('{') < 0) return text;
   let out = '';
   let i = 0;
@@ -89,29 +91,33 @@ export function formatTemplate(text, args, gender) {
       out += text.slice(open);
       break;
     }
-    out += expand(text.slice(open + 1, close), args, gender);
+    out += expand(text.slice(open + 1, close), args, gender, !!isolate);
     i = close + 1;
   }
   return out;
 }
 
-/** @param {string} body @param {object|null|undefined} args @param {'m'|'f'} gender @returns {string} */
-function expand(body, args, gender) {
+const FSI = '⁨';
+const PDI = '⁩';
+
+/** @param {string} body @param {object|null|undefined} args @param {'m'|'f'} gender @param {boolean} isolate @returns {string} */
+function expand(body, args, gender, isolate) {
   if (body.startsWith('g:')) {
     const forms = splitTop(body.slice(2));
     const pick = gender === 'f' && forms.length > 1 ? forms[1] : forms[0];
-    return formatTemplate(pick, args, gender);
+    return formatTemplate(pick, args, gender, isolate);
   }
   if (body.startsWith('p:')) {
     const parts = splitTop(body.slice(2));
     const n = args ? args[parts[0]] : undefined;
     const one = parts.length > 1 ? parts[1] : '';
     const many = parts.length > 2 ? parts[2] : one;
-    return formatTemplate(n === 1 ? one : many, args, gender);
+    return formatTemplate(n === 1 ? one : many, args, gender, isolate);
   }
   if (args && Object.prototype.hasOwnProperty.call(args, body)) {
     const v = args[body];
-    return typeof v === 'number' ? formatNumber(v) : String(v);
+    const s = typeof v === 'number' ? formatNumber(v) : String(v);
+    return isolate && s ? FSI + s + PDI : s;
   }
   return '{' + body + '}';
 }
@@ -161,7 +167,7 @@ export function createI18n(opts = {}) {
         }
         return '[' + key + ']';
       }
-      return formatTemplate(text, args, i18n.gender);
+      return formatTemplate(text, args, i18n.gender, i18n.dir === 'rtl');
     },
 
     setLang(lang) {

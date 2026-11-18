@@ -167,6 +167,8 @@ export const UI_CSS = `
 .ui-banner.ui-k-break .ui-banner-main,.ui-banner.ui-k-danger .ui-banner-main{background:var(--danger);color:var(--paper)}
 .ui-banner.ui-k-perfect .ui-banner-main{background:var(--accent)}
 .ui-m-portrait .ui-banner{top:21%}
+.ui-tgt .ui-banner:not(.ui-k-break):not(.ui-k-perfect):not(.ui-k-danger){top:calc(var(--safe-top) + 150px)}
+.ui-m-portrait.ui-tgt .ui-banner:not(.ui-k-break):not(.ui-k-perfect):not(.ui-k-danger){top:calc(var(--safe-top) + 220px)}
 /* Combat call-outs (Break!, Perfect!) are small, short and beside the action, not on it. */
 .ui-banner.ui-k-break,.ui-banner.ui-k-perfect,.ui-banner.ui-k-danger{top:31%;left:74%}
 .ui-m-portrait .ui-banner.ui-k-break,.ui-m-portrait .ui-banner.ui-k-perfect,.ui-m-portrait .ui-banner.ui-k-danger{top:24%;left:70%}
@@ -257,6 +259,7 @@ export const UI_CSS = `
 .ui-grow{flex:1;min-inline-size:0}
 .ui-sep{block-size:2px;background:linear-gradient(to right,transparent,var(--line),transparent);border:0;margin:2px 0}
 
+.ui-scr [hidden],.ui-btn[hidden]{display:none!important}
 .ui-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-block-size:48px;min-inline-size:48px;padding:0 18px;border:0;
   background:var(--paper);color:var(--ink);font-family:var(--font-display);font-size:var(--fs-body);line-height:1.1;cursor:pointer;text-align:center;
   clip-path:${CUT_S};transition:transform 80ms ease-out,background-color 120ms;touch-action:manipulation}
@@ -463,6 +466,10 @@ export const UI_CSS = `
   .ui-resbig{font-size:1.5rem}
 }
 @media (max-width:760px){.ui-tabs .ui-tab.ui-hasico:not(.ui-sel) span{display:none}.ui-tabs .ui-tab.ui-hasico:not(.ui-sel){flex:0 0 48px}}
+.ui-looks .ui-slot{align-items:center;min-block-size:0;padding-block:6px}
+.ui-looks .ui-li-title,.ui-looks .ui-li-sub{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.ui-looks .ui-li-sub{font-size:var(--fs-small);line-height:1.2}
+@media (max-height:440px){.ui-looks .ui-ringico{inline-size:30px;block-size:30px;flex:0 0 30px}.ui-looks{gap:6px}}
 .ui-title .ui-ghostbtn{background:var(--panel);box-shadow:inset 0 0 0 2px rgba(243,235,221,.55)}
 
 @keyframes ui-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}

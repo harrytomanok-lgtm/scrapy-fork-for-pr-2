@@ -774,4 +774,96 @@ export const scenarios = [
       assert.ok(Math.abs(ratio - 0.5) < 0.05, 'regen is halved in the Siphon zone (' + ratio.toFixed(2) + ')');
     },
   },
+  {
+    // Holding Attack right after an air string, while its last hit still recovers, starts Meteor Heel (the hold is
+    // buffered); and a grounded tap at a target hovering up to 6 m rises to it (the rising lunge) and hangs there.
+    name: 'combat-air-reach',
+    width: 640,
+    height: 360,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await game((g) => {
+        g.god(true);
+        g.ai(false);
+        const p = g.player();
+        const tmp = [];
+        let best = null;
+        for (let d = 70; d <= 250 && !best; d += 30) {
+          for (let a = 0; a < 12 && !best; a++) {
+            const x = p.x + Math.sin(a * 0.5236) * d;
+            const z = p.z + Math.cos(a * 0.5236) * d;
+            if (g.ctx.world.heightAt(x, z) < 2 || g.ctx.world.slopeAt(x, z) > 0.06) continue;
+            g.teleport(x, z, {});
+            if (g.ctx.world.queryColliders(x, z, 30, tmp) === 0) best = { x, z };
+          }
+        }
+        if (best) g.teleport(best.x, best.z, { yaw: Math.PI });
+        g.setCamera({ yaw: Math.PI, pitch: -0.1 });
+        g.step(2);
+      });
+      const heel = await game((g) => {
+        const id = g.spawn('choir_acolyte', { dist: 3, level: 30, passive: true });
+        g.step(30);
+        g.lock(id);
+        g.setOra(g.player().oraMax);
+        g.hold('attack', true);
+        g.step(Math.ceil(0.35 * 60) + 4);
+        g.hold('attack', false);
+        g.step(18);
+        g.press('dash');
+        g.step(10);
+        const p = g.ctx.player;
+        for (let i = 0; i < 5; i++) { g.press('attack'); g.step(7); }
+        // The last press of the string is held down while it still runs.
+        const s0 = g.events(['combat:techStart']).length;
+        g.hold('attack', true);
+        const log = [];
+        for (let i = 0; i < 16; i++) {
+          g.step(3);
+          log.push(p.combat.state + ':' + p.combat.techId + ':' + p.move.mode);
+        }
+        g.hold('attack', false);
+        g.step(40);
+        return { starts: g.events(['combat:techStart']).slice(s0).filter((e) => e.payload.entId === p.id).map((e) => e.payload.techId), log };
+      });
+      assert.ok(heel.starts.includes('meteor_heel'), 'a hold during the air string recovery becomes Meteor Heel: ' + JSON.stringify(heel));
+      const lunge = await game((g) => {
+        g.killAll();
+        g.step(30);
+        g.heal();
+        const p = g.ctx.player;
+        // Fresh flat ground beside the crater, standing.
+        g.teleport(p.pos.x + 20, p.pos.z - 4, { yaw: Math.PI });
+        g.setCamera({ yaw: Math.PI, pitch: 0.1 });
+        g.step(40);
+        const ground = g.heightAt(p.pos.x, p.pos.z);
+        const x = p.pos.x + Math.sin(p.yaw) * 5;
+        const z = p.pos.z + Math.cos(p.yaw) * 5;
+        const id = g.ctx.ai.spawn('ember_wisp', x, ground + 6, z, { passive: true, level: 5 }).id;
+        g.step(2);
+        const w = g.ctx.ents.get(id);
+        w.brain.passive = true;
+        g.lock(id);
+        g.step(2);
+        const wispAlt = w.pos.y - ground;
+        const mode0 = p.move.mode + ':' + (p.pos.y - ground).toFixed(1) + ':' + Math.hypot(w.pos.x - p.pos.x, w.pos.z - p.pos.z).toFixed(1);
+        let peak = 0;
+        const h0 = g.events(['combat:hit']).filter((e) => e.payload.targetId === id).length;
+        g.press('attack');
+        for (let i = 0; i < 24; i++) { g.step(1); peak = Math.max(peak, p.pos.y - ground); }
+        const hits1 = g.events(['combat:hit']).filter((e) => e.payload.targetId === id).length - h0;
+        g.press('attack');
+        g.step(14);
+        const hang = p.pos.y - ground;
+        const hits2 = g.events(['combat:hit']).filter((e) => e.payload.targetId === id).length - h0;
+        return { wispAlt, peak, hits1, hits2, hang, mode: p.move.mode, mode0 };
+      });
+      console.log('    lunge: ' + JSON.stringify(lunge));
+      await shot('combat-rising-lunge');
+      assert.ok(lunge.wispAlt > 3.5, 'the wisp hovers (' + lunge.wispAlt.toFixed(1) + ' m)');
+      assert.ok(lunge.peak > lunge.wispAlt - 2.5, 'the first hit rises to it: ' + JSON.stringify(lunge));
+      assert.ok(lunge.hits1 >= 1, 'and lands: ' + JSON.stringify(lunge));
+      assert.ok(lunge.hits2 >= 2 && lunge.hang > 2, 'the air string continues with the hang: ' + JSON.stringify(lunge));
+    },
+  },
 ];

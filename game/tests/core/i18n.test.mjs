@@ -64,7 +64,17 @@ test('plurals pick by args.n, with nested parameters', () => {
   assert.equal(i18n.t('test.nested', { count: 2500 }), '2,500 shells for her');
   i18n.setLang('he');
   assert.equal(i18n.t('test.plural', { n: 1 }), 'קליע אחד');
-  assert.equal(i18n.t('test.plural', { n: 5 }), '5 קליעים');
+  assert.equal(i18n.t('test.plural', { n: 5 }), '⁨5⁩ קליעים', 'Hebrew arguments are bidi-isolated');
+});
+
+test('right-to-left lines isolate every inserted argument (FSI ... PDI); left-to-right lines do not', () => {
+  const { i18n } = setup('he');
+  assert.equal(i18n.t('test.hello', { name: 'Kai 2' }), 'שלום, ⁨Kai 2⁩!');
+  assert.equal(i18n.t('test.gender', null), 'קפוץ!', 'no arguments, nothing inserted');
+  assert.equal(i18n.t('test.hello', { name: '' }), 'שלום, !', 'an empty argument adds no marks');
+  i18n.setLang('en');
+  assert.equal(i18n.t('test.hello', { name: 'Kai 2' }), 'Hello, Kai 2!');
+  assert.equal(i18n.t('test.plural', { n: 2500 }), '2,500 bolts');
 });
 
 test('a missing key renders as [key] and is recorded once', () => {

@@ -95,6 +95,26 @@ export function createAi(ctx) {
   let introPlaying = false;
   /** @type {number[]} */
   const addIds = [];
+  /** A boss phase set a weather fog (Iskra's blizzard): cleared on boss:end, on reset and on player death. */
+  let bossFog = false;
+  /** The player tested against a pending boss's arena (set around pending.restart; one function, no closure per tick). @type {any} */
+  let arenaPlayer = null;
+  /** @param {string} id @returns {boolean} */
+  function playerInArenaOf(id) {
+    const p = arenaPlayer;
+    const bd = p ? ctx.defs.find('boss', id) : null;
+    const lm = bd && ctx.world ? ctx.world.landmark(bd.arena.landmarkId) : null;
+    if (!lm) return false;
+    const dx = p.pos.x - lm.x;
+    const dz = p.pos.z - lm.z;
+    return dx * dx + dz * dz <= bd.arena.radius * bd.arena.radius;
+  }
+  function clearBossFog() {
+    if (!bossFog) return;
+    bossFog = false;
+    const env = ctx.env;
+    if (env && typeof env.clearFog === 'function') env.clearFog();
+  }
 
   // Hazard pool (scripted moves).
   const hzX = new Float64Array(MAX_HAZARDS);
@@ -833,6 +853,10 @@ export function createAi(ctx) {
       }
       const ph = bd.phases[bossPhase];
       if (ph.summon) addQueue.push(ph.summon);
+      if (ph.fog && c.env && typeof c.env.setFog === 'function') {
+        c.env.setFog(ph.fog);
+        bossFog = true;
+      }
       if (ph.onEnter && ph.onEnter.length && c.quests && c.quests.runActions) c.quests.runActions(ph.onEnter);
     }
     if (bd.adds && !addsCalled && frac < bd.adds.hpBelow && ent.stats.hp > 0) {
@@ -867,7 +891,8 @@ export function createAi(ctx) {
     bossEnded = true;
     pBossEnd.bossId = bossDef ? bossDef.id : pending.pending || '';
     pBossEnd.defeated = defeated;
-    if (defeated) pending.defeat();
+    if (defeated) pending.defeat(pBossEnd.bossId);
+    clearBossFog();
     ctx.bus.emit('boss:end', pBossEnd);
   }
 
@@ -905,17 +930,24 @@ export function createAi(ctx) {
           bossEngaged = false;
           bossHeld = true;
         } else if (bossEngaged) ai.resetBoss();
+        else if (!scripted && alive && pending.ids.length > 1) {
+          // The player has not been at this boss's fight but stands in another pending boss's arena (a boss started
+          // from afar, or the last of several restarted by a load): that fight takes over, this one waits, still pending.
+          arenaPlayer = p;
+          let other = null;
+          for (let i = 0; i < pending.ids.length && !other; i++) {
+            if (pending.ids[i] !== bossDef.id && playerInArenaOf(pending.ids[i])) other = pending.ids[i];
+          }
+          arenaPlayer = null;
+          if (other) ai.startBoss(other, { skipIntro: true });
+        }
       }
       return;
     }
-    if (!ent && pending.pending && !pending.spawned) {
-      const bd = c.defs.find('boss', pending.pending);
-      const lm = bd && c.world ? c.world.landmark(bd.arena.landmarkId) : null;
-      if (!lm) return;
-      const dx = p.pos.x - lm.x;
-      const dz = p.pos.z - lm.z;
-      const inArena = dx * dx + dz * dz <= bd.arena.radius * bd.arena.radius;
-      const id = pending.restart(inArena, alive, false);
+    if (!ent && pending.ids.length && !pending.spawned) {
+      arenaPlayer = p;
+      const id = pending.restart(playerInArenaOf, alive, false);
+      arenaPlayer = null;
       if (id) ai.startBoss(id, { skipIntro: true });
     }
   }
@@ -950,8 +982,8 @@ export function createAi(ctx) {
         ctx.log.warn('ai', 'startBoss: unknown boss', id);
         return null;
       }
-      const old = bossEnt();
-      if (old) despawn(old.id);
+      // Another boss's fight is reset, not dropped: it stays pending and restarts when the player enters its arena.
+      if (bossEnt()) ai.resetBoss();
       clearAdds(false);
       return spawnBoss(bd, !!(opts && opts.skipIntro));
     },
@@ -965,6 +997,7 @@ export function createAi(ctx) {
       pending.reset();
       hzN = 0;
       if (was) endBoss(false);
+      clearBossFog();
     },
 
     get boss() {
@@ -1066,6 +1099,7 @@ export function createAi(ctx) {
     addQueue.length = 0;
     hzN = 0;
     pending.end();
+    clearBossFog();
     director.reset();
     sessionReady = false;
     camps = [];
@@ -1190,7 +1224,7 @@ export function createAi(ctx) {
         }
       }
       director.reset();
-      if (pending.pending && !bossEnt()) {
+      if (pending.ids.length && !bossEnt()) {
         const p = ctx.player;
         const id = pending.restart(false, !!p && p.alive, !!e.retry);
         if (id) ai.startBoss(id, { skipIntro: true });
@@ -1200,6 +1234,7 @@ export function createAi(ctx) {
     },
     playerDied() {
       if (bossEnt()) ai.resetBoss();
+      clearBossFog();
     },
     ended() {
       for (const id of Array.from(spawned)) {

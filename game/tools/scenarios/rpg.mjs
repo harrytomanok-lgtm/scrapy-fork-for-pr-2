@@ -499,4 +499,167 @@ export const scenarios = [
       await shot('rpg-finale-zenith');
     },
   },
+  {
+    // A journey loaded in the middle of a step rebuilds what that step's onStart set up (S3), and several pending
+    // quest bosses never orphan each other (S1): kill steps with script-spawned enemies (MQ1 s5, MQ4 s3), a destroy
+    // step (MQ2 s7), three boss steps at once (MQ3 s4, MQ5 s3, and the finale MQ7 s3).
+    name: 'rpg-resume',
+    width: W, height: H,
+    async run({ game, assert, shot }) {
+      const r = await game((g, drain) => {
+        const d = (0, eval)('(' + drain + ')');
+        const Q = g.ctx.quests;
+        const tagged = (tag) => g.ctx.ents.list('enemy').filter((e) => e.alive && e.questTag === tag && e.combat.state !== 'dead');
+        const bosses = () => g.ctx.ents.list('boss').filter((e) => e.alive && e.combat.state !== 'dead').map((e) => e.defId);
+        const stepOf = (id) => (Q.active().find((a) => a.questId === id) || { stepId: Q.state(id) }).stepId;
+        g.god(true);
+        let q = g.ctx.store.state.quests;
+        q.done = q.done.filter((x) => x !== 'mq1');
+        q.active.mq1 = { step: 4, counts: { s5: 1 } };
+        q.active.mq2 = { step: 6, counts: {} };
+        q.active.mq4 = { step: 2, counts: { s3: 5 } };
+        const saved1 = g.save();
+        const loaded1 = g.load(1);
+        const dlg1 = Q.dialogueState();
+        d(g);
+        g.step(3);
+        const a = {
+          saved: saved1, loaded: loaded1, dialogue: dlg1 && dlg1.dialogueId,
+          steps: [stepOf('mq1'), stepOf('mq2'), stepOf('mq4')],
+          wisps: tagged('mq1_wisps').length, wave: tagged('mq4_wave').length,
+          siphon: (Q.objects().find((o) => o.id === 'siphon_1') || {}).entId || 0,
+          markers: Q.markers().map((m) => m.questId),
+        };
+        d(g);
+        for (const e of tagged('mq1_wisps')) g.kill(e.id);
+        for (const e of tagged('mq4_wave')) g.kill(e.id);
+        d(g);
+        g.step(3);
+        d(g);
+        a.after = [stepOf('mq1'), stepOf('mq4')];
+
+        // Three boss steps pending at once, then a load.
+        q = g.ctx.store.state.quests;
+        q.active = { mq3: { step: 3, counts: {} }, mq5: { step: 2, counts: {} }, mq7: { step: 2, counts: {} } };
+        if (q.done.indexOf('mq2') < 0) q.done.push('mq2');
+        if (q.done.indexOf('mq1') < 0) q.done.push('mq1');
+        const saved2 = g.save();
+        const nBanners = g.events(['ui:banner']).length;
+        const loaded2 = g.load(1);
+        const dlg2 = Q.dialogueState();
+        d(g);
+        g.step(3);
+        const b = { saved: saved2, loaded: loaded2, dialogue: dlg2 && dlg2.dialogueId, atLoad: bosses(),
+          bossBanners: g.events(['ui:banner']).slice(nBanners).filter((x) => x.payload.kind === 'boss').length };
+        const visit = (lm) => {
+          g.goto(lm);
+          g.step(40);
+          return bosses().join(',');
+        };
+        b.visits = [visit('bramble_hollow'), visit('burrow_pit'), visit('bramble_hollow')];
+        const bh = g.ctx.ents.list('boss').find((e) => e.alive && e.defId === 'bramblehorn');
+        if (bh) g.kill(bh.id);
+        d(g);
+        g.step(5);
+        d(g);
+        b.mq3 = stepOf('mq3');
+        b.visits.push(visit('burrow_pit'), visit('dim_court'));
+        b.mq5 = stepOf('mq5');
+        b.mq7 = stepOf('mq7');
+        return { a, b };
+      }, drainSrc.toString());
+      const { a, b } = r;
+      assert.ok(a.saved && a.loaded, 'saved and loaded inside MQ1 s5, MQ2 s7 and MQ4 s3');
+      assert.deepEqual(a.steps, ['s5', 's7', 's3'], 'the steps resume');
+      assert.ok(!a.dialogue, 'a resumed step does not replay its story line (' + a.dialogue + ')');
+      assert.equal(a.wisps, 3, 'MQ1 s5: the three wisps the step still needs drift in again');
+      assert.equal(a.wave, 3, 'MQ4 s3: the three Choir the step still needs come back');
+      assert.ok(a.siphon > 0, 'MQ2 s7: the Siphon to destroy stands');
+      for (const id of ['mq1', 'mq2', 'mq4']) assert.ok(a.markers.includes(id), 'a marker for ' + id + ' (' + a.markers.join(',') + ')');
+      assert.deepEqual(a.after, ['s6', 's4'], 'the rebuilt enemies finish their steps');
+      assert.ok(b.saved && b.loaded, 'saved and loaded with three boss steps open');
+      assert.ok(!b.dialogue, 'no story line on load (' + b.dialogue + ')');
+      assert.ok(b.atLoad.length <= 1, 'at most one boss spawned at a time (' + b.atLoad.join(',') + ')');
+      assert.equal(b.bossBanners, 0, 'a resumed boss skips its intro');
+      assert.deepEqual(b.visits.slice(0, 3), ['bramblehorn', 'gorrumaw', 'bramblehorn'], 'each pending boss returns at its arena: ' + b.visits.join(' | '));
+      assert.equal(b.mq3, 's5', 'Bramblehorn defeated after the switches');
+      assert.equal(b.visits[3], 'gorrumaw', 'Gorrumaw is still pending after Bramblehorn falls');
+      assert.equal(b.visits[4], 'vorrhal', 'the finale boss is still pending');
+      assert.equal(b.mq5, 's3');
+      assert.equal(b.mq7, 's3');
+      await shot('rpg-resume-vorrhal');
+    },
+  },
+  {
+    // S2 (the MQ4 pillar stands again), S7 (death ends a race), S8 (bag-full items become Shells), and a fallen
+    // Siphon's guards are dispelled.
+    name: 'rpg-fixes',
+    width: W, height: H,
+    async run({ game, assert }) {
+      const r = await game((g) => {
+        const Q = g.ctx.quests;
+        const out = {};
+        // S8: Sunfruit at the cap; a quest gives three more.
+        g.give('sunfruit', 9);
+        const cap = g.ctx.rpg.count('sunfruit');
+        const shells0 = g.ctx.rpg.shells;
+        const t0 = g.events(['ui:toast']).length;
+        Q.runActions([{ op: 'giveItem', item: 'sunfruit', count: 3 }]);
+        out.s8 = { cap, after: g.ctx.rpg.count('sunfruit'), shells: g.ctx.rpg.shells - shells0,
+          toasts: g.events(['ui:toast']).slice(t0).map((x) => x.payload.key) };
+        // S2: the saltglass pillar is broken before the Dawn Lance step.
+        const q = g.ctx.store.state.quests;
+        delete q.active.mq2;
+        if (q.done.indexOf('mq2') < 0) q.done.push('mq2');
+        Q.start('mq4');
+        g.step(2);
+        const pil0 = (Q.objects().find((o) => o.id === 'saltglass_pillar') || {}).entId || 0;
+        if (pil0) g.kill(pil0);
+        g.step(3);
+        const mid = (Q.objects().find((o) => o.id === 'saltglass_pillar') || {}).entId || 0;
+        g.step(120);
+        const pil1 = (Q.objects().find((o) => o.id === 'saltglass_pillar') || {}).entId || 0;
+        out.s2 = { pil0, mid, pil1, flag: !!q.flags['obj.saltglass_pillar.destroyed'] };
+        // Siphon guards: wake siphon_1, then silence it.
+        const sp = Q.objects().find((o) => o.id === 'siphon_1');
+        g.ai(true);
+        g.god(true);
+        g.goto('siphon_1');
+        g.step(20);
+        const guards = () => g.ctx.ents.list('enemy').filter((e) => e.alive && e.questTag === 'siphon_1_guard').length;
+        const woke = guards();
+        if (sp && sp.entId) g.kill(sp.entId);
+        g.step(3);
+        out.guards = { woke, after: guards() };
+        // S7: a race, then death.
+        g.god(false);
+        const course = g.ctx.defs.all('course')[0];
+        g.teleport(course.start.x + 2, course.start.z + 2);
+        g.step(2);
+        const started = Q.raceStart(course.id);
+        g.step(10);
+        const e0 = g.events(['race:end']).length;
+        g.kill(g.ctx.player.id);
+        g.step(3);
+        const ends = g.events(['race:end']).slice(e0);
+        out.s7 = { started, ended: ends.length, finished: ends.length ? ends[0].payload.finished : null, again: Q.raceStart(course.id) };
+        Q.raceAbort();
+        return out;
+      });
+      assert.equal(r.s8.cap, r.s8.after, 'the bag stays at the cap');
+      assert.ok(r.s8.shells > 0, 'the overflow is sold for Shells (+' + r.s8.shells + ')');
+      assert.ok(r.s8.toasts.includes('rpg.toast.bagFull'), 'the toast says what happened: ' + r.s8.toasts.join(','));
+      assert.ok(!r.s8.toasts.includes('rpg.toast.item'), 'no toast claims items that were not added');
+      assert.ok(r.s2.pil0 > 0, 'the pillar is built with MQ4');
+      assert.equal(r.s2.mid, 0, 'it shatters');
+      assert.ok(r.s2.pil1 > 0 && r.s2.pil1 !== r.s2.pil0, 'and stands again');
+      assert.ok(!r.s2.flag, 'never flagged destroyed');
+      assert.ok(r.guards.woke > 0, 'the Siphon woke its guards (' + r.guards.woke + ')');
+      assert.equal(r.guards.after, 0, 'its fall dispels them');
+      assert.ok(r.s7.started, 'race started');
+      assert.equal(r.s7.ended, 1, 'death ends the race');
+      assert.equal(r.s7.finished, false);
+      assert.ok(r.s7.again, 'the race can be started again');
+    },
+  },
 ];

@@ -1187,13 +1187,18 @@ function installStick() {
     return t;
   };
   /** Walk at the nearest enemy and tap Attack, nothing else. */
-  S.brawl = (match, maxTicks, every = 12) => {
+  S.brawl = (match, maxTicks, every = 12, healBelow = 0) => {
     const p = ctx.player;
-    const out = { ticks: 0, deathAt: -1, hpMin: p.stats.hp, hpMax: p.stats.hpMax, taps: 0, killed: 0 };
+    const out = { ticks: 0, deathAt: -1, hpMin: p.stats.hp, hpMax: p.stats.hpMax, taps: 0, killed: 0, heals: 0 };
     for (; out.ticks < maxTicks; out.ticks += 6) {
       if (!p.alive || p.combat.state === 'dead') {
         out.deathAt = out.ticks;
         break;
+      }
+      // The sandbox player drinks a healing item when low (the tap-only bot never guards or dodges).
+      if (healBelow > 0 && p.stats.hp < p.stats.hpMax * healBelow) {
+        g.heal();
+        out.heals++;
       }
       const e = S.nearest(match);
       if (!e) break;
@@ -1255,7 +1260,7 @@ const sandbox = {
       }
       src += ' after ' + waited * 30 + ' ticks';
       const n0 = g.ctx.ents.list('enemy').filter((e) => e.alive && near(e)).length;
-      const r = S.brawl(near, 60 * 50, 10);
+      const r = S.brawl(near, 60 * 50, 10, 0.3);
       // Finish the stragglers (flyers out of melee reach) with bolts.
       for (let k = 0; k < 60 && S.nearest(near); k++) {
         const e = S.nearest(near);

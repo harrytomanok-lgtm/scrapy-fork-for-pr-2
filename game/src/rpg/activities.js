@@ -24,6 +24,8 @@ const SIPHON_CYCLE_RANGE = 600;
 /** Beyond this distance from a woken Siphon its guards are sent home (m). */
 const SIPHON_GUARD_LEASH = 400;
 const DISCOVERY_EVERY = 30;
+/** An unbreakable quest object stands again this long after it is broken (s). */
+const OBJECT_RESPAWN = 1.2;
 
 /**
  * @param {any} ctx
@@ -40,6 +42,8 @@ export function createActivities(ctx, host) {
   const pSiphon = { id: '', state: 'closed', regionId: '' };
   const pGate = { courseId: '', index: 0, total: 0 };
   let tickN = 0;
+  /** Unbreakable quest objects waiting to stand again. */
+  let respawns = 0;
 
   const S = () => ctx.store.state;
   const W = () => ctx.store.state.world;
@@ -162,7 +166,7 @@ export function createActivities(ctx, host) {
     host.quests.setInteractable(r.id, false);
     for (const g of got) {
       if (g.kind === 'shells') ctx.bus.emit('ui:toast', { key: 'rpg.toast.shells', args: { n: g.count }, kind: 'good' });
-      else ctx.bus.emit('ui:toast', { key: 'rpg.toast.item', args: { item: ctx.i18n.t('item.' + g.itemId + '.name'), count: g.count }, kind: 'good' });
+      else ctx.rpg.toastGrant(g.itemId, { added: g.count, soldCount: g.soldCount || 0, soldShells: g.soldShells || 0, dropped: g.dropped || 0 });
     }
     ctx.bus.emit('chest:opened', { id: r.id });
   }
@@ -246,16 +250,7 @@ export function createActivities(ctx, host) {
     const e = r.entId ? ctx.ents.get(r.entId) : null;
     // The player left a woken (or silenced) Siphon: its guards go home (they would hold the active-enemy cap from
     // kilometres away and starve the ambient spawner) and wake again on the next approach.
-    if (d.woke && d2 > SIPHON_GUARD_LEASH * SIPHON_GUARD_LEASH) {
-      const tag = r.id + '_guard';
-      const list = ctx.ents.list('enemy');
-      for (let i = list.length - 1; i >= 0; i--) {
-        const g = list[i];
-        if (g.alive && g.questTag === tag && ctx.ai) ctx.ai.despawn(g.id);
-      }
-      d.woke = false;
-      d.wave2 = false;
-    }
+    if (d.woke && d2 > SIPHON_GUARD_LEASH * SIPHON_GUARD_LEASH) sendGuardsHome(r);
     if (!e || !e.alive) return;
     if (!d.woke && d2 < SIPHON_WAKE * SIPHON_WAKE) {
       d.woke = true;
@@ -273,6 +268,20 @@ export function createActivities(ctx, host) {
     d.t += dt;
     const want = siphonOpen(d.t, BALANCE.siphon.cycleSeconds, BALANCE.siphon.openSeconds) ? 'open' : 'closed';
     if (want !== r.state) setSiphon(r, e, want);
+  }
+
+  /** Despawn a Siphon's living guards (quest tag `<siphon>_guard`) and let it wake again later. @param {any} r */
+  function sendGuardsHome(r) {
+    const tag = r.id + '_guard';
+    const list = ctx.ents.list('enemy');
+    for (let i = list.length - 1; i >= 0; i--) {
+      const g = list[i];
+      if (!g.alive || g.questTag !== tag || !ctx.ai) continue;
+      if (ctx.vfx && r.state === 'destroyed') ctx.vfx.shockwave(g.pos.x, g.pos.y + 1, g.pos.z, { radius: 3, color: PALETTE.ora, seconds: 0.4 });
+      ctx.ai.despawn(g.id);
+    }
+    r.data.woke = false;
+    r.data.wave2 = false;
   }
 
   function setSiphon(r, e, state) {
@@ -301,6 +310,8 @@ export function createActivities(ctx, host) {
     ctx.rpg.grantXp(F.bonusXp('siphon', ctx.rpg.level), 'siphon');
     if (ctx.vfx) ctx.vfx.shockwave(r.x, r.y + 2, r.z, { radius: 60, color: PALETTE.ora, seconds: 1.2, ground: true });
     if (ctx.ai && ctx.ai.clear) ctx.ai.clear(r.x, r.z, 120);
+    // The Siphon's guards are bound to it: its fall (the Ora shockwave above) dispels them wherever they are.
+    sendGuardsHome(r);
     ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.siphon', args: { n: w.siphons.length } });
   }
 
@@ -311,6 +322,9 @@ export function createActivities(ctx, host) {
     const q = S().quests;
     for (const def of ctx.defs.all('object')) {
       if (!def.quest || def.script || def.id.startsWith('siphon_')) continue;
+      // An object no destroy step asks for (the MQ4 saltglass pillar) is never gone for good: a stale flag from an
+      // older journey is dropped and the object is rebuilt.
+      if (flags()['obj.' + def.id + '.destroyed'] && !breakable(def.id)) delete flags()['obj.' + def.id + '.destroyed'];
       const want = !!q.active[def.quest] && !flags()['obj.' + def.id + '.destroyed'];
       const r = byId.get(def.id);
       if (want && !r) buildQuestObject(def);
@@ -320,6 +334,23 @@ export function createActivities(ctx, host) {
       if (r.kind !== 'questObject' || r.entId) continue;
       host.quests.setInteractable(r.id, !flags()['obj.' + r.id + '.used'] && stepWants(r.id));
     }
+  }
+
+  /** @type {Set<string>|null} objects some destroy step asks for */
+  let breakables = null;
+  /** @param {string} id @returns {boolean} a destroy step of some quest targets this object */
+  function breakable(id) {
+    if (!breakables) {
+      breakables = new Set();
+      for (const qd of ctx.defs.all('quest')) {
+        for (const s of qd.steps || []) {
+          if (s.type !== 'destroy') continue;
+          if (s.object) breakables.add(s.object);
+          if (Array.isArray(s.objects)) for (const o of s.objects) breakables.add(o);
+        }
+      }
+    }
+    return breakables.has(id);
   }
 
   /** @param {string} id @returns {boolean} the current step of an active quest lists this object for interact */
@@ -366,6 +397,20 @@ export function createActivities(ctx, host) {
     const e = r.entId ? ctx.ents.get(r.entId) : null;
     if (e) ctx.ents.destroy(e.id);
     r.entId = 0;
+  }
+
+  /** Unbreakable quest objects stand again a moment after they are broken. @param {number} dt */
+  function stepRespawns(dt) {
+    for (let i = 0; i < recs.length; i++) {
+      const r = recs[i];
+      if (r.kind !== 'questObject' || r.entId || !(r.data.respawnT > 0)) continue;
+      r.data.respawnT -= dt;
+      if (r.data.respawnT > 0) continue;
+      r.data.respawnT = 0;
+      respawns = Math.max(0, respawns - 1);
+      spawnObjectEntity(r, r.data.def, Math.max(1, ctx.rpg.level));
+      if (r.prop) r.prop.setGlow(0.5);
+    }
   }
 
   // ------------------------------------------------------------------ race
@@ -458,6 +503,7 @@ export function createActivities(ctx, host) {
       if (race.active) endRace(false);
       for (const r of recs.slice()) removeRec(r);
       recs.length = 0;
+      respawns = 0;
       byId.clear();
       discover.length = 0;
     },
@@ -467,7 +513,15 @@ export function createActivities(ctx, host) {
       tickN++;
       for (let i = 0; i < recs.length; i++) if (recs[i].kind === 'siphon' && (recs[i].entId || recs[i].data.woke)) stepSiphon(recs[i], dt, p);
       if (race.active) stepRace(dt, p);
+      if (respawns > 0) stepRespawns(dt);
       if (tickN % DISCOVERY_EVERY === 0) stepDiscovery(p);
+    },
+
+    /** player:died: a running race ends (the player wakes at a Ringstone; the start post is free again). */
+    playerDied() {
+      if (!race.active) return;
+      endRace(false);
+      ctx.bus.emit('ui:toast', { key: 'rpg.toast.raceFailed', args: null, kind: 'warn' });
     },
 
     /** @param {any} p actor:died @param {boolean} side */
@@ -477,7 +531,16 @@ export function createActivities(ctx, host) {
         for (const x of recs) if (x.entId === p.entId) r = x;
         if (!r) return;
         if (r.kind === 'siphon') silence(r);
-        else {
+        else if (r.kind === 'questObject' && !breakable(r.id)) {
+          // Unbreakable (a later step still needs it, like the pillar the Dawn Lance focuses through): it shatters
+          // for a moment and stands again at full strength.
+          ctx.ents.destroy(r.entId);
+          r.entId = 0;
+          r.data.respawnT = OBJECT_RESPAWN;
+          respawns++;
+          if (r.prop) r.prop.setGlow(0);
+          if (ctx.vfx) ctx.vfx.shockwave(r.x, r.y + 1.5, r.z, { radius: 6, color: PALETTE.ora, seconds: 0.5 });
+        } else {
           flags()['obj.' + r.id + '.destroyed'] = true;
           r.state = 'broken';
           if (r.prop) {
