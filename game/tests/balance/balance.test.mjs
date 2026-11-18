@@ -42,12 +42,14 @@ test('player level follows the region level along the main path, and every boss 
   inBand(mq7.level, [25, 28], 'level when MQ7 starts');
 });
 
+// Lower bound 2 s: three level-2 Ember Wisps fall in 2.7 s in the browser check since the first string hit rises to
+// flyers (tools/scenarios/balance.mjs, balance-meadows), so a small wisp group may clear in under 3 s.
 test('group fights: quick, never a death sentence', () => {
   for (const d of DIFFS) {
     const maxLost = d === 'master' ? 1.2 : 0.9;
     for (const r of RUNS[d].rows) {
       for (const f of r.fights) {
-        inBand(f.ttkGroup, [3, 25], `${d} ${r.stage} ${f.id} seconds to clear`);
+        inBand(f.ttkGroup, [2, 25], `${d} ${r.stage} ${f.id} seconds to clear`);
         assert.ok(f.hpLost <= maxLost * r.hp, `${d} ${r.stage} ${f.id}: ${(100 * f.hpLost / r.hp).toFixed(0)}% HP lost`);
         if (d !== 'master') assert.ok(f.ttd > f.ttkGroup, `${d} ${r.stage} ${f.id}: dies in ${f.ttd.toFixed(1)} s, clears in ${f.ttkGroup.toFixed(1)} s`);
       }
