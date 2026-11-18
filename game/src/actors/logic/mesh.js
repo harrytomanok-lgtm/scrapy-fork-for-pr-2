@@ -282,6 +282,7 @@ export function mergeSpec(spec, formKey = null) {
     const by = bi >= 0 ? sk.world[bi * 3 + 1] : 0;
     const bz = bi >= 0 ? sk.world[bi * 3 + 2] : 0;
     const base = P.length / 3;
+    const up = typeof part.normalUp === 'number' ? Math.max(0, Math.min(1, part.normalUp)) : 0;
     for (let v = 0; v < g.p.length; v += 3) {
       let x = g.p[v] * g.sx;
       const y = g.p[v + 1] * g.sy;
@@ -301,7 +302,19 @@ export function mergeSpec(spec, formKey = null) {
         (by + ((pos[1] || 0) + M[3] * x + M[4] * y + M[5] * z) * scale),
         (bz + ((pos[2] || 0) + M[6] * x + M[7] * y + M[8] * z) * scale),
       );
-      N.push(M[0] * nx + M[1] * ny + M[2] * nz, M[3] * nx + M[4] * ny + M[5] * nz, M[6] * nx + M[7] * ny + M[8] * nz);
+      let wx = M[0] * nx + M[1] * ny + M[2] * nz;
+      let wy = M[3] * nx + M[4] * ny + M[5] * nz;
+      let wz = M[6] * nx + M[7] * ny + M[8] * nz;
+      if (up > 0) {
+        // toon face trick: bend the normals toward up (and a little forward), so a face turned to the camera lands
+        // in the lit band like the top of the arms instead of a dark shadow-band patch
+        wx *= 1 - up;
+        wy = wy * (1 - up) + up * 0.85;
+        wz = wz * (1 - up) + up * 0.45;
+        const wl = Math.hypot(wx, wy, wz) || 1;
+        wx /= wl; wy /= wl; wz /= wl;
+      }
+      N.push(wx, wy, wz);
       S.push(si);
       B.push(Math.max(0, bi), 0, 0, 0);
     }

@@ -4,6 +4,9 @@
  * fill. Density and colour come from the region (foliage tokens, a few flower clumps in the accent colours);
  * paths, scorch, steep slopes, water and snow stay bare. One draw call, about 6 triangles per clump, refilled when
  * the player crosses a 3 m cell and hidden in flight. Visual only: no colliders, no simulation state.
+ * Radius, density and instance cap come from the tier caps (render.caps.tuftRadius, tuftDensity, tuftInstances; low
+ * smaller and sparser than high). The instance buffers are sized for the tier (resized on a tier change only) and a
+ * refill uploads only the instances it wrote.
  * @module world/tufts
  */
 
@@ -13,10 +16,29 @@ import { hash2 } from '../core/rng.js';
 import { REGIONS, FLAG, R_FROSTSPINE } from './gen/layout.js';
 
 const CELL = 1.25;
-const RADIUS = 30;
-const SPAN = Math.ceil(RADIUS / CELL);
-const MAX = 1700;
+/** Hard limits whatever the caps say. */
+const MAX_RADIUS = 40;
+const MAX = 2400;
 const STEP = 3;
+/** Fallbacks when the caps carry no tuft rows (the high row of render/logic/tiers). */
+const DEF_RADIUS = 30;
+const DEF_DENSITY = 1;
+const DEF_INSTANCES = 1700;
+
+/**
+ * Tuft settings from the tier caps, clamped. Pure.
+ * @param {any} caps @param {{ radius:number, density:number, instances:number }} out
+ * @returns {{ radius:number, density:number, instances:number }}
+ */
+export function tuftSettings(caps, out) {
+  const r = caps && typeof caps.tuftRadius === 'number' ? caps.tuftRadius : DEF_RADIUS;
+  const d = caps && typeof caps.tuftDensity === 'number' ? caps.tuftDensity : DEF_DENSITY;
+  const n = caps && typeof caps.tuftInstances === 'number' ? caps.tuftInstances : DEF_INSTANCES;
+  out.radius = Math.max(0, Math.min(MAX_RADIUS, r));
+  out.density = Math.max(0, Math.min(1, d));
+  out.instances = Math.max(0, Math.min(MAX, Math.floor(n)));
+  return out;
+}
 /** Clumps per cell by region index (meadows, coast, thornwood, rustdune, frostspine, stormwell, spire). */
 const DENSITY = [0.8, 0.22, 0.62, 0.16, 0.3, 0.45, 0.32];
 
@@ -62,8 +84,10 @@ export function createTufts(ctx, grid, seed) {
   const flowerB = new Color(PALETTE.flora.brambleFlower);
   const flowerC = new Color(PALETTE.flora.redLeaf);
   const mat = ctx.render.materials.toon({ vertexColors: true, instanced: true, wind: true, doubleSide: true });
-  const mesh = new InstancedMesh(clumpGeometry(), mat, MAX);
-  mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
+  const set = tuftSettings(ctx.render.caps, { radius: 0, density: 0, instances: 0 });
+  const cap0 = Math.max(1, set.instances);
+  const mesh = new InstancedMesh(clumpGeometry(), mat, cap0);
+  mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(cap0 * 3), 3);
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.name = 'world.tufts';
@@ -78,14 +102,26 @@ export function createTufts(ctx, grid, seed) {
 
   /** @param {number} px @param {number} pz */
   function refill(px, pz) {
+    tuftSettings(ctx.render.caps, set);
+    const cap = Math.max(1, set.instances);
+    if (mesh.instanceMatrix.count !== cap) {
+      // tier change (not a frame path): new buffers; dispose releases the old GPU buffers (WebGLObjects)
+      mesh.dispose();
+      mesh.instanceMatrix = new InstancedBufferAttribute(new Float32Array(cap * 16), 16);
+      mesh.instanceColor = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+    }
+    const max = set.instances;
+    const dmul = set.density;
     const e = mesh.instanceMatrix.array;
     const ca = mesh.instanceColor.array;
     const ci = Math.floor(px / CELL);
     const cj = Math.floor(pz / CELL);
-    const r2 = (RADIUS / CELL) * (RADIUS / CELL);
+    const rc = set.radius / CELL;
+    const r2 = rc * rc;
+    const span = Math.ceil(rc);
     let n = 0;
-    for (let dj = -SPAN; dj <= SPAN && n < MAX; dj++) {
-      for (let di = -SPAN; di <= SPAN && n < MAX; di++) {
+    for (let dj = -span; dj <= span && n < max; dj++) {
+      for (let di = -span; di <= span && n < max; di++) {
         if (di * di + dj * dj > r2) continue;
         const i = ci + di;
         const j = cj + dj;
@@ -96,7 +132,7 @@ export function createTufts(ctx, grid, seed) {
         const y = grid.heightAt(x, z);
         if (y < 1.2) continue;
         const ri = grid.regionIndexAt(x, z);
-        let dens = DENSITY[ri] || 0.3;
+        let dens = (DENSITY[ri] || 0.3) * dmul;
         const fl = grid.flagsAt(x, z);
         if ((fl & (FLAG.PATH | FLAG.SCORCH | FLAG.WATER)) !== 0) continue;
         if ((fl & FLAG.SETTLEMENT) !== 0) dens *= 0.45;
@@ -123,7 +159,12 @@ export function createTufts(ctx, grid, seed) {
       }
     }
     mesh.count = n;
+    if (n === 0) return;
+    mesh.instanceMatrix.clearUpdateRanges();
+    mesh.instanceMatrix.addUpdateRange(0, n * 16);
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor.clearUpdateRanges();
+    mesh.instanceColor.addUpdateRange(0, n * 3);
     mesh.instanceColor.needsUpdate = true;
   }
 
@@ -134,7 +175,8 @@ export function createTufts(ctx, grid, seed) {
      */
     update(px, py, pz, camY, force) {
       const alt = Math.min(py, camY) - grid.heightAt(px, pz);
-      mesh.visible = alt < 28;
+      tuftSettings(ctx.render.caps, set);
+      mesh.visible = alt < 28 && set.instances > 0 && set.radius > 0;
       if (!mesh.visible) return;
       const i = Math.floor(px / STEP);
       const j = Math.floor(pz / STEP);
@@ -144,7 +186,7 @@ export function createTufts(ctx, grid, seed) {
       dirty = false;
       refill(px, pz);
     },
-    /** The ground changed (crater): rebuild on the next update. */
+    /** The ground or the tier caps changed (crater, quality change): rebuild on the next update. */
     invalidate() {
       dirty = true;
     },
@@ -156,6 +198,7 @@ export function createTufts(ctx, grid, seed) {
       if (mesh.parent) mesh.parent.remove(mesh);
       mesh.geometry.dispose();
       mat.dispose();
+      mesh.dispose();
     },
   };
 }

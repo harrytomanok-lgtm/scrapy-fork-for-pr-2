@@ -566,7 +566,8 @@ export function createRender(ctx) {
       lastCam.copy(cp);
       globals.uCamPos.value.copy(cp);
       if (dynamic && dt > 0) {
-        if (dyn.update(dt, cinematic)) {
+        const ls = c.loop && c.loop.stats;
+        if (dyn.update(dt, cinematic, ls ? ls.costMs : 0, ls ? ls.cap : 0)) {
           render.scale = dyn.scale;
           resize();
         }

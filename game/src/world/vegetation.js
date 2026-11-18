@@ -3,6 +3,8 @@
  * chunky faceted geometry with baked vertex colours, wind sway on the plants, refilled nearest first from the
  * seeded per-cell scatter when the focus crosses a 128 m cell, with the tier radii and instance caps. Prop
  * colliders around the player enter the collider grid; destroyed props stay hidden until `game:loaded`.
+ * Instance buffers are sized for the active tier (low: 1200 trees, 600 rocks per kind; resized only on a tier change)
+ * and a refill uploads only the instances it wrote (update ranges), so a cell crossing never re-uploads whole buffers.
  * @module world/vegetation
  */
 
@@ -226,6 +228,18 @@ function buildGeometries() {
 }
 
 /**
+ * Instance capacity of one prop kind for the tier caps: one kind may hold every drawn tree (or rock).
+ * @param {number} k kind @param {{ treeInstances?:number, rockInstances?:number }|null|undefined} caps
+ * @returns {number}
+ */
+export function capacityFor(k, caps) {
+  const tree = IS_TREE[k] === 1;
+  const max = tree ? MAX_TREES : MAX_ROCKS;
+  const want = caps ? (tree ? caps.treeInstances : caps.rockInstances) : max;
+  return typeof want === 'number' && want > 0 ? Math.min(max, want) : max;
+}
+
+/**
  * @param {any} ctx
  * @param {ReturnType<import('./gen/grid.js').createGrid>} grid
  * @param {ReturnType<import('./gen/colliders.js').createColliders>} colliders
@@ -237,7 +251,7 @@ export function createVegetation(ctx, grid, colliders, seed) {
   /** @type {any[]} */
   const meshes = [];
   for (let k = 0; k < KIND_COUNT; k++) {
-    const cap = IS_TREE[k] ? MAX_TREES : MAX_ROCKS;
+    const cap = capacityFor(k, ctx.render.caps);
     const wind = IS_TREE[k] === 1 && k !== KIND.CRYSTAL;
     const opts = { vertexColors: true, instanced: true, wind, doubleSide: k === KIND.PALM };
     if (k === KIND.CRYSTAL) Object.assign(opts, { emissive: PALETTE.biome.spire.cliff, emissiveIntensity: 0.3, glossy: true });
@@ -249,6 +263,18 @@ export function createVegetation(ctx, grid, colliders, seed) {
     if (IS_TREE[k] === 1 && m.material.uniforms.uNearHide) m.material.uniforms.uNearHide.value = TREE_NEAR_HIDE;
     ctx.render.layers.props.add(m);
     meshes.push(m);
+  }
+
+  /**
+   * Re-size a kind's instance buffers for the active tier (tier change only; not a frame path). The old GPU buffers
+   * are released through the mesh's dispose event (WebGLObjects removes its instance attributes).
+   * @param {any} m @param {number} cap
+   */
+  function resize(m, cap) {
+    m.dispose();
+    m.instanceMatrix = new InstancedBufferAttribute(new Float32Array(cap * 16), 16);
+    m.instanceColor = new InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+    m.count = 0;
   }
 
   // Cell offsets in distance order (nearest first).
@@ -298,6 +324,10 @@ export function createVegetation(ctx, grid, colliders, seed) {
     const rR = caps.rockRadius;
     const tCap = Math.min(MAX_TREES, caps.treeInstances);
     const rCap = Math.min(MAX_ROCKS, caps.rockInstances);
+    for (let k = 0; k < KIND_COUNT; k++) {
+      const want = capacityFor(k, caps);
+      if (meshes[k].instanceMatrix.count !== want) resize(meshes[k], want);
+    }
     const maxR = tR > rR ? tR : rR;
     const ci0 = Math.floor((fx + WORLD_HALF) / SCATTER_CELL);
     const cj0 = Math.floor((fz + WORLD_HALF) / SCATTER_CELL);
@@ -339,10 +369,17 @@ export function createVegetation(ctx, grid, colliders, seed) {
     }
     for (let k = 0; k < KIND_COUNT; k++) {
       const m = meshes[k];
-      m.count = counts[k];
+      const n = counts[k];
+      m.count = n;
+      m.visible = n > 0;
+      if (n === 0) continue;
+      // upload only the instances written this refill (the tail past `count` is never drawn)
+      m.instanceMatrix.clearUpdateRanges();
+      m.instanceMatrix.addUpdateRange(0, n * 16);
       m.instanceMatrix.needsUpdate = true;
+      m.instanceColor.clearUpdateRanges();
+      m.instanceColor.addUpdateRange(0, n * 3);
       m.instanceColor.needsUpdate = true;
-      m.visible = counts[k] > 0;
     }
     treesDrawn = trees;
     rocksDrawn = rocks;

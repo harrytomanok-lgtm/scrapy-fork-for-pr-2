@@ -30,9 +30,16 @@ export const CAM = Object.freeze({
   lookAhead: 2,
   portraitRise: 0.6,
   portraitPullBack: 1.5,
-  /** Player height on screen measured from the bottom (0..1). */
+  /** Player body centre on screen measured from the bottom (0..1). */
   frameLandscape: 0.55,
-  framePortrait: 0.62,
+  /**
+   * Portrait: the body centre just under the middle, so the feet sit about 40% up from the bottom, just above the
+   * control deck, with the horizon near the upper third (with portraitPitch). Was 0.62, which pulled the camera down
+   * to about 0.5 m over the ground and filled the lower half with near ground under the touch controls.
+   */
+  framePortrait: 0.48,
+  /** Portrait: the rest pitch of the ground modes (explore, combat, lock) is this much steeper (radians). */
+  portraitPitch: -3 * D2R,
   flightRoll: 6 * D2R,
   boostLag: 0.12,
   lockMaxDist: 14,
@@ -47,6 +54,48 @@ export const CAM = Object.freeze({
   shakeRollDeg: 2.5,
   threatOffscreen: 1.0,
 });
+
+/**
+ * Rest pitch of a mode in radians: the mode table's pitch, steepened in portrait for the ground modes.
+ * @param {string} mode @param {boolean} portrait
+ * @returns {number}
+ */
+export function restPitch(mode, portrait) {
+  const row = CAM_MODES[mode] || CAM_MODES.explore;
+  const ground = mode === 'explore' || mode === 'combat' || mode === 'lock';
+  return row.pitch * D2R + (portrait && ground ? CAM.portraitPitch : 0);
+}
+
+/**
+ * The at-rest follow framing of the rig in cam.js (no collision, no look-ahead), for tests and tuning: the camera
+ * height above the feet, its horizontal distance, and where the feet, the head and the horizon land on screen
+ * (fractions of the height measured from the bottom).
+ * @param {string} mode @param {boolean} portrait @param {number} bodyH body height (m)
+ * @returns {{ pitch:number, camHeight:number, camBack:number, feet:number, head:number, horizon:number }}
+ */
+export function restFraming(mode, portrait, bodyH) {
+  const row = CAM_MODES[mode] || CAM_MODES.explore;
+  const pitch = restPitch(mode, portrait);
+  const dist = row.dist + (portrait ? CAM.portraitPullBack : 0);
+  const pivotH = row.height + (portrait ? CAM.portraitRise : 0);
+  const fov = portrait ? row.fovP : row.fovL;
+  const frame = portrait ? CAM.framePortrait : CAM.frameLandscape;
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  const shift = frameShift(frame, dist, fov) - (pivotH - bodyH * 0.5) * cp;
+  // camera relative to the feet, in the vertical plane of the view (forward horizontal, up)
+  const camBack = dist * cp + sp * shift;
+  const camHeight = pivotH - sp * dist + cp * shift;
+  const t = Math.tan((fov * D2R) / 2);
+  /** @param {number} y height of a point above the feet, straight ahead of the camera by camBack */
+  const at = (y) => {
+    const dy = y - camHeight;
+    const fwd = camBack * cp + dy * sp;
+    const upc = -camBack * sp + dy * cp;
+    return 0.5 + 0.5 * (upc / fwd) / t;
+  };
+  return { pitch, camHeight, camBack, feet: at(0), head: at(bodyH), horizon: 0.5 + 0.5 * Math.tan(-pitch) / t };
+}
 
 /**
  * Critically damped spring toward `target` (exact for constant targets, frame-rate independent).

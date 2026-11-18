@@ -89,6 +89,58 @@ test('dynamic resolution (high): 0.5 s steps of 0.05 and the drop rule', () => {
   assert.equal(dr.dropRequested, true);
 });
 
+/** Feed `seconds` of presented frames at `fps`, each costing `costMs`, under the frame cap `cap`; returns the changes. */
+function feedCost(dr, fps, costMs, cap, seconds, held = false) {
+  let changes = 0;
+  const dt = 1 / fps;
+  for (let t = 0; t < seconds - 1e-9; t += dt) if (dr.update(dt, held, costMs, cap)) changes++;
+  return changes;
+}
+
+test('dynamic resolution (high): decides on the frame cost, so it can raise under the 60 fps cap', () => {
+  const dr = createDynRes(TIERS.high, true);
+  // presented at the cap but each frame costs 25 ms: the cost says 40 fps, lower
+  feedCost(dr, 60, 25, 60, 1.1);
+  assert.equal(dr.scale, 0.9);
+  // cheap frames (8 ms = 125 fps of headroom) presented at the 60 cap: the scale climbs back to 1
+  assert.equal(feedCost(dr, 60, 8, 60, 1.1), 2);
+  assert.equal(dr.scale, 1);
+  // in the hysteresis band (cost 16 ms = 62.5 fps) nothing moves
+  dr.reset();
+  feedCost(dr, 60, 25, 60, 0.55);
+  assert.equal(dr.scale, 0.95);
+  assert.equal(feedCost(dr, 60, 16, 60, 5), 0);
+  // GPU-bound: the CPU cost is small but only 45 frames are presented: lower, never raise
+  assert.equal(feedCost(dr, 45, 4, 60, 0.55), 1);
+  assert.equal(dr.scale, 0.9);
+});
+
+test('dynamic resolution (high): a 30 fps capped menu holds, never lowers and never drops the tier', () => {
+  const dr = createDynRes(TIERS.high, true);
+  feedCost(dr, 60, 25, 60, 2.2);
+  assert.equal(dr.scale, 0.8, 'at the minimum');
+  // the menu opens: 30 presented frames per second under a cap of 30, slow cost or not
+  assert.equal(feedCost(dr, 30, 40, 30, 20), 0);
+  assert.equal(dr.scale, 0.8);
+  assert.equal(dr.dropRequested, false, 'a capped menu never drops the tier');
+  // uncapped again and cheap: the scale climbs
+  feedCost(dr, 60, 6, 60, 2.2);
+  assert.equal(dr.scale, 1);
+  assert.equal(dr.dropRequested, false);
+});
+
+test('dynamic resolution (low): cost decisions, and the 30 fps paused cap is not below the target', () => {
+  const dr = createDynRes(TIERS.low, false);
+  // 30 presented, cost 45 ms (22 fps worth): lower one step per 3 s
+  assert.equal(feedCost(dr, 30, 45, 60, 3.05), 1);
+  assert.equal(dr.scale, 0.9);
+  // the paused cap (30) equals the low target: no hold, cheap frames raise it
+  assert.equal(feedCost(dr, 30, 10, 30, 3.05), 1);
+  assert.equal(dr.scale, 1);
+  // cost 30 ms (33 fps) is inside the band
+  assert.equal(feedCost(dr, 30, 30, 60, 9.1), 0);
+});
+
 /** Fill one particle. */
 function emit(P, life, mat = 0) {
   const i = P.alloc();
