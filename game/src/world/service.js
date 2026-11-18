@@ -549,6 +549,7 @@ export function createWorld(ctx) {
     },
     invalidateProps() {
       if (veg) veg.invalidate();
+      if (tufts) tufts.invalidate();
     },
   };
 }
