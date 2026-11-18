@@ -4,7 +4,8 @@
  * Traps: `window` error and unhandledrejection, and `console.error`, all recorded through `log` (so they appear
  * in `__GAME__.errors`) and reported as `error { message, fatal:false }` once a context exists.
  * WebGL context loss pauses the sim (pause reason 'context'), shows a 'restoring' toast and `render.restore()` runs
- * on restore; when no restore comes within CONTEXT_RESTORE_MS the fatal screen replaces the frozen canvas.
+ * on restore; when no restore comes within CONTEXT_RESTORE_MS of visible time the fatal screen replaces the frozen
+ * canvas (the timer never runs while the page is hidden). The running journey is saved before the fatal screen.
  * Fatal errors: the ui package's `fatal` screen once it is installed; before that, or when `ui.open` throws,
  * the foundation's own fatal layer in `dom.layer('fatal')`.
  * @module core/errors
@@ -47,8 +48,8 @@ export function errorMessage(err) {
 
 /**
  * Install the error traps.
- * @param {{ log:import('./log.js').Log, dom:import('./dom.js').Dom|null, lang?:'he'|'en', win?:any, restoreMs?:number }} opts
- *   restoreMs: overrides CONTEXT_RESTORE_MS (tests)
+ * @param {{ log:import('./log.js').Log, dom:import('./dom.js').Dom|null, lang?:'he'|'en', win?:any, doc?:any, restoreMs?:number }} opts
+ *   restoreMs: overrides CONTEXT_RESTORE_MS (tests); doc: replaces `document` for the visibility checks (tests)
  * @returns {ErrorService}
  */
 export function createErrors(opts) {
@@ -158,6 +159,15 @@ export function createErrors(opts) {
       const message = errorMessage(err);
       log.error('fatal', message);
       report(message, true);
+      // The fatal screen's only way out is a reload: keep the running journey first (save.load puts the
+      // player back at the respawn Ringstone).
+      if (ctx && ctx.session && ctx.session.running && ctx.save && ctx.player && !service.fatalShown) {
+        try {
+          ctx.save.write('fatal');
+        } catch (e) {
+          log.warn('fatal', 'save before the fatal screen failed', errorMessage(e));
+        }
+      }
       if (ctx) {
         try {
           if (ctx.loop) ctx.loop.stop();
@@ -184,18 +194,39 @@ export function createErrors(opts) {
       let giveUp = null;
       /** @type {any} */
       let notice = null;
+      let lost = false;
       const restoreMs = typeof opts.restoreMs === 'number' ? opts.restoreMs : CONTEXT_RESTORE_MS;
-      const clearTimers = () => {
+      const doc = opts.doc !== undefined ? opts.doc : typeof document !== 'undefined' ? document : null;
+      const hidden = () => !!(doc && doc.hidden);
+      const clearGiveUp = () => {
         if (giveUp !== null) clearTimeout(giveUp);
-        if (notice !== null) clearTimeout(notice);
         giveUp = null;
+      };
+      const clearTimers = () => {
+        clearGiveUp();
+        if (notice !== null) clearTimeout(notice);
         notice = null;
+      };
+      // Android drops the GPU context of a background tab and restores it only once the page is visible again:
+      // the give-up timer runs only while the page is visible, and starts afresh each time it becomes visible.
+      const armGiveUp = () => {
+        if (giveUp !== null || !lost || hidden() || service.fatalShown) return;
+        giveUp = setTimeout(() => {
+          giveUp = null;
+          if (!lost || hidden() || service.fatalShown) return;
+          service.fatal(t('core.fatal.contextGone'));
+        }, restoreMs);
+      };
+      const onVisibility = () => {
+        if (hidden()) clearGiveUp();
+        else armGiveUp();
       };
       const onLost = (e) => {
         e.preventDefault();
         log.warn('webgl', 'context lost');
         if (ctx && ctx.time) ctx.time.pause(CONTEXT_PAUSE);
-        if (giveUp !== null) return;
+        if (lost) return;
+        lost = true;
         // Most restores take a few frames: the 'restoring' toast appears only when the loss lasts.
         notice = setTimeout(() => {
           notice = null;
@@ -205,12 +236,10 @@ export function createErrors(opts) {
             // the toast is a courtesy; the restore does not depend on it
           }
         }, CONTEXT_NOTICE_MS);
-        giveUp = setTimeout(() => {
-          giveUp = null;
-          if (!service.fatalShown) service.fatal(t('core.fatal.contextGone'));
-        }, restoreMs);
+        armGiveUp();
       };
       const onRestored = () => {
+        lost = false;
         clearTimers();
         log.warn('webgl', 'context restored');
         try {
@@ -223,10 +252,12 @@ export function createErrors(opts) {
       };
       canvas.addEventListener('webglcontextlost', onLost, false);
       canvas.addEventListener('webglcontextrestored', onRestored, false);
+      if (doc && typeof doc.addEventListener === 'function') doc.addEventListener('visibilitychange', onVisibility);
       undo.push(() => {
         clearTimers();
         canvas.removeEventListener('webglcontextlost', onLost, false);
         canvas.removeEventListener('webglcontextrestored', onRestored, false);
+        if (doc && typeof doc.removeEventListener === 'function') doc.removeEventListener('visibilitychange', onVisibility);
       });
     },
 

@@ -320,21 +320,39 @@ export function createTouch(ctx, shared) {
 
   /* ---------------------------------------------------------------- layout -- */
 
-  let sig = '';
+  // The layout is recomputed only when something it depends on may have changed: a resize, an orientation change,
+  // a visual viewport resize, the left-handed setting, or the controls being shown. The safe-area insets come from
+  // getComputedStyle (a forced style recalculation), so they are cached and re-read only on those events.
+  let dirty = true;
+  let insetsDirty = true;
+  const last = { w: -1, h: -1, l: -1, r: -1, t: -1, b: -1, lh: false };
+  const inset = { l: 0, r: 0, t: 0, b: 0 };
+  /** Mark the layout (and the cached safe-area insets) stale. */
+  function invalidate() {
+    dirty = true;
+    insetsDirty = true;
+  }
   function relayout() {
+    dirty = false;
     // The viewport size, not the layer's: the layer follows #app, which the renderer may resize later this frame.
     const W = window.innerWidth || root.clientWidth;
     const H = window.innerHeight || root.clientHeight;
-    const cs = getComputedStyle(probe);
-    const sl = parseFloat(cs.paddingLeft) || 0;
-    const sr = parseFloat(cs.paddingRight) || 0;
-    const st = parseFloat(cs.paddingTop) || 0;
-    const sb = parseFloat(cs.paddingBottom) || 0;
+    if (insetsDirty) {
+      insetsDirty = false;
+      const cs = getComputedStyle(probe);
+      inset.l = parseFloat(cs.paddingLeft) || 0;
+      inset.r = parseFloat(cs.paddingRight) || 0;
+      inset.t = parseFloat(cs.paddingTop) || 0;
+      inset.b = parseFloat(cs.paddingBottom) || 0;
+    }
+    const sl = inset.l;
+    const sr = inset.r;
+    const st = inset.t;
+    const sb = inset.b;
     const settings = ctx.save && ctx.save.settings;
     const lh = !!(settings && settings.leftHanded);
-    const s = W + 'x' + H + ':' + sl + ',' + sr + ',' + st + ',' + sb + (lh ? 'L' : 'R');
-    if (s === sig) return;
-    sig = s;
+    if (W === last.w && H === last.h && sl === last.l && sr === last.r && st === last.t && sb === last.b && lh === last.lh) return;
+    last.w = W; last.h = H; last.l = sl; last.r = sr; last.t = st; last.b = sb; last.lh = lh;
     L = touchLayout({ w: W, h: H, safeL: sl, safeR: sr, safeT: st, safeB: sb, leftHanded: lh });
     for (const b of L.buttons) {
       const el = btns[b.action].el;
@@ -366,10 +384,18 @@ export function createTouch(ctx, shared) {
     knob.style.height = L.stickKnob + 'px';
   }
 
-  listen(window, 'resize', () => {
-    sig = '';
+  const onResize = () => {
+    invalidate();
     if (shown) relayout();
-  });
+  };
+  listen(window, 'resize', onResize);
+  listen(window, 'orientationchange', onResize);
+  const vv = /** @type {any} */ (window).visualViewport;
+  if (vv && typeof vv.addEventListener === 'function') listen(vv, 'resize', onResize);
+  /** @param {any} p settings:changed */
+  function onSettings(p) {
+    if (p && p.key === 'leftHanded') dirty = true;
+  }
 
   /** @param {string} action @param {boolean} on */
   function show(action, on) {
@@ -510,6 +536,9 @@ export function createTouch(ctx, shared) {
   const bus = ctx.bus;
   bus.on('combat:surge', onSurge, 'control');
   bus.on('lang:changed', onLang, 'control');
+  bus.on('settings:changed', onSettings, 'control');
+  // Safety net for a missed resize event: the viewport size (not the insets) is compared once a second.
+  let sizeCheckT = 0;
 
   return {
     /** @param {any} inp @param {number} dt */
@@ -522,12 +551,12 @@ export function createTouch(ctx, shared) {
         root.classList.toggle('ctl-on', want);
         if (!want) releaseAll();
         else {
-          sig = '';
+          invalidate();
           slowT = 1;
         }
       }
       if (!shown) return;
-      relayout();
+      if (dirty) relayout();
       // Long presses (Form cycles, Item switches).
       for (const action in LONG_ACTIONS) {
         const b = btns[action];
@@ -547,6 +576,11 @@ export function createTouch(ctx, shared) {
         btns.dash.el.classList.toggle('ctl-latched', on);
       }
       slowT += dt > 0 ? dt : 1 / 60;
+      sizeCheckT += dt > 0 ? dt : 1 / 60;
+      if (sizeCheckT >= 1) {
+        sizeCheckT = 0;
+        dirty = true;
+      }
       if (slowT >= 0.1) {
         slowT = 0;
         refresh();
@@ -559,6 +593,7 @@ export function createTouch(ctx, shared) {
       for (const [t, type, fn, opt] of listeners) t.removeEventListener(type, fn, opt);
       bus.off('combat:surge', onSurge);
       bus.off('lang:changed', onLang);
+      bus.off('settings:changed', onSettings);
       if (root.parentElement) root.parentElement.removeChild(root);
     },
     /** The current layout (tests). */

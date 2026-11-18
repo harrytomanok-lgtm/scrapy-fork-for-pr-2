@@ -20,7 +20,13 @@ test('defaults outside test mode', () => {
   assert.equal(f.debug, false);
   assert.equal(f.fps, false);
   assert.equal(f.bench, false);
+  assert.equal(f.fpscap, true);
   assert.deepEqual(f.raw, {});
+});
+
+test('fpscap=0 turns the frame cap off', () => {
+  assert.equal(parseFlags('fpscap=0').fpscap, false);
+  assert.equal(parseFlags('fpscap=1').fpscap, true);
 });
 
 test('the harness query', () => {

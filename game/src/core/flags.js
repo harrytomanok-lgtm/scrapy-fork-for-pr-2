@@ -29,6 +29,7 @@
  * @property {boolean} debug         debug overlay
  * @property {boolean} fps           FPS counter
  * @property {boolean} bench         run the benchmark of 7.3 after boot
+ * @property {boolean} fpscap        frame cap on (default); `fpscap=0` presents every vsync (benchmarks)
  * @property {Record<string, string>} raw   every query parameter as given (package-specific extras)
  */
 
@@ -96,6 +97,7 @@ export function parseFlags(search = '') {
     debug: bool(get('debug')),
     fps: bool(get('fps')),
     bench,
+    fpscap: get('fpscap') === null ? true : bool(get('fpscap')),
     raw,
   };
 }

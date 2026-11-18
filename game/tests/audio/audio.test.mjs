@@ -334,3 +334,55 @@ test('stingers produce notes for every contract id', () => {
     for (let i = 0; i < n; i++) assert.ok(INSTRUMENTS[buf[i].inst], id + ' uses instrument ' + buf[i].inst);
   }
 });
+
+// ------------------------------------------------------------------ unlock (autoplay policy)
+
+test('unlock: gestures stay armed until the context runs, and re-arm after a system suspend', async () => {
+  const listeners = new Map();
+  const target = {
+    addEventListener(type, fn) { listeners.set(type, fn); },
+    removeEventListener(type) { listeners.delete(type); },
+  };
+  let activation = false;
+  const ac = createMockContext();
+  ac.state = 'suspended';
+  let onState = null;
+  ac.addEventListener = (type, fn) => { if (type === 'statechange') onState = fn; };
+  ac.resume = () => {
+    if (activation) ac.state = 'running';
+    return activation ? Promise.resolve() : Promise.reject(new Error('not allowed'));
+  };
+  let hidden = false;
+  const e = createEngine(mockCtx(), { makeContext: () => ac, sync: true, gestureTarget: target, isHidden: () => hidden });
+  for (const t of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) assert.ok(listeners.has(t), t + ' is a gesture');
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  // A touch pointerdown (no user activation): the context exists but stays suspended; the listeners are kept.
+  listeners.get('pointerdown')();
+  await flush();
+  assert.equal(e.ready, true);
+  assert.equal(ac.state, 'suspended');
+  assert.equal(e.play('ui_confirm'), 0, 'no sound while suspended');
+  assert.ok(listeners.has('pointerup') && listeners.has('touchend'), 'the gestures stay armed while suspended');
+  // The pointerup of the same tap grants activation: running, listeners removed.
+  activation = true;
+  listeners.get('pointerup')();
+  await flush();
+  assert.equal(ac.state, 'running');
+  assert.equal(listeners.size, 0, 'the gestures are removed once running');
+  // The system interrupts the context while the page is visible: re-armed, the next gesture resumes it.
+  activation = false;
+  ac.state = 'interrupted';
+  onState();
+  assert.ok(listeners.has('click'), 're-armed after an interruption');
+  activation = true;
+  listeners.get('click')();
+  await flush();
+  assert.equal(ac.state, 'running');
+  assert.equal(listeners.size, 0);
+  // Suspended while hidden: no re-arm (the visibility handler resumes on return).
+  hidden = true;
+  ac.state = 'suspended';
+  onState();
+  assert.equal(listeners.size, 0, 'no gesture listeners while hidden');
+  e.dispose();
+});

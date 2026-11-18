@@ -39,7 +39,9 @@ export function dbToGain(db) {
 /**
  * Create the engine.
  * @param {any} ctx
- * @param {{ makeContext?:()=>any, sync?:boolean, noWindow?:boolean }} [opts]  tests inject a mock context and render synchronously
+ * @param {{ makeContext?:()=>any, sync?:boolean, noWindow?:boolean, gestureTarget?:any, isHidden?:()=>boolean }} [opts]
+ *   tests inject a mock context and render synchronously; gestureTarget and isHidden replace the window and
+ *   document.hidden for the unlock gestures
  */
 export function createEngine(ctx, opts = {}) {
   const flags = ctx.flags || {};
@@ -456,21 +458,59 @@ export function createEngine(ctx, opts = {}) {
 
   // ------------------------------------------------------------------ gestures and visibility
 
+  /** Event target of the unlock gestures: `opts.gestureTarget` (tests) or the window. */
+  const gestureTarget = opts.gestureTarget || (hasWindow ? window : null);
+  /** @returns {boolean} the page is hidden (a hidden page must not resume audio) */
+  function pageHidden() {
+    if (typeof opts.isHidden === 'function') return !!opts.isHidden();
+    return hasWindow && typeof document !== 'undefined' && !!document.hidden;
+  }
+  /**
+   * Gestures that may grant user activation. A touch pointerdown does not (Chrome activates on pointerup,
+   * touchend and click for touch), so the listeners stay armed and every gesture retries resume() until the
+   * context reports 'running'; they are re-armed when the context is suspended or interrupted by the system.
+   */
+  const gestureEvents = ['pointerdown', 'pointerup', 'touchend', 'mousedown', 'click', 'keydown'];
+  let listening = false;
   function onGesture() {
     engine.unlock();
   }
-  function onVisibility() {
-    if (!ac || typeof document === 'undefined') return;
-    if (document.hidden) ac.suspend().catch(() => {});
-    else ac.resume().catch(() => {});
-  }
-  const gestureEvents = ['pointerdown', 'keydown', 'touchend', 'mousedown'];
   /** @param {boolean} on */
   function listenGestures(on) {
-    if (!hasWindow || noaudio) return;
+    if (!gestureTarget || noaudio || listening === on) return;
+    listening = on;
     for (const e of gestureEvents) {
-      if (on) window.addEventListener(e, onGesture, { capture: true });
-      else window.removeEventListener(e, onGesture, { capture: true });
+      if (on) gestureTarget.addEventListener(e, onGesture, { capture: true });
+      else gestureTarget.removeEventListener(e, onGesture, { capture: true });
+    }
+  }
+  /** Disarm once the context runs; keep (or re-arm) the gesture listeners while it does not. */
+  function checkRunning() {
+    if (!ac) return;
+    if (ac.state === 'running') listenGestures(false);
+    else if (!pageHidden()) listenGestures(true);
+  }
+  /** Ask the context to run (when visible); the result is checked whether resume() succeeds or is refused. */
+  function tryResume() {
+    if (!ac || ac.state === 'running' || ac.state === 'closed' || pageHidden()) return;
+    let pr = null;
+    try {
+      pr = ac.resume();
+    } catch (err) {
+      pr = null;
+    }
+    if (pr && typeof pr.then === 'function') pr.then(checkRunning, checkRunning);
+  }
+  function onStateChange() {
+    // 'suspended' by the system (another app took audio focus) or 'interrupted' (iOS): wait for a new gesture.
+    checkRunning();
+  }
+  function onVisibility() {
+    if (!ac) return;
+    if (pageHidden()) ac.suspend().catch(() => {});
+    else {
+      tryResume();
+      checkRunning();
     }
   }
 
@@ -488,7 +528,8 @@ export function createEngine(ctx, opts = {}) {
     unlock() {
       if (noaudio) return;
       if (ac) {
-        if (ac.state === 'suspended' && !(hasWindow && typeof document !== 'undefined' && document.hidden)) ac.resume().catch(() => {});
+        tryResume();
+        checkRunning();
         return;
       }
       try {
@@ -524,9 +565,12 @@ export function createEngine(ctx, opts = {}) {
       buildQueue();
       if (opts.sync) flushRender();
       else pump();
-      if (ac.state === 'suspended') ac.resume().catch(() => {});
       engine.ready = true;
-      listenGestures(false);
+      if (typeof ac.addEventListener === 'function') ac.addEventListener('statechange', onStateChange);
+      else ac.onstatechange = onStateChange;
+      // The listeners are removed only once the context really runs (a touch pointerdown gives no activation).
+      tryResume();
+      checkRunning();
       if (hasWindow && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
       if (engine.onUnlock) engine.onUnlock();
     },
@@ -811,6 +855,7 @@ export function createEngine(ctx, opts = {}) {
       if (hasWindow && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
       for (let i = 0; i < MAX_SLOTS; i++) releaseVoice(slots[i]);
       if (ac) {
+        if (typeof ac.removeEventListener === 'function') ac.removeEventListener('statechange', onStateChange);
         try { ac.close().catch(() => {}); } catch (err) { /* ignore */ }
       }
       ac = null;

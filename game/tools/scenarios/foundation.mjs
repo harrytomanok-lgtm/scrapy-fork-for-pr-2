@@ -291,6 +291,82 @@ export const scenarios = [
     },
   },
   {
+    // Android discards background tabs: the journey is saved synchronously on visibilitychange to hidden and on
+    // pagehide, in the middle of a boss fight and its intro cinematic too, and that save loads at a safe place.
+    name: 'foundation-lifecycle-save',
+    async run({ game, assert }) {
+      await opening(game, assert);
+      const r = await game((g) => {
+        const c = g.ctx;
+        const written = [];
+        let cine = 0;
+        c.bus.on('save:written', (p) => written.push(p.ok), 'probe');
+        c.bus.on('cine:start', () => cine++, 'probe');
+        g.grantXp(25);
+        g.step(10);
+        const rs = g.pois('ringstone').find((q) => q.id === 'ringstone_sparkstead');
+        // A boss fight away from the Ringstone, with its intro cinematic running, and a grunt on the player.
+        g.teleport(rs.x + 70, rs.z + 40);
+        g.step(5);
+        const boss = g.startBoss('durn');
+        const grunt = g.spawn('tusk_boar', { dist: 5, aggro: true });
+        for (let i = 0; i < 6; i++) {
+          g.press('attack');
+          g.step(10);
+        }
+        if (grunt) g.damage(grunt, 1);
+        g.step(2);
+        const during = { inCombat: !!c.combat.inCombat, cineBusy: !!c.cam.busy, cine, boss: !!boss, hp: g.player().hp };
+        const quests = JSON.stringify(g.state().quests);
+        const xp = g.player().xp;
+        // Hidden: written at once, synchronously (not at the end of the tick, not after combat).
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        const afterHidden = written.slice();
+        window.dispatchEvent(new Event('pagehide'));
+        const afterPagehideHidden = written.length;
+        delete /** @type {any} */ (document).visibilityState;
+        delete /** @type {any} */ (document).hidden;
+        document.dispatchEvent(new Event('visibilitychange'));
+        // pagehide without a hidden page first (tab closed) also writes.
+        window.dispatchEvent(new Event('pagehide'));
+        const afterPagehide = written.slice();
+        // Reload the saved journey (memory storage in test mode keeps the slot for this page).
+        const loaded = g.load(1);
+        g.step(30);
+        const p = g.player();
+        const s = g.state();
+        const bosses = c.ents.list('boss').filter((e) => e.alive).length;
+        const enemiesNear = c.ents.list('enemy').filter((e) => e.alive && Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < 20).length;
+        return {
+          during, afterHidden, afterPagehideHidden, afterPagehide, loaded,
+          dist: Math.hypot(p.x - rs.x, p.z - rs.z), hp: p.hp, hpMax: p.hpMax, xp: p.xp, xpBefore: xp,
+          questsSame: JSON.stringify(s.quests) === quests, inCombat: !!c.combat.inCombat, cineBusy: !!c.cam.busy,
+          reasons: c.time.reasons(), context: c.input.context, top: g.top(), bosses, enemiesNear,
+        };
+      });
+      assert.ok(r.during.boss, 'the boss fight started');
+      assert.ok(r.during.inCombat, 'the player is in combat when the page is hidden ' + JSON.stringify(r.during));
+      assert.ok(r.during.cine > 0, 'the boss intro cinematic started');
+      assert.deepEqual(r.afterHidden, [true], 'hidden in combat: one synchronous save');
+      assert.equal(r.afterPagehideHidden, 1, 'pagehide right after a hidden save does not write twice');
+      assert.deepEqual(r.afterPagehide, [true, true], 'pagehide on a visible page writes');
+      assert.equal(r.loaded, true, 'the lifecycle save loads');
+      assert.ok(r.dist < 3, 'the player comes back at the respawn Ringstone (' + r.dist.toFixed(1) + ' m)');
+      assert.ok(r.hp > 0, 'alive after load');
+      assert.equal(r.xp, r.xpBefore, 'progress made before the hide is kept');
+      assert.equal(r.questsSame, true, 'the quest steps are intact');
+      assert.equal(r.inCombat, false, 'not inside a half-running fight');
+      assert.equal(r.cineBusy, false, 'no half-running cinematic');
+      assert.equal(r.bosses, 0, 'no boss entity carried over');
+      assert.equal(r.enemiesNear, 0, 'no enemy at the Ringstone');
+      assert.deepEqual(r.reasons, [], 'no pause reason left behind');
+      assert.equal(r.context, 'game');
+      assert.equal(r.top, 'hud');
+    },
+  },
+  {
     name: 'foundation-lang-pause',
     async run({ game, assert, shot }) {
       await opening(game, assert);
@@ -467,6 +543,9 @@ export const scenarios = [
       });
       await shot('foundation-touch-portrait');
       await page.setViewportSize({ width: 640, height: 360 });
+      // The touch layout follows resize events (it no longer measures every frame); a browser delivers them in
+      // the rendering steps before the next animation frame, so wait for one as a real device would.
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(true))));
       await game((g) => {
         g.setLang('he');
         g.render();
@@ -826,6 +905,18 @@ export const scenarios = [
           }
         });
         mo.observe(document, { childList: true, subtree: true });
+        // Keep the game's AudioContext reachable, to suspend it the way the system does.
+        const AC = window.AudioContext;
+        const made = [];
+        /** @type {any} */ (window).__AUDIO_CONTEXTS__ = made;
+        if (AC) {
+          window.AudioContext = class extends AC {
+            constructor(o) {
+              super(o);
+              made.push(this);
+            }
+          };
+        }
         let g;
         Object.defineProperty(window, '__GAME__', {
           configurable: true,
@@ -909,12 +1000,36 @@ export const scenarios = [
       assert.ok(started.player, 'the player exists');
       assert.ok(started.toasts.includes('core.save.memoryOnly'), 'the session-only warning toast fires: ' + started.toasts.join(', '));
 
-      // 3. Audio unlocks on the first tap.
+      // 3. Audio unlocks on the first tap. An untrusted pointerdown (like a touch pointerdown, it grants no user
+      // activation) may create the context but must not end the unlock: the real tap after it still runs it.
       assert.equal(started.audioReady, false, 'audio is locked before any gesture');
+      const early = await frame.evaluate(async () => {
+        window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true }));
+        await new Promise((r) => setTimeout(r, 200));
+        return { state: window.__GAME__.ctx.audio.debug().state };
+      });
+      console.log('  audio after an untrusted pointerdown: ' + early.state);
       await host.touchscreen.tap(200, 140);
       await host.waitForTimeout(400);
-      const audio = await frame.evaluate(() => window.__GAME__.ctx.audio.ready);
-      assert.equal(audio, true, 'the first tap unlocks audio');
+      const audioState = () => frame.evaluate(() => {
+        const a = window.__GAME__.ctx.audio;
+        return { ready: !!a.ready, state: a.debug().state };
+      });
+      const audio = await audioState();
+      assert.equal(audio.ready, true, 'the first tap unlocks audio');
+      assert.equal(audio.state, 'running', 'the AudioContext runs after the tap ' + JSON.stringify(audio));
+      // The system suspends the context while the page is visible (audio focus, interruption): the gesture
+      // listeners re-arm and the next tap resumes it.
+      await frame.evaluate(async () => {
+        await window.__AUDIO_CONTEXTS__[0].suspend();
+        await new Promise((r) => setTimeout(r, 100));
+      });
+      const suspended = await audioState();
+      assert.equal(suspended.state, 'suspended', 'suspended by the system');
+      await host.touchscreen.tap(200, 140);
+      await host.waitForTimeout(400);
+      const resumed = await audioState();
+      assert.equal(resumed.state, 'running', 'the next tap resumes a suspended context ' + JSON.stringify(resumed));
 
       // 4. A refused pointer lock (no allow-pointer-lock in the sandbox) changes nothing.
       const lock = await frame.evaluate(async () => {

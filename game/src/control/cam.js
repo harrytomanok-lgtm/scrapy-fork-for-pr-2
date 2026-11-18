@@ -17,7 +17,7 @@ import { SIM_DT } from '../core/constants.js';
 import { KIND_MASK, TAG } from '../core/ents.js';
 import { clamp, angleDelta, wrapAngle, lerp, smoothstep } from '../core/math.js';
 import {
-  CAM, CAM_MODES, spring, noise1, kickEnvelope, frameShift, horizontalFov, lockFraming, easeToward,
+  CAM, CAM_MODES, spring, noise1, kickEnvelope, frameShift, horizontalFov, lockFraming, easeToward, interpAngle,
 } from './logic/camMath.js';
 
 const D2R = Math.PI / 180;
@@ -34,6 +34,9 @@ export function createCam(ctx, shared) {
     trauma: 0, kickPeak: 0, kickStart: -10, kickDur: 0.25, kickHold: false,
     dlgSpeaker: 0, dlgListener: 0, lockSide: 1, lockStartT: -10, threatT: 0, prevYaw: 0, prevMode: 'explore',
     blendT: 0, blendDur: 0.4, collDist: 5.5,
+    // Orbit angles at the start of the last sim step: the rig shows yaw and pitch between these and the current
+    // ones with the frame alpha (prevYaw above is the roll-rate state, a different thing).
+    stepYaw0: 0, stepPitch0: -12 * D2R,
   };
   const sDist = { x: 5.5, v: 0 };
   const sHeight = { x: 1.6, v: 0 };
@@ -315,6 +318,8 @@ export function createCam(ctx, shared) {
     order: 50,
     /** @param {any} c */
     step(c) {
+      st.stepYaw0 = st.yaw;
+      st.stepPitch0 = st.pitch;
       const s = c.save && c.save.settings;
       const lx = c.input.axis('lookX');
       const ly = c.input.axis('lookY');
@@ -498,9 +503,13 @@ export function createCam(ctx, shared) {
         sPz.x = pz + (lagZ / lag) * maxLag;
       }
 
-      // Orbit direction (the camera looks along it).
-      const yaw = st.yaw;
-      const pitch = st.pitch;
+      // Orbit direction (the camera looks along it), interpolated between the last two sim steps.
+      if (snap) {
+        st.stepYaw0 = st.yaw;
+        st.stepPitch0 = st.pitch;
+      }
+      const yaw = interpAngle(st.stepYaw0, st.yaw, alpha);
+      const pitch = st.stepPitch0 + (st.pitch - st.stepPitch0) * (alpha < 0 ? 0 : alpha > 1 ? 1 : alpha);
       const cp = Math.cos(pitch);
       const sp = Math.sin(pitch);
       const dirX = Math.sin(yaw) * cp;

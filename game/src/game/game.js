@@ -69,7 +69,8 @@ export function installPackages(ctx, packages = PACKAGES) {
  * The foundation's runtime glue, installed once before any package:
  * - system `core.save` (cleanup phase, after `core.cleanup`): `save.tick` for play time and autosave;
  * - `settings:changed`: language and text size;
- * - page visibility: pause reason 'hidden' while the page is hidden (not in test mode);
+ * - page visibility: pause reason 'hidden' while the page is hidden (not in test mode), and a synchronous save of
+ *   the running journey on visibilitychange to hidden and on pagehide (every mode; test mode stores in memory);
  * - `ui:screen { id:'loading', open:true }`: hide the foundation's fallback loading layer.
  * @param {any} ctx
  * @param {{ hideLoading:() => void }} hooks
@@ -93,14 +94,47 @@ export function installGlue(ctx, hooks) {
       if (p.id === 'loading' && p.open) hooks.hideLoading();
     });
   });
-  if (!ctx.flags.test && typeof document !== 'undefined') {
-    const sync = () => {
-      if (document.visibilityState === 'hidden') ctx.time.pause('hidden');
-      else ctx.time.resume('hidden');
-    };
-    document.addEventListener('visibilitychange', sync);
+  if (typeof document === 'undefined') return;
+  // Android discards background tabs without warning: the journey is written synchronously (localStorage) the
+  // moment the page is hidden or unloaded, in combat and in cinematics too. save.load puts the player back at the
+  // respawn Ringstone, so a save taken mid-fight loads at a safe place with the quest step intact.
+  let savedWhileHidden = false;
+  const sync = () => {
+    if (document.visibilityState === 'hidden') {
+      if (!savedWhileHidden) savedWhileHidden = saveJourney(ctx, 'hidden');
+      if (!ctx.flags.test) ctx.time.pause('hidden');
+    } else {
+      savedWhileHidden = false;
+      // No catch-up burst for the time spent in the background.
+      if (ctx.loop) ctx.loop.resync();
+      if (!ctx.flags.test) ctx.time.resume('hidden');
+    }
+  };
+  document.addEventListener('visibilitychange', sync);
+  if (typeof window !== 'undefined') {
+    // pagehide also fires when the tab is closed or navigated without being hidden first.
+    window.addEventListener('pagehide', () => {
+      if (!savedWhileHidden) saveJourney(ctx, 'pagehide');
+    });
     // A page restored from the back-forward cache or opened in a background tab starts in the right state.
-    if (typeof window !== 'undefined') window.addEventListener('pageshow', sync);
-    sync();
+    window.addEventListener('pageshow', sync);
+  }
+  if (!ctx.flags.test) sync();
+}
+
+/**
+ * Write the running journey now (page lifecycle and the fatal screen). Never throws.
+ * @param {any} ctx @param {string} reason
+ * @returns {boolean} true when a journey was written
+ */
+export function saveJourney(ctx, reason) {
+  const session = ctx.session;
+  const save = ctx.save;
+  if (!session || !session.running || !save || !ctx.player) return false;
+  try {
+    return save.write(reason) === true;
+  } catch (e) {
+    if (ctx.log) ctx.log.warn('save', 'lifecycle save failed', reason, e && e.message);
+    return false;
   }
 }
