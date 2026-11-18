@@ -126,12 +126,13 @@ export function createStructures(ctx, grid, colliders, seed) {
     const r = s.r;
     const tilt = s.tilt * r;
     // Rock underside (inverted cone), crystal top (short hex column with an apex).
-    hexCol(C, s.x, s.z, s.y - r * 1.4, 0.0001, s.y, r, s.yaw, k(sp.cliff, 0.78), sp.cliff);
-    hexCol(C, s.x, s.z, s.y, r, s.y + r * 0.35, r * 0.82, 0.1, sp.cliff, sp.ground);
-    hexCol(C, s.x, s.z, s.y + r * 0.35, r * 0.82, s.y + r * (1.1 + (i % 3) * 0.4), 0, 0, sp.ground, sp.accent, tilt, -tilt * 0.5);
+    // Rock reads as rock (shade underside, cliff body); only the short crystal crown keeps the pale spire colour.
+    hexCol(C, s.x, s.z, s.y - r * 1.5, 0.0001, s.y, r, s.yaw, k(sp.shade, 0.7), k(sp.shade, 1.05));
+    hexCol(C, s.x, s.z, s.y, r, s.y + r * 0.3, r * 0.86, 0.1, k(sp.shade, 1.05), sp.cliff);
+    hexCol(C, s.x, s.z, s.y + r * 0.3, r * 0.6, s.y + r * (0.8 + (i % 3) * 0.3), 0, 0, sp.cliff, sp.ground, tilt, -tilt * 0.5);
     colliders.add({ shape: 'sphere', x: s.x, y: s.y, z: s.z, r: r * 0.95, flags: COLLIDER.SOLID });
   }
-  const crownMat = ctx.render.materials.toon({ vertexColors: true, emissive: PALETTE.biome.spire.ground, emissiveIntensity: 0.16, fogScale: 0.55, glossy: true });
+  const crownMat = ctx.render.materials.toon({ vertexColors: true, emissive: PALETTE.biome.spire.ground, emissiveIntensity: 0.05, fogScale: 9 });
   const crown = new Mesh(C.geometry(), crownMat);
   crown.matrixAutoUpdate = false;
   crown.frustumCulled = false;

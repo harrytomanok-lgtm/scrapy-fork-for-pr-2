@@ -188,17 +188,22 @@ function hero(v) {
     }
     return out;
   };
+  // Tempest mantle: four wide ribbons flaring from the shoulders like a wind-torn cape, plus two swept wind-vanes
+  // at the temples (ART_UX 2.3). Wide enough to change the silhouette at phone size.
   const mantle = [];
   for (const s of [1, -1]) {
-    mantle.push(P('extra1', 'box', [0.08, 0.62 * k, 0.012], [s * 0.12, -0.26 * k, -0.04], [0.45, 0, s * 0.5], 'ora'));
-    mantle.push(P('extra1', 'box', [0.065, 0.55 * k, 0.012], [s * 0.26, -0.18 * k, -0.02], [0.3, 0, s * 0.95], 'ora'));
-    mantle.push(P('head', 'blade', [0.065, 0.3 * k, 0.014], [s * 0.115 * k, 0.19 * k, -0.03], [-1.05, s * 0.15, s * -0.5], 'ora'));
+    mantle.push(P('extra1', 'box', [0.13, 0.78 * k, 0.014], [s * 0.1, -0.32 * k, -0.06], [0.5, 0, s * 0.38], 'ora'));
+    mantle.push(P('extra1', 'box', [0.1, 0.66 * k, 0.014], [s * 0.25, -0.24 * k, -0.03], [0.36, 0, s * 0.85], 'ora'));
+    mantle.push(P('head', 'blade', [0.08, 0.36 * k, 0.016], [s * 0.12 * k, 0.2 * k, -0.04], [-1.15, s * 0.15, s * -0.55], 'ora'));
   }
+  // Zenith: six crystal blades fanned upward behind the shoulders like wings (a V, never a collar), longest inside.
   const blades = [];
-  for (const a of [0.7, 1.12, 1.55]) {
+  for (const [a, len] of [[0.34, 0.66], [0.78, 0.56], [1.2, 0.44]]) {
     for (const s of [1, -1]) {
       const ang = a * s;
-      blades.push(P('extra1', 'blade', [0.08, (0.5 - (a - 0.7) * 0.12) * k, 0.025], [Math.sin(ang) * 0.3, Math.cos(ang) * 0.3 - 0.12, -0.2], [0.25, 0, -ang], 'ora', { glossy: true }));
+      const L = len * k;
+      const r0 = 0.2 + L * 0.5;
+      blades.push(P('extra1', 'blade', [0.13, L, 0.03], [Math.sin(ang) * r0, Math.cos(ang) * r0 - 0.05, -0.24], [-0.3, 0, -ang], 'ora', { glossy: true }));
     }
   }
   return {
@@ -211,19 +216,22 @@ function hero(v) {
     parts,
     chains: [{ bones: ['sash1', 'sash2', 'sash3'], stiffness: 38, damping: 6.5 }, { bones: ['tail1'], stiffness: 55, damping: 7 }],
     forms: {
+      // Emissive values stay low enough that the low tier (no bloom, colours clamp at 1) keeps the Form hue
+      // instead of clipping to cream; the vfx lantern sprites carry the brightness.
       ember: {
         palette: { seam: PALETTE.ember, ora: PALETTE.ember, sash: PALETTE.ember, sashStripe: CHAR.emberCore, eye: PALETTE.ember },
-        emissive: { seam: 2.4, ora: 1.8, sash: 1.5, sashStripe: 1.8, eye: 0.8, glint: 0.6 },
-        partsAdd: [...seam(false), P('sash3', 'blade', [0.07, 0.36 * k, 0.012], [0, -0.38 * k, 0], [PI, 0, 0], 'sash')],
+        emissive: { seam: 1.2, ora: 0.9, sash: 0.55, sashStripe: 1.0, eye: 0.8, glint: 0.6 },
+        partsAdd: [...seam(true), P('sash3', 'blade', [0.1, 0.5 * k, 0.012], [0, -0.42 * k, 0], [PI, 0, 0], 'sash'),
+          P('sash2', 'box', [0.11, 0.2 * k, 0.012], [0, -0.1 * k, 0], null, 'sash')],
       },
       tempest: {
-        palette: { seam: PALETTE.tempest, ora: CHAR.tempestRibbon, sashStripe: CHAR.tempestRibbon, eye: PALETTE.tempest },
-        emissive: { seam: 2.4, ora: 1.5, sashStripe: 0.7, eye: 0.7, glint: 0.6 },
+        palette: { seam: PALETTE.tempest, ora: PALETTE.tempest, sashStripe: CHAR.tempestRibbon, eye: PALETTE.tempest },
+        emissive: { seam: 1.3, ora: 0.55, sashStripe: 0.7, eye: 0.7, glint: 0.6 },
         partsAdd: [...seam(true), ...mantle],
       },
       zenith: {
-        palette: { seam: PALETTE.zenith, ora: PALETTE.zenith, sash: PALETTE.zenith, sashStripe: PALETTE.zenith },
-        emissive: { seam: 2.2, ora: 1.5, sash: 1.0, sashStripe: 1.2, glint: 1.2 },
+        palette: { seam: PALETTE.zenith, ora: PALETTE.zenith, sash: PALETTE.zenith, sashStripe: PALETTE.ora },
+        emissive: { seam: 1.4, ora: 0.6, sash: 0.35, sashStripe: 0.9, glint: 1.2 },
         partsAdd: [...seam(false), ...blades],
       },
     },
@@ -511,7 +519,7 @@ function vorrhal() {
   const build = { height: 2.4, shoulder: 0.46, bulk: 0.25, head: 0.95 };
   const k = build.height / 1.8;
   const parts = person({
-    build, detail: 'hero', face: true, boots: 'short', hair: 'crop', noNeck: false, skirt: { slot: 'robe', len: 0.95, r: 0.23 },
+    build, detail: 'hero', face: true, boots: 'short', hair: 'crop', noNeck: false, skirt: { slot: 'robe', len: 1.12, r: 0.44 },
     slots: { top: 'robe', legs: 'robe', boots: 'robe', skin: 'skin', hair: 'robe', eye: 'ink', upper: 'robe', fore: 'robe', hand: 'skin' },
   });
   parts.push(P('head', 'sphere', [0.27 * k, 0.29 * k, 0.28 * k], [0, 0.14 * k, -0.05 * k], [0.15, 0, 0], 'robe', { seg: 8 }));

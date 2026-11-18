@@ -80,12 +80,12 @@ export const RECIPES = {
     { m: 0, cell: dot, n: 2, lo: 1, rate: 20, sp: [0, 0.5], life: [0.2, 0.3], sz: [3, 1.5], col: 'core', sh: 'still', hdr: 2.4, k: 1 },
   ] },
   ult_impact: { body: 'ora', light: { r: 40, i: 3, t: 1.5 }, shock: { r: 30, t: 0.6, sphere: true, ground: true, col: 'body' },
-    pillar: { h: 60, w: 3.5, t: 1.5, col: 'body' }, decal: { kind: 'scorch', r: 18, t: 14 }, layers: [
-      { m: 0, cell: dot, n: 2, lo: 1, sp: [0, 0], life: [0.35, 0.5], sz: [10, 22], col: 'core', sh: 'still', hdr: 2.6, k: 1 },
+    pillar: { h: 60, w: 1.2, t: 0.7, col: 'body' }, decal: { kind: 'scorch', r: 18, t: 14 }, layers: [
+      { m: 0, cell: dot, n: 2, lo: 1, sp: [0, 0], life: [0.3, 0.45], sz: [6, 12], col: 'core', sh: 'still', hdr: 2.2, k: 1 },
       { m: 1, cell: streak, n: 60, lo: 30, sp: [30, 55], life: [0.3, 0.6], sz: [0.25, 0.06], col: 'body', sh: 'hemi', st: 0.05, dr: 3, hdr: 2.2, k: 0.5 },
       { m: 1, cell: streak, n: 30, lo: 12, sp: [20, 35], life: [0.3, 0.5], sz: [0.2, 0.05], col: 'fringe', sh: 'ring', st: 0.05, dr: 3, hdr: 1.6 },
       { m: 2, cell: chip, n: 40, lo: 20, sp: [10, 22], life: [0.8, 1.4], sz: [0.6, 0.3], col: 'path', sh: 'hemi', g: 20, rv: 8 },
-      { m: 2, cell: smoke, n: 30, lo: 14, sp: [8, 16], life: [1.0, 1.8], sz: [3, 7], col: 'smoke', a: 0.55, sh: 'ring', fb: 4, dr: 2.5 },
+      { m: 2, cell: smoke, n: 30, lo: 14, sp: [10, 18], life: [0.9, 1.5], sz: [2, 4.5], col: 'smoke', a: 0.35, sh: 'ring', fb: 4, dr: 2.5 },
     ] },
   flicker_out: { body: 'ora', layers: [
     { m: 1, cell: streak, n: 12, lo: 6, sp: [10, 16], life: [0.08, 0.16], sz: [0.05, 0.02], col: 'core', sh: 'disc', r: 0.4, st: 0.06, hdr: 1.8, k: 1 },
@@ -181,7 +181,7 @@ export const RECIPES = {
     { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.1, 0.1], sz: [1, 1.8], col: 'core', sh: 'still', hdr: 1.6 },
   ] },
   crater: { body: 'scorchRim', layers: [
-    { m: 2, cell: smoke, n: 18, lo: 8, sp: [4, 9], life: [1.0, 1.6], sz: [2, 4.5], col: 'paper', a: 0.6, sh: 'ring', fb: 4, dr: 2 },
+    { m: 2, cell: smoke, n: 18, lo: 8, sp: [5, 10], life: [0.9, 1.4], sz: [1.6, 3.4], col: 'paper', a: 0.4, sh: 'ring', fb: 4, dr: 2 },
     { m: 2, cell: chip, n: 24, lo: 12, sp: [8, 15], life: [0.7, 1.2], sz: [0.4, 0.2], col: 'path', sh: 'hemi', g: 18, rv: 8 },
     { m: 0, cell: spark, n: 14, lo: 6, sp: [3, 8], life: [0.4, 0.8], sz: [0.25, 0.05], col: 'body', sh: 'hemi', g: 6, hdr: 1.8 },
   ] },

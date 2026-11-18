@@ -231,7 +231,13 @@ void main() {
   if (uRimStrength > 0.0) c += smoothstep(0.55, 0.7, 1.0 - max(dot(n, v), 0.0)) * uRimColor * uRimStrength;
   c += vBase * vEmis + uEmissiveColor * uEmissiveIntensity;
   c += uRimColor * edge * 2.5;
-  c = mix(c, applyFog(c, vPosW), uFogScale);
+  if (uFogScale > 1.0) {
+    // fogScale above 1 thickens the fog for this material (density x fogScale): far decor fades into the air
+    float fa = 1.0 - pow(1.0 - fogAmount(vPosW), uFogScale * uFogScale);
+    c = mix(c, fogTint(vPosW), fa);
+  } else {
+    c = mix(c, applyFog(c, vPosW), uFogScale);
+  }
   c = mix(c, vec3(1.0), uFlash);
   gl_FragColor = vec4(c, uGhost);
   #include <colorspace_fragment>

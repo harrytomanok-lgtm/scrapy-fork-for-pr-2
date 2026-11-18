@@ -17,6 +17,7 @@ import { REGIONS, LANDMARKS } from './gen/layout.js';
 import { createTerrain } from './terrain.js';
 import { createWater } from './water.js';
 import { createVegetation } from './vegetation.js';
+import { createTufts } from './tufts.js';
 import { createStructures } from './structures.js';
 import { drawMap } from './map.js';
 
@@ -144,6 +145,8 @@ export function createWorld(ctx) {
   /** @type {any} */
   let veg = null;
   /** @type {any} */
+  let tufts = null;
+  /** @type {any} */
   let structs = null;
   let bakeMode = 'none';
   let bakeMs = 0;
@@ -245,6 +248,7 @@ export function createWorld(ctx) {
         report(0.9);
         water = createWater(ctx, grid, EDGE_HARD);
         veg = createVegetation(ctx, grid, col, seed);
+        tufts = createTufts(ctx, grid, seed);
         terrain.flush(focusX, focusY, focusZ);
         water.follow(focusX, focusZ);
         veg.update(focusX, focusY, focusZ, focusX, focusZ, true);
@@ -385,6 +389,7 @@ export function createWorld(ctx) {
           if (terrain) terrain.edited(x, z, r * 1.3 + 8);
           if (water) water.edited(x, z, r * 1.3);
           if (veg) veg.invalidate();
+          if (tufts) tufts.invalidate();
         }
       }
       craterPayload.x = x;
@@ -455,6 +460,7 @@ export function createWorld(ctx) {
         const px = p && p.alive ? p.pos.x : focusX;
         const pz = p && p.alive ? p.pos.z : focusZ;
         veg.update(focusX, focusY, focusZ, px, pz, true);
+        if (tufts) tufts.update(px, p && p.alive ? p.pos.y : focusY, pz, focusY, true);
       }
     },
 
@@ -483,7 +489,8 @@ export function createWorld(ctx) {
 
     /** Remove the meshes and GPU resources. */
     dispose() {
-      for (const part of [terrain, water, veg, structs]) if (part) part.dispose();
+      for (const part of [terrain, water, veg, tufts, structs]) if (part) part.dispose();
+      tufts = null;
       terrain = null;
       water = null;
       veg = null;
@@ -524,6 +531,7 @@ export function createWorld(ctx) {
       water.follow(focusX, focusZ);
       const p = c.player;
       veg.update(focusX, focusY, focusZ, p && p.alive ? p.pos.x : focusX, p && p.alive ? p.pos.z : focusZ, false);
+      if (p && p.alive) tufts.update(p.pos.x, p.pos.y, p.pos.z, focusY, false);
       pulseT += dt > 0 ? dt : 0;
       structs.update(pulseT);
     },

@@ -293,6 +293,12 @@ export function createField(seed) {
         st[k + 4] = 1;
         st[k + 5] = raw;
         st[k + 6] = s.height || s.radius * 0.3;
+        if (lm.type === 'arena') {
+          // a boss arena is fought on dry ground: the rim sits at least 6 m up and the floor at least 3 m above
+          // the sea (bramble_hollow's raw ground is low, so its 25 m bowl used to flood the whole arena)
+          st[k + 5] = Math.max(raw, 6);
+          st[k + 6] = Math.min(st[k + 6], st[k + 5] - 3);
+        }
       } else {
         st[k + 4] = 0;
         const base = Math.max(raw, lm.type === 'settlement' || lm.type === 'siphon' ? 6 : 3);

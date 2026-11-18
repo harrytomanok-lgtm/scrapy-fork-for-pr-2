@@ -37,7 +37,7 @@ const AURA_STYLE = { base: 1, ember: 2, tempest: 3, zenith: 4, enemy: 5 };
 const AURA_COLOR = { base: PALETTE.ora, ember: PALETTE.ember, tempest: PALETTE.tempest, zenith: PALETTE.zenith, enemy: PALETTE.hostile };
 /** Full-screen flashes for feel classes (fx:impact), through the flash budget. */
 const IMPACT_FLASH = { finisher: 0.12, burst: 0.06, ultimate: 0.35, transform: 0.4, bossDeath: 0.3, craterBig: 0.15, perfectGuard: 0.1, levelUp: 0.08 };
-const DECAL_KIND = { scorch: 0, crack: 1, ring: 2, shape: 3, shock: 4, glyph: 5 };
+const DECAL_KIND = { scorch: 0, crack: 1, ring: 2, shape: 3, shock: 4, glyph: 5, glow: 6 };
 
 /** @param {any} ctx */
 export function createVfx(ctx) {
@@ -290,6 +290,7 @@ export function createVfx(ctx) {
     const a = {
       entId: 0, shell: /** @type {any} */ (null), cur: 0, target: 0, color: new Color(PALETTE.ora), fringe: new Color(), style: 1,
       flareT: 0, releasing: false, acc: 0, acc2: 0, dustT: 0, wasFull: false, gen: 0, handle: /** @type {any} */ (null), phase: 0,
+      glowId: 0, gx: 0, gz: 0,
     };
     auras.push(a);
   }
@@ -332,6 +333,13 @@ export function createVfx(ctx) {
   for (let i = 0; i < MAX_AFTER; i++) afters.push({ on: false, mesh: /** @type {any} */ (null), mat: /** @type {any} */ (null), t: 0, seconds: 0.3, x: 0, y: 0, z: 0, h: 1.8, color: new Color() });
   const lights = [];
   for (let i = 0; i < MAX_LIGHTS; i++) lights.push({ h: /** @type {any} */ (null), t: 0, seconds: 0, x: 0, y: 0, z: 0, color: 0, i: 0, r: 0 });
+  /** The player's boost stage (move:boost) for the speed streaks; the weather layer (env fog override). */
+  let pBoost = 0;
+  let speedK = 0;
+  let speedT = 0;
+  let weatherTarget = 0;
+  let weatherK = 0;
+  let weatherT = 0;
   const boostEnt = new Int32Array(MAX_BOOST);
   const boostHandle = new Int32Array(MAX_BOOST);
 
@@ -660,6 +668,15 @@ export function createVfx(ctx) {
     },
 
     /** Debug and test view of the pools. */
+    /**
+     * Weather layer (an addition for env.setFog): 'snow' draws wind-blown snow around the camera at `amount`
+     * (0..1, eased); 'none' or 0 stops it.
+     * @param {'snow'|'none'} kind @param {number} [amount]
+     */
+    weather(kind, amount = 1) {
+      weatherTarget = kind === 'snow' ? Math.max(0, Math.min(1, amount)) : 0;
+    },
+
     debugState() {
       let em = 0;
       for (let i = 0; i < emitters.length; i++) if (emitters[i].id) em++;
@@ -673,7 +690,7 @@ export function createVfx(ctx) {
       for (let i = 0; i < orbs.length; i++) if (orbs[i].on) ob++;
       let pj = 0;
       for (let i = 0; i < projs.length; i++) if (projs[i].entId) pj++;
-      return { particles: pool.live, cap: pool.cap, emitters: em, beams: bm, decals: dc, shells: sh, orbs: ob, projectiles: pj };
+      return { particles: pool.live, cap: pool.cap, emitters: em, beams: bm, decals: dc, shells: sh, orbs: ob, projectiles: pj, speed: speedK, weather: weatherK };
     },
 
     /** Remove every pooled mesh. */
@@ -854,6 +871,40 @@ export function createVfx(ctx) {
     }
   }
 
+  /** Drop an aura's ground light. @param {any} a */
+  function auraGlowOff(a) {
+    if (a.glowId) vfx.removeDecal(a.glowId);
+    a.glowId = 0;
+  }
+
+  /**
+   * The Form ground light (ART_UX 2.3 'the body becomes a lantern'; light on the ground replaces bloom on low):
+   * one persistent draped decal that follows the body, strength by aura level.
+   * @param {any} a @param {number} x @param {number} z @param {number} k strength 0..1
+   */
+  function auraGlow(a, x, z, k) {
+    let d = a.glowId ? mfx.findDecal(a.glowId) : null;
+    if (!d || d.out > 0) {
+      decalOpts.color = a.color.getHex(); decalOpts.seconds = undefined; decalOpts.shape = 'circle';
+      a.glowId = vfx.decal('glow', x, z, 2.1, decalOpts);
+      d = a.glowId ? mfx.findDecal(a.glowId) : null;
+      if (!d) return;
+      a.gx = x;
+      a.gz = z;
+    }
+    const dx = x - a.gx;
+    const dz = z - a.gz;
+    if (dx * dx + dz * dz > 0.04) {
+      mfx.drape(d, 0, x, z, 2.1, 0, 0, 1, 0);
+      a.gx = x;
+      a.gz = z;
+    }
+    const u = d.mat.uniforms;
+    u.uColor.value.copy(a.color).multiplyScalar(1.25);
+    u.uRing.value = a.style;
+    d.fill = k;
+  }
+
   /** @param {any} c @param {number} dt @param {number} alpha @param {boolean} low */
   function updateAuras(c, dt, alpha, low) {
     const hdrMul = low ? 0.8 : 1;
@@ -867,6 +918,7 @@ export function createVfx(ctx) {
         a.gen++;
         s.active = false;
         s.mesh.visible = false;
+        auraGlowOff(a);
         continue;
       }
       if (a.releasing) {
@@ -875,6 +927,7 @@ export function createVfx(ctx) {
           a.entId = 0;
           s.active = false;
           s.mesh.visible = false;
+          auraGlowOff(a);
           continue;
         }
       } else {
@@ -882,8 +935,10 @@ export function createVfx(ctx) {
       }
       if (a.flareT > 0) a.flareT -= dt;
       const cur = a.cur;
+      const form = a.style >= 2 && a.style <= 4;
       if (cur <= 0.01) {
         s.mesh.visible = false;
+        auraGlowOff(a);
         continue;
       }
       c.ents.renderPos(ent, alpha, v1);
@@ -891,23 +946,29 @@ export function createVfx(ctx) {
       const rad = ent.radius > 0 ? ent.radius : 0.5;
       const flare = a.flareT > 0 ? a.flareT / 0.15 : 0;
       const grow = 1 + flare * 0.25;
-      s.mesh.position.set(v1.x, v1.y + h * 0.5, v1.z);
-      s.mesh.scale.set((rad * 1.3 + 0.3) * grow, h * 0.68 * grow, (rad * 1.3 + 0.3) * grow);
-      s.mesh.visible = true;
-      const u = s.mat.uniforms;
-      u.uStyle.value = a.style;
-      u.uColor.value.copy(a.color);
-      u.uFringe.value.copy(a.fringe);
-      u.uIntensity.value = (1.1 + 0.9 * cur) * hdrMul;
-      u.uAlpha.value = Math.min(1, cur * 1.1) * (low ? 0.85 : 1);
-      u.uFlare.value = flare;
+      // Forms have no shell at rest (ART_UX 2.3): the shell only flashes in on the transformation flare.
+      // Gather (base) and the enemy aura keep the shell.
+      if (form && flare <= 0) {
+        s.mesh.visible = false;
+      } else {
+        s.mesh.position.set(v1.x, v1.y + h * 0.5, v1.z);
+        s.mesh.scale.set((rad * 1.3 + 0.3) * grow, h * 0.68 * grow, (rad * 1.3 + 0.3) * grow);
+        s.mesh.visible = true;
+        const u = s.mat.uniforms;
+        u.uStyle.value = a.style;
+        u.uColor.value.copy(a.color);
+        u.uFringe.value.copy(a.fringe);
+        u.uIntensity.value = (1.1 + 0.9 * cur) * hdrMul;
+        u.uAlpha.value = Math.min(1, cur * 1.1) * (low ? 0.85 : 1) * (form ? flare : 1);
+        u.uFlare.value = flare;
+      }
       const speed = a.style === 3 ? 1.9 : a.style === 4 ? 0.5 : a.style === 2 ? 1.2 : 0.9;
       a.phase += dt * speed * (0.6 + 1.6 * cur);
-      u.uPhase.value = a.phase;
-      // rising streaks (40/s on high, 15/s on low at full)
+      if (!form) s.mat.uniforms.uPhase.value = a.phase;
       cBody.copy(a.color);
       cFringe.copy(a.fringe);
-      a.acc += (low ? 15 : 40) * cur * dt;
+      // rising streaks (40/s on high, 15/s on low at full); Forms keep them thin and few: they are accents
+      a.acc += (low ? 15 : 40) * cur * dt * (form ? 0.6 : 1);
       let n = Math.floor(a.acc);
       a.acc -= n;
       if (n > 8) n = 8;
@@ -929,54 +990,116 @@ export function createVfx(ctx) {
         pool.grav[pi] = 0; pool.drag[pi] = 0.5; pool.core[pi] = 0.5; pool.stretch[pi] = a.style === 4 ? 0.05 : 0.09; pool.fadeIn[pi] = 0.1;
         pool.mat[pi] = 1; pool.cell[pi] = CELL.streak; pool.frames[pi] = 1;
       }
-      // style accents
-      if (!low || a.style === 3) {
-        a.acc2 += (a.style === 2 ? 14 : a.style === 4 ? 8 : a.style === 3 ? 30 : 6) * cur * dt;
+      // style accents: Ember motes rising from the body, Zenith star motes (Tempest has its ribbons instead)
+      if (a.style !== 3) {
+        a.acc2 += (a.style === 2 ? (low ? 22 : 26) : a.style === 4 ? 10 : 6) * cur * dt;
         let m = Math.floor(a.acc2);
         a.acc2 -= m;
         if (m > 4) m = 4;
+        if (low && !form) m = 0;
         for (let k = 0; k < m; k++) {
           const ang = rnd() * TAU;
           const pi = pool.alloc();
           if (pi < 0) break;
-          const y0 = v1.y + rnd() * h;
-          pool.px[pi] = v1.x + Math.cos(ang) * rad * 1.3; pool.py[pi] = y0; pool.pz[pi] = v1.z + Math.sin(ang) * rad * 1.3;
+          const y0 = v1.y + (0.25 + rnd() * 0.7) * h;
+          pool.px[pi] = v1.x + Math.cos(ang) * rad * 0.9; pool.py[pi] = y0; pool.pz[pi] = v1.z + Math.sin(ang) * rad * 0.9;
           pool.rot[pi] = rnd() * TAU; pool.rotV[pi] = 0; pool.fadeIn[pi] = 0; pool.frames[pi] = 1; pool.drag[pi] = 1;
-          if (a.style === 3) {
-            // crackling arcs: short jagged streaks on the shell
-            pool.vx[pi] = (rnd() - 0.5) * 30; pool.vy[pi] = (rnd() - 0.5) * 30; pool.vz[pi] = (rnd() - 0.5) * 30;
-            pool.life[pi] = 0.06; pool.s0[pi] = 0.05; pool.s1[pi] = 0.03; pool.stretch[pi] = 0.02; pool.mat[pi] = 1; pool.cell[pi] = CELL.streak;
-            pool.cr[pi] = 1.8; pool.cg[pi] = 1.9; pool.cb[pi] = 2.2; pool.ca[pi] = 1; pool.grav[pi] = 0; pool.core[pi] = 1;
-          } else {
-            pool.vx[pi] = (rnd() - 0.5) * 0.6; pool.vy[pi] = a.style === 2 ? 2.5 + rnd() * 2 : 0.6; pool.vz[pi] = (rnd() - 0.5) * 0.6;
-            pool.life[pi] = 0.5 + rnd() * 0.5; pool.s0[pi] = a.style === 4 ? 0.22 : 0.14; pool.s1[pi] = 0.03; pool.stretch[pi] = 0;
-            pool.mat[pi] = 0; pool.cell[pi] = a.style === 4 ? CELL.star : CELL.spark; pool.grav[pi] = a.style === 2 ? -1 : 0; pool.core[pi] = 0.6;
-            const hh = 1.8 * hdrMul;
-            pool.cr[pi] = (a.style === 4 ? 1 : cBody.r) * hh; pool.cg[pi] = (a.style === 4 ? 1 : cBody.g) * hh; pool.cb[pi] = (a.style === 4 ? 1 : cBody.b) * hh;
-            pool.ca[pi] = 1;
+          pool.vx[pi] = (rnd() - 0.5) * 0.7; pool.vy[pi] = a.style === 2 ? 1.2 + rnd() * 1.6 : 0.6; pool.vz[pi] = (rnd() - 0.5) * 0.7;
+          pool.life[pi] = a.style === 2 ? 0.9 + rnd() * 0.7 : 0.5 + rnd() * 0.5; pool.s0[pi] = a.style === 4 ? 0.2 : 0.17; pool.s1[pi] = 0.04; pool.stretch[pi] = 0;
+          pool.mat[pi] = 0; pool.cell[pi] = a.style === 4 ? CELL.star : CELL.spark; pool.grav[pi] = a.style === 2 ? -0.6 : 0; pool.core[pi] = 0.6;
+          const hh = 1.8 * hdrMul;
+          const hot = a.style === 2 && rnd() < 0.35;
+          pool.cr[pi] = (a.style === 4 || hot ? 1 : cBody.r) * hh; pool.cg[pi] = (a.style === 4 || hot ? 0.95 : cBody.g) * hh; pool.cb[pi] = (a.style === 4 || hot ? 0.85 : cBody.b) * hh;
+          pool.ca[pi] = 1;
+        }
+      }
+      if (form) {
+        const k = Math.min(1, cur * 1.15);
+        // lantern glow: soft additive sprites on the chest and hands stand in for bloom (all tiers)
+        const pulse = 0.85 + 0.15 * Math.sin(a.phase * 3.1);
+        const gl = 1.15 * hdrMul;
+        if (c.actors && c.actors.socket) {
+          c.actors.socket(ent, 'chest', v2);
+          parts.sprite(0, v2.x, v2.y, v2.z, h * 0.75 * pulse, 0, CELL.dot, cBody.r * gl, cBody.g * gl, cBody.b * gl, 0.42 * k, 0.15, 0, 0, 0, 0);
+          c.actors.socket(ent, 'handR', v2);
+          parts.sprite(0, v2.x, v2.y, v2.z, 0.42 * pulse, 0, CELL.dot, cBody.r * gl, cBody.g * gl, cBody.b * gl, 0.75 * k, 0.5, 0, 0, 0, 0);
+          c.actors.socket(ent, 'handL', v2);
+          parts.sprite(0, v2.x, v2.y, v2.z, 0.42 * pulse, 0, CELL.dot, cBody.r * gl, cBody.g * gl, cBody.b * gl, 0.75 * k, 0.5, 0, 0, 0, 0);
+          c.actors.socket(ent, 'head', v2);
+          parts.sprite(0, v2.x, v2.y + 0.05, v2.z, 0.55, 0, CELL.dot, cBody.r * gl, cBody.g * gl, cBody.b * gl, 0.28 * k, 0.1, 0, 0, 0, 0);
+        }
+        const fy = Math.sin(ent.yaw);
+        const fz = Math.cos(ent.yaw);
+        if (a.style === 3) {
+          // Tempest: three paper-cut wind ribbons on tilted orbits around the body (no lightning, no arcs)
+          for (let r = 0; r < 3; r++) {
+            const tilt = r === 0 ? 0.45 : r === 1 ? -0.38 : 0.12;
+            const az = r * 2.1;
+            const orb = rad + 0.45 + r * 0.12;
+            const cy = v1.y + h * (0.32 + r * 0.2);
+            const head = a.phase * (2.6 + r * 0.5) + r * 2.0;
+            for (let q = 0; q < 6; q++) {
+              const th = head - q * 0.24;
+              const ox = Math.cos(th) * orb;
+              const oz = Math.sin(th) * orb;
+              const oy = Math.sin(th + az) * orb * tilt;
+              const tx = -Math.sin(th);
+              const tz = Math.cos(th);
+              const ty = Math.cos(th + az) * tilt;
+              const fade = (1 - q / 6) * k;
+              const w = 1.5 * hdrMul;
+              parts.sprite(1, v1.x + ox, cy + oy, v1.z + oz, 0.07 + 0.03 * (1 - q / 6), 0, CELL.streak, cFringe.r * w, cFringe.g * w, cFringe.b * w, 0.9 * fade, 0.6, 0.34, tx, ty, tz);
+            }
+          }
+          // a gust ring at the feet every 0.9 s
+          a.dustT -= dt;
+          if (a.dustT <= 0 && cur > 0.3) {
+            a.dustT = 0.9;
+            waveOpts.radius = rad + 2.4; waveOpts.seconds = 0.55; waveOpts.color = a.fringe.getHex(); waveOpts.sphere = false; waveOpts.ground = true;
+            vfx.shockwave(v1.x, v1.y, v1.z, waveOpts);
+          }
+        } else if (a.style === 4) {
+          // Zenith: six slow motes orbiting behind the shoulders and a thin halo
+          for (let q = 0; q < 6; q++) {
+            const th = a.phase * 0.9 + (q * TAU) / 6;
+            const rr = rad + 0.55;
+            const yy = v1.y + h * (0.55 + 0.25 * Math.sin(th * 2 + q));
+            parts.sprite(0, v1.x + Math.cos(th) * rr - fy * 0.15, yy, v1.z + Math.sin(th) * rr - fz * 0.15, 0.16, th, CELL.star, 1.6 * hdrMul, 1.55 * hdrMul, 1.7 * hdrMul, 0.85 * k, 0.6, 0, 0, 0, 0);
+          }
+          parts.sprite(0, v1.x - fy * 0.12, v1.y + h + 0.22, v1.z - fz * 0.12, 0.62, a.phase, CELL.ring, 1.5 * hdrMul, 1.5 * hdrMul, 1.6 * hdrMul, 0.5 * k, 0.5, 0, 0, 0, 0);
+        } else if (a.style === 2) {
+          // Ember: the sash burns, a trail of hot sparks behind the back
+          if (c.actors && c.actors.socket) {
+            c.actors.socket(ent, 'back', v2);
+            for (let q = 0; q < 3; q++) {
+              const sx = v2.x - fy * (0.15 + q * 0.18);
+              const sz = v2.z - fz * (0.15 + q * 0.18);
+              parts.sprite(0, sx, v2.y - 0.25 - q * 0.22, sz, 0.34 - q * 0.06, 0, CELL.dot, 1.6 * hdrMul, 1.05 * hdrMul, 0.6 * hdrMul, 0.55 * k, 0.4, 0, 0, 0, 0);
+            }
           }
         }
+        auraGlow(a, v1.x, v1.z, (0.75 + 0.25 * Math.sin(a.phase * 2.3)) * k);
+      } else {
+        auraGlowOff(a);
       }
       if (!low) {
-        // orbiting pebbles and the ground dust ring every 600 ms
-        const base = v1.y + 0.15 + 0.5 * cur;
-        for (let k = 0; k < 12; k++) {
-          const ang = a.phase * 1.3 + (k * TAU) / 12;
-          const rr = rad + 0.9 + 0.25 * Math.sin(k * 2.1 + a.phase);
-          const yy = base + 0.35 * Math.sin(k * 1.7 + a.phase * 2) * cur;
-          parts.sprite(2, v1.x + Math.cos(ang) * rr, yy, v1.z + Math.sin(ang) * rr, 0.12 + 0.05 * (k % 3), ang, CELL.pebble,
-            0.75, 0.68, 0.6, Math.min(1, cur * 1.5), 0, 0, 0, 0, 0);
+        // orbiting pebbles and the ground dust ring every 600 ms (Gather and charge; Forms have their own)
+        if (!form) {
+          const base = v1.y + 0.15 + 0.5 * cur;
+          for (let k = 0; k < 12; k++) {
+            const ang = a.phase * 1.3 + (k * TAU) / 12;
+            const rr = rad + 0.9 + 0.25 * Math.sin(k * 2.1 + a.phase);
+            const yy = base + 0.35 * Math.sin(k * 1.7 + a.phase * 2) * cur;
+            parts.sprite(2, v1.x + Math.cos(ang) * rr, yy, v1.z + Math.sin(ang) * rr, 0.12 + 0.05 * (k % 3), ang, CELL.pebble,
+              0.75, 0.68, 0.6, Math.min(1, cur * 1.5), 0, 0, 0, 0, 0);
+          }
+          a.dustT -= dt;
+          if (a.dustT <= 0 && cur > 0.3) {
+            a.dustT = 0.6;
+            waveOpts.radius = rad + 2.2; waveOpts.seconds = 0.5; waveOpts.color = PALETTE.paper; waveOpts.sphere = false; waveOpts.ground = true;
+            vfx.shockwave(v1.x, v1.y, v1.z, waveOpts);
+          }
         }
-        a.dustT -= dt;
-        if (a.dustT <= 0 && cur > 0.3) {
-          a.dustT = 0.6;
-          waveOpts.radius = rad + 2.2; waveOpts.seconds = 0.5; waveOpts.color = PALETTE.paper; waveOpts.sphere = false; waveOpts.ground = true;
-          vfx.shockwave(v1.x, v1.y, v1.z, waveOpts);
-        }
-      }
-      if (a.style === 4) {
-        // zenith halo above the head
-        parts.sprite(0, v1.x, v1.y + h + 0.35, v1.z, 0.9, a.phase, CELL.glyph, 1.5 * hdrMul, 1.5 * hdrMul, 1.6 * hdrMul, 0.6 * cur, 0.5, 0, 0, 0, 0);
       }
       if (cur > 0.98 && !a.wasFull && !a.releasing) {
         a.wasFull = true;
@@ -990,6 +1113,97 @@ export function createVfx(ctx) {
     }
   }
 
+  /** Fractional part of a hash of i (stable per streak). @param {number} i @param {number} k */
+  function h01(i, k) {
+    const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  /**
+   * Speed (ART_UX 3.x boost feel, FOV-independent): while the player boosts, world-space wind streaks stream past
+   * the body along its velocity, and at the sonic stage the screen speed lines (render overlay, also on low) run.
+   * @param {any} c @param {number} dt @param {number} alpha @param {boolean} low
+   */
+  function updateSpeed(c, dt, alpha, low) {
+    const p = c.player;
+    const mv = p && p.alive ? p.move : null;
+    const flying = !!mv && (mv.mode === 'fly' || mv.mode === 'air');
+    const v = p ? Math.sqrt(p.vel.x * p.vel.x + p.vel.y * p.vel.y + p.vel.z * p.vel.z) : 0;
+    const target = !p || !p.alive || pBoost === 0 || v < 8 ? 0 : pBoost === 2 ? 1 : flying ? 0.45 : 0.3;
+    speedK += (target - speedK) * Math.min(1, dt * (target > speedK ? 6 : 3));
+    if (speedK < 0.02 || !p) return;
+    if (pBoost === 2 && ctx.render && typeof ctx.render.speedLines === 'function') ctx.render.speedLines(0.35 + 0.65 * speedK);
+    speedT += dt;
+    c.ents.renderPos(p, alpha, v1);
+    const inv = 1 / Math.max(0.001, v);
+    const dx = p.vel.x * inv;
+    const dy = p.vel.y * inv;
+    const dz = p.vel.z * inv;
+    // a frame around the velocity axis
+    let ux = 0; let uy = 1; let uz = 0;
+    if (Math.abs(dy) > 0.9) { ux = 1; uy = 0; }
+    let rx = dy * uz - dz * uy; let ry = dz * ux - dx * uz; let rz = dx * uy - dy * ux;
+    const rl = Math.sqrt(rx * rx + ry * ry + rz * rz) || 1;
+    rx /= rl; ry /= rl; rz /= rl;
+    const qx = ry * dz - rz * dy; const qy = rz * dx - rx * dz; const qz = rx * dy - ry * dx;
+    const n = Math.round((low ? 34 : 56) * speedK);
+    const span = 34;
+    const cy = v1.y + (p.height || 1.8) * 0.5;
+    const rate = (v + 20) / span;
+    for (let i = 0; i < n; i++) {
+      const ph = speedT * rate * (0.8 + 0.4 * h01(i, 1)) + h01(i, 2);
+      const f = ph - Math.floor(ph);
+      const along = (0.6 - f) * span;
+      const ang = h01(i, 3) * TAU;
+      const rad = 1.6 + 5.5 * h01(i, 4);
+      const ox = Math.cos(ang) * rad;
+      const oy = Math.sin(ang) * rad;
+      const px = v1.x + dx * along + rx * ox + qx * oy;
+      const py = cy + dy * along + ry * ox + qy * oy;
+      const pz = v1.z + dz * along + rz * ox + qz * oy;
+      const fade = Math.min(1, f * 5) * Math.min(1, (1 - f) * 4) * speedK;
+      const len = (2 + 4 * h01(i, 5)) * (0.5 + 0.5 * speedK);
+      const w = 0.07 + 0.07 * h01(i, 6);
+      parts.sprite(1, px, py, pz, w, 0, CELL.streak, 1.3, 1.35, 1.4, 0.6 * fade, 0.3, len, dx, dy, dz);
+    }
+  }
+
+  /**
+   * Weather layer (driven by env.setFog's `snow`): wind-blown snow streaks in a box around the camera.
+   * @param {any} c @param {number} dt @param {boolean} low
+   */
+  function updateWeather(c, dt, low) {
+    weatherK += (weatherTarget - weatherK) * Math.min(1, dt * 1.5);
+    if (weatherK < 0.02) return;
+    const cam = c.three && c.three.camera;
+    if (!cam) return;
+    weatherT += dt;
+    const W = ctx.render && ctx.render.globals ? ctx.render.globals.uWind.value : null;
+    const wx = W ? W.x * 7 : 5;
+    const wz = W ? W.z * 7 : 2;
+    const n = Math.round((low ? 170 : 300) * weatherK);
+    const B = 20;
+    const H = 14;
+    const cx = cam.position.x;
+    const cy = cam.position.y;
+    const cz = cam.position.z;
+    const fall = 5.5;
+    for (let i = 0; i < n; i++) {
+      const sp = 0.75 + 0.5 * h01(i, 7);
+      // positions wrap inside the box around the camera, so the snow never runs out and never pops
+      let x = h01(i, 8) * B + wx * weatherT * sp - cx;
+      let y = h01(i, 9) * H - fall * weatherT * sp - cy;
+      let z = h01(i, 10) * B + wz * weatherT * sp - cz;
+      x -= Math.floor(x / B) * B; y -= Math.floor(y / H) * H; z -= Math.floor(z / B) * B;
+      const px = cx + x - B * 0.5;
+      const py = cy + y - H * 0.5;
+      const pz = cz + z - B * 0.5;
+      const edge = Math.min(1, Math.min(x, B - x, z, B - z) / 3) * Math.min(1, Math.min(y, H - y) / 2);
+      // normal-blended soft flakes: additive white would vanish against the bright fog
+      parts.sprite(2, px, py, pz, 0.12 + 0.12 * h01(i, 11), 0, CELL.dot, 1, 1, 1, 0.95 * edge * weatherK, 0.8, 0, 0, 0, 0);
+    }
+  }
+
   /** @param {any} c @param {number} dt */
   function updateShells(c, dt) {
     const shells = mfx.shells;
@@ -999,8 +1213,19 @@ export function createVfx(ctx) {
       s.t += dt;
       const k = Math.min(1, s.t / s.seconds);
       const e = 1 - (1 - k) * (1 - k) * (1 - k);
-      s.mesh.scale.setScalar(Math.max(0.01, s.radius * e));
-      s.mat.uniforms.uAlpha.value = Math.pow(1 - k, 1.4);
+      const rr = Math.max(0.01, s.radius * e);
+      s.mesh.scale.setScalar(rr);
+      // a shockwave sphere that has swept past the camera would wash the whole screen (and hide the player in
+      // the crater): it fades out while the camera is inside it
+      let inside = 1;
+      const cp = ctx.render && ctx.render.globals ? ctx.render.globals.uCamPos.value : null;
+      if (cp) {
+        const d = cp.distanceTo(s.mesh.position);
+        if (d < rr) inside = d > rr * 0.85 ? (d - rr * 0.85) / (rr * 0.15) : 0;
+      }
+      s.mat.uniforms.uAlpha.value = Math.pow(1 - k, 1.4) * inside;
+      // fully faded spheres around the camera are not drawn at all (a screen of overdraw on the phone)
+      s.mesh.visible = inside > 0.01;
       if (k >= 1) {
         s.active = false;
         s.mesh.visible = false;
@@ -1253,6 +1478,8 @@ export function createVfx(ctx) {
       parts.clearSprites();
       updateEmitters(c, dt, alpha, low);
       updateAuras(c, dt, alpha, low);
+      updateSpeed(c, dt, alpha, low);
+      updateWeather(c, dt, low);
       updateShells(c, dt);
       updateDecals(dt);
       updateOrbs(c, dt, low);
@@ -1440,6 +1667,7 @@ export function createVfx(ctx) {
     /** @param {any} e move:boost */
     boost(e) {
       let slot = -1;
+      if (ctx.player && e.entId === ctx.player.id) pBoost = e.stage;
       for (let i = 0; i < MAX_BOOST; i++) if (boostEnt[i] === e.entId) slot = i;
       if (e.stage === 0) {
         if (slot >= 0) {

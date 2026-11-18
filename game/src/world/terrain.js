@@ -30,12 +30,14 @@ ${glsl.common}
 attribute vec4 aNormal;
 attribute vec4 aColor;
 uniform vec3 uFoliage[7];
+uniform vec3 uShade[7];
 uniform float uSink;
 uniform float uSinkRadius;
 uniform float uCanopyNear;
 uniform float uCanopyFar;
 varying vec3 vGround;
 varying vec3 vCanopy;
+varying vec3 vShade;
 varying float vCanopyAmt;
 varying float vDens;
 varying vec3 vNormalW;
@@ -48,6 +50,7 @@ void main() {
   float dens = aColor.a;
   int ri = int(clamp(aNormal.w * 127.0 + 0.5, 0.0, 6.0));
   vCanopy = uFoliage[ri];
+  vShade = uShade[ri];
   vGround = g * (1.0 - 0.16 * dens);
   vDens = dens;
   vCanopyAmt = dens * smoothstep(uCanopyNear, uCanopyFar, dist);
@@ -63,6 +66,7 @@ ${glsl.lighting}
 ${glsl.fog}
 varying vec3 vGround;
 varying vec3 vCanopy;
+varying vec3 vShade;
 varying float vCanopyAmt;
 varying float vDens;
 varying vec3 vNormalW;
@@ -80,9 +84,17 @@ void main() {
   float bump = tn(vPosW.xz * 0.085) * 0.65 + tn(vPosW.xz * 0.031 + 17.0) * 0.35;
   float amt = clamp(vCanopyAmt * 1.5 - (1.0 - bump) * 0.55, 0.0, 1.0);
   vec3 canopy = vCanopy * (0.55 + 0.8 * bump);
-  vec3 base = mix(vGround, canopy, amt);
+  // Painted ground (ART_UX 1.2/1.8): soft-edged patches of the region's shade colour and lighter sunlit
+  // patches from the same value noise, then a fine stipple near the camera so the foreground is never a flat fill.
+  float flat01 = smoothstep(0.55, 0.85, n.y);
+  float dark = smoothstep(0.56, 0.64, bump) * 0.3 * flat01;
+  float lite = smoothstep(0.36, 0.28, bump) * 0.09 * flat01;
+  vec3 ground = mix(vGround, vShade, dark) * (1.0 + lite);
+  vec3 base = mix(ground, canopy, amt);
   float grain = tn(vPosW.xz * 0.33) - 0.5;
-  base *= 1.0 + grain * 0.14 * (1.0 - smoothstep(40.0, 180.0, dist));
+  float fine = tn(vPosW.xz * 1.9 + grain) - 0.5;
+  float nearK = 1.0 - smoothstep(40.0, 180.0, dist);
+  base *= 1.0 + grain * 0.16 * nearK + fine * 0.13 * (1.0 - smoothstep(6.0, 45.0, dist));
   vec3 ln = normalize(n + vec3(bump - 0.5, 0.0, tn(vPosW.xz * 0.085 + 5.0) - 0.5) * amt * 0.9);
   // Terrain takes no rim light: the view vector is the normal itself.
   vec3 c = toonLight(base, ln, ln);
@@ -100,6 +112,8 @@ export function createTerrain(ctx, grid) {
   const glsl = ctx.render.glsl;
   const g = ctx.render.globals;
   const foliage = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].foliage).multiplyScalar(0.88));
+  // region shade colours for the painted ground patches (Color stores linear values, like the foliage)
+  const shade = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].shade));
 
   /** @param {boolean} far */
   function material(far) {
@@ -109,6 +123,7 @@ export function createTerrain(ctx, grid) {
         uShadowTint: g.uShadowTint, uFogColor: g.uFogColor, uFogDensity: g.uFogDensity, uFogHeight: g.uFogHeight,
         uRimColor: g.uRimColor, uCamPos: g.uCamPos, uWind: g.uWind,
         uFoliage: { value: foliage },
+        uShade: { value: shade },
         uSink: { value: far ? 1 : 0 },
         uSinkRadius: { value: 1152 },
         uCanopyNear: { value: 300 },
