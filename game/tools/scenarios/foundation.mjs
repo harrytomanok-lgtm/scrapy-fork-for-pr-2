@@ -543,6 +543,9 @@ export const scenarios = [
       });
       await shot('foundation-touch-portrait');
       await page.setViewportSize({ width: 640, height: 360 });
+      // The touch layout follows resize events (it no longer measures every frame); a browser delivers them in
+      // the rendering steps before the next animation frame, so wait for one as a real device would.
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(true))));
       await game((g) => {
         g.setLang('he');
         g.render();
