@@ -1870,3 +1870,28 @@ Each package reported where its code differs from, or adds to, the contract abov
 - Added audio.debug().place (palette, nearSiphon, nearSiphonD, nearCamp, siphonLoop, siphonId). The place check also runs without an AudioContext so tests can read it.
 - Choir camps are found from the spawnTable def of the camp's region: a camp is Choir when any camps row for its tier has a camp_choir_* group. The corrupted-music radius for camps (140 m) and the Siphon drone on/off distances (170 m / 210 m) are my values; ART_UX gives none.
 - In test mode without autoplay the vfx update uses game-clock time instead of the real frame time (3.4 says frame dt is real seconds). Normal play is unchanged.
+
+### integration: foundation (boot, splash, sandbox, input)
+
+- Additions to the debug API: `__GAME__.bootTimes()` returns { stages:[{stage, at, ms}], total, firstPaint, firstContentfulPaint }, in ms since navigation. foundation-api now lists it in API_MEMBERS. New core module src/core/bootclock.js (markBoot, bootTimes); it has no three or DOM dependency.
+- The HTML outputs (2.5) now contain a static loading splash inside #app (theme.splashMarkup: the overlay layer with .k-loading, no text and no external reference). htmlOutputs() takes an optional `splash`. dom.createDom adopts layers that already exist in #app (by data-layer) before creating any.
+- boot.js exports paintYield(). main.js waits for one paint before boot(), and boot.js waits for one between blocking stages, so __GAME__ now appears about one frame later than before.
+- Context loss (3.1 and 3.9): there is now a 'restoring' toast (ui:toast with key core.fatal.contextLost) once the loss lasts 1 s, and after CONTEXT_RESTORE_MS = 8000 without a restore the fatal screen opens with the new string core.fatal.contextGone.
+- Input (4.8): the kbm source no longer asks for pointer lock from mousedown events that a touch screen generates (sourceCapabilities.firesTouchEvents), and stops asking after a pointerlockerror when no lock has ever succeeded.
+
+### integration: visual pass (world, env, actors, render, vfx)
+
+- Added env.setFog({density,color,seconds,snow}) and env.clearFog(seconds), plus a fog field in env.info(); these are not in the contract.
+- Added vfx.weather(kind, amount) (internal, used by env), speed and weather fields in vfx.debugState(), and an internal decal kind 'glow' (6) for the Form ground light.
+- Toon material: a fogScale above 1 now means fog density x fogScale (it used to be an extrapolating mix); values of 1 or less behave as before. The Shattered Crown uses 9.
+- Forms no longer show the aura shell at rest (shell only during the transform flare); Gather and enemy auras keep it. This follows ART_UX 2.3 rather than the earlier vfx behaviour.
+- Arena basin stamps (landmark type 'arena') clamp the rim to at least 6 m and the floor to at least 3 m above sea, so the bramble_hollow and burrow_pit terrain changes.
+- Hero Form specs: emissive values lowered (Ember sash 1.5 to 0.55, seams 2.4 to 1.2 to 1.4) so the hue survives on the low tier without bloom; the Tempest mantle uses the PALETTE.tempest colour instead of the near-white ribbon colour.
+
+### integration: playthrough fixes (rpg, ai, ui, control)
+
+- ai arena rule: a boss tagged SCRIPTED by a quest script does not reset when the player leaves its arena, and after release it waits for the player to come back. Section 12 (ai) says the arena-leave reset applies after the player has been inside radius + 60. Without this exception the MQ7 tether finale, which sends the player to the Spire base 300 m away, could never be won.
+- Quest engine: a destroy step whose object is already destroyed (in store.world.siphons, or flagged obj.<id>.destroyed) completes on the next poll. GDD 8.1 says a destroy step completes when 'the object's HP reached 0'. Added the optional QuestHost.destroyed(objId).
+- The rpg 'ending' script opens the ui 'ending' screen itself, even in test mode, after the mq7_ending dialogue and a 0.3 s wait. Nothing else ever opened that screen.
+- MQ1 tutorial additions not in GDD 2: - self-destructed wisps are replaced - an Ora refill and a floor of 12 Ora during the wisp step - a 'Hold Descend to land' prompt before the boars when the player is flying - a touch-specific lock prompt - the Breaker hint (GDD 2 lists it as a hint strip) shows after the first lock-on
+- ui: the pause-tab screens and the shop (pause, character, techniques, inventory, quests, map, settings, controls, savecode, shop) now hide the HUD, as the screens that block play already did.
