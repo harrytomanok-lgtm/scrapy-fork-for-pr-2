@@ -189,6 +189,19 @@ test('quest engine: tagged kills count through questTag; resume re-runs only wor
   assert.equal(h2.engine.current('mq2').id, 's4');
 });
 
+test('quest engine: a destroy step whose object was destroyed earlier (free roam) completes on the next poll', () => {
+  const h = harness([Q('t', [{ id: 'talk', type: 'talk', npc: 'bren', dialogue: 'd' }, { id: 'des', type: 'destroy', object: 'siphon_3' }, { id: 'end', type: 'talk', npc: 'bren', dialogue: 'e' }])]);
+  const gone = new Set();
+  h.host.destroyed = (id) => gone.has(id);
+  h.engine.start('t');
+  gone.add('siphon_3');
+  h.engine.poll(0, 0, 0, () => false, {});
+  assert.equal(h.engine.current('t').id, 'talk', 'only the current step is checked');
+  h.engine.completeStep('t');
+  h.engine.poll(0, 0, 0, () => false, {});
+  assert.equal(h.engine.current('t').id, 'end', 'the already destroyed Siphon counts');
+});
+
 test('dialogue: traversal, node and choice actions, conditional choices', () => {
   const events = [];
   const ran = [];

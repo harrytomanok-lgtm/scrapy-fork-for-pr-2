@@ -273,7 +273,10 @@ export function registerScripts(ctx) {
       c.combat.addOra(p, p.stats.oraMax);
     }
     c.rpg.setFlag('ending', true);
-    api.say('mq7_ending').then(() => {
+    // The credits card (nothing else opens the ui 'ending' screen) opens a moment after the last line, once the
+    // dialogue screen has closed; free roam resumes when it is closed.
+    api.say('mq7_ending').then(() => api.wait(0.3)).then(() => {
+      if (c.ui) c.ui.open('ending', {});
       c.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.freeRoam', args: null });
       api.done();
     });

@@ -617,7 +617,505 @@ function firstTen(name, w, h) {
   };
 }
 
+/**
+ * In the page: `window.__M`, the main-path drivers on top of `__P`. Travel is by teleport (debug), but every quest
+ * step is completed through its real event: dialogues tapped through the UI, kills and destroys by the player's
+ * damage, the bosses' real phases, interacts by the Interact action.
+ */
+function installMain() {
+  const g = /** @type {any} */ (window).__GAME__;
+  const ctx = g.ctx;
+  const P = /** @type {any} */ (window).__P;
+  const M = { log: [], deaths: 0, phases: {}, fallbacks: [] };
+  const note = (s) => M.log.push(s);
+  M.step = (qid) => {
+    const a = ctx.quests.active().find((x) => x.questId === qid);
+    return a ? a.stepId : ctx.quests.state(qid);
+  };
+  M.def = (qid) => {
+    const a = ctx.quests.active().find((x) => x.questId === qid);
+    if (!a) return null;
+    return ctx.defs.find('quest', qid).steps[a.stepIndex];
+  };
+  /** Run the sim, tapping through dialogues; stop early when the death screen is up. */
+  M.run = (n) => {
+    for (let t = 0; t < n; t += 10) {
+      if (ctx.ui.top() === 'dialogue') P.dlg();
+      if (ctx.ui.top() === 'death') return false;
+      if (ctx.ui.top() === 'ending') return false;
+      P.sim(10);
+    }
+    if (ctx.ui.top() === 'dialogue') P.dlg();
+    return true;
+  };
+  M.go = (x, z, o) => {
+    g.teleport(x, z, o || {});
+    M.run(20);
+  };
+  M.marker = (qid) => {
+    for (const m of ctx.quests.markers()) if (m.questId === qid) return { x: m.x, z: m.z };
+    return null;
+  };
+  /** Walk up to an NPC and press Interact; the dialogue is tapped through. */
+  M.talk = (qid, npc) => {
+    const mk = M.marker(qid);
+    if (mk) M.go(mk.x + 2.5, mk.z + 2.5);
+    M.run(70);
+    const nid = ctx.quests.npcEntity(npc);
+    const e = nid ? ctx.ents.get(nid) : null;
+    if (e) {
+      g.teleport(e.pos.x + 2, e.pos.z + 2);
+      M.run(12);
+    }
+    let how = 'interact';
+    if (ctx.quests.focus) {
+      g.press('interact');
+      P.sim(2);
+    }
+    if (!ctx.quests.dialogueOpen) {
+      how = 'talkTo';
+      M.fallbacks.push(qid + ':' + npc + ' focus=' + ctx.quests.focus + ' npc=' + !!e);
+      ctx.quests.talkTo(npc);
+    }
+    const lines = P.dlg(120);
+    M.run(10);
+    note(qid + ' talk ' + npc + ' (' + how + ', ' + lines.length + ' lines)');
+  };
+  /** Damage enemies that match until the step moves on. */
+  M.kill = (qid, match, spawn) => {
+    const s0 = M.step(qid);
+    for (let k = 0; k < 60 && M.step(qid) === s0; k++) {
+      let any = false;
+      for (const e of ctx.ents.list('enemy')) {
+        if (!e.alive || !match(e)) continue;
+        any = true;
+        g.teleport(e.pos.x + 3, e.pos.z + 3);
+        P.sim(2);
+        g.damage(e.id, 0.6);
+        P.sim(4);
+        if (e.alive && e.stats.hp > 0) g.damage(e.id, 0.6);
+        P.sim(2);
+      }
+      if (!any && spawn) spawn();
+      M.run(20);
+    }
+    note(qid + ' kill -> ' + M.step(qid));
+  };
+  /** Fight a boss the quest started: damage in chunks so every phase plays. */
+  M.boss = (qid, bossId, onTick) => {
+    const s0 = M.step(qid);
+    const ph = [];
+    let boss = null;
+    for (let k = 0; k < 30 && !boss; k++) {
+      boss = ctx.ents.list('boss').find((b) => b.alive && b.defId === bossId) || null;
+      if (!boss) M.run(10);
+    }
+    if (!boss) {
+      note(qid + ' boss ' + bossId + ' never spawned');
+      return;
+    }
+    const id = boss.id;
+    for (let k = 0; k < 400 && M.step(qid) === s0; k++) {
+      const b = ctx.ents.get(id);
+      if (onTick && onTick(b)) continue;
+      if (b && b.alive && (b.tags & 64) === 0) {
+        g.teleport(b.pos.x + 7, b.pos.z + 7, { alt: b.move && b.move.mode === 'fly' ? b.pos.y - g.heightAt(b.pos.x, b.pos.z) : 0 });
+        P.sim(2);
+        g.damage(id, 0.05);
+      }
+      if (!M.run(20)) break;
+    }
+    for (const e of g.events(['boss:phase'])) if (e.payload.bossId === bossId) ph.push(e.payload.phase);
+    M.phases[bossId] = ph;
+    const bb = ctx.ents.get(id);
+    note(qid + ' boss ' + bossId + ' phases ' + JSON.stringify(ph) + ' -> ' + M.step(qid) + (bb && bb.alive ? ' (alive hp ' + Math.round(bb.stats.hp) + '/' + Math.round(bb.stats.hpMax) + ' tags ' + bb.tags + ' cs ' + bb.combat.state + ')' : ''));
+  };
+  M.destroy = (qid, objId) => {
+    const s0 = M.step(qid);
+    for (let k = 0; k < 300 && M.step(qid) === s0; k++) {
+      const o = ctx.quests.objects().find((x) => x.id === objId);
+      if (!o) break;
+      const e = o.entId ? ctx.ents.get(o.entId) : null;
+      if (!e) {
+        M.go(o.x + 14, o.z + 14);
+        continue;
+      }
+      const d = Math.hypot(e.pos.x - ctx.player.pos.x, e.pos.z - ctx.player.pos.z);
+      if (d > 30) g.teleport(e.pos.x + 14, e.pos.z + 14);
+      g.damage(e.id, 0.08);
+      if (!M.run(20)) break;
+    }
+    note(qid + ' destroy ' + objId + ' -> ' + M.step(qid));
+  };
+  M.interact = (qid, objId) => {
+    const o = ctx.quests.objects().find((x) => x.id === objId);
+    if (!o) return note(qid + ' no object ' + objId);
+    M.go(o.x + 1.5, o.z + 1.5);
+    const f = ctx.quests.focus;
+    g.press('interact');
+    M.run(10);
+    note(qid + ' interact ' + objId + ' focus=' + f);
+  };
+  M.gotoStep = (qid) => {
+    const mk = M.marker(qid);
+    if (mk) M.go(mk.x, mk.z);
+    M.run(30);
+    note(qid + ' goto -> ' + M.step(qid));
+  };
+  /** Death: watch for the death screen and tap a button (Rise or Retry). */
+  M.deathTap = (which) => {
+    // The death screen opens from the ui frame, so frames are rendered while waiting.
+    for (let k = 0; k < 60 && ctx.ui.top() !== 'death'; k++) g.step(10);
+    if (ctx.ui.top() !== 'death') return false;
+    g.render();
+    const bs = document.querySelectorAll('[data-screen=death] .ui-btn');
+    const b = which === 'retry' ? bs[1] : bs[0];
+    if (!b || b.hidden) return false;
+    b.click();
+    M.deaths++;
+    M.run(20);
+    return true;
+  };
+  /** Bring the player to a level with XP grants (each level-up is a real rpg:levelUp). */
+  M.level = (l) => {
+    for (let k = 0; k < 400 && ctx.rpg.level < l; k++) g.grantXp(40 * ctx.rpg.level * ctx.rpg.level + 100);
+    M.run(10);
+  };
+  /** @type {any} */ (window).__M = M;
+  return true;
+}
+
+/** The MQ7 tether phase: carry each thread from its anchor to the Spire base with Interact. */
+function tetherTick(b) {
+  const g = /** @type {any} */ (window).__GAME__;
+  const ctx = g.ctx;
+  const M = /** @type {any} */ (window).__M;
+  const a = ctx.quests.active().find((x) => x.questId === 'mq7');
+  if (!a || a.objectiveKey !== 'quest.mq7.tether') return false;
+  M.tethers = (M.tethers || 0) + 1;
+  for (const d of ctx.defs.all('object')) {
+    if (!d.id.startsWith('tether_')) continue;
+    g.teleport(d.x + 1, d.z + 1);
+    M.run(4);
+    if (ctx.quests.focus !== d.id) continue;
+    g.press('interact');
+    M.run(4);
+    g.teleport(6, 6, { alt: 4 });
+    M.run(6);
+  }
+  M.run(10);
+  return true;
+}
+
+const mainPath = {
+  name: 'play-main-path',
+  width: 844,
+  height: 390,
+  touch: true,
+  query: 'lang=he&quality=low',
+  async run({ page, game, assert, shot, harness }) {
+    const setup = async () => {
+      await game(installHelpers);
+      await game(installMain);
+      await game((g) => {
+        g.setDevice('touch');
+        g.god(true);
+      });
+    };
+    await setup();
+    // A frame after a long teleport chain builds many terrain chunks: warm up first, retry once under load.
+    const snap = async (name) => {
+      await game((g) => {
+        g.ctx.world.flushBuilds();
+        g.render();
+        g.render();
+      });
+      try {
+        await shot(name);
+      } catch (err) {
+        console.log('    shot retry ' + name + ': ' + String(err).split('\n')[0]);
+        await shot(name);
+      }
+    };
+    const tap = async (sel) => {
+      await game((g) => g.render());
+      await page.tap(sel);
+      await game((g) => g.render());
+    };
+
+    // ---- MQ2: Dov, Mira (equip the wraps with taps), the raid, Durn (die once, Retry), Kerrin, Siphon I, Sela.
+    const a = await game(() => {
+      const M = window.__M;
+      M.talk('mq2', 'dov');
+      M.talk('mq2', 'mira');
+      return { step: M.step('mq2'), wraps: window.__GAME__.ctx.rpg.count('training_wraps'), log: M.log.slice() };
+    });
+    console.log('    ' + JSON.stringify(a));
+    assert.equal(a.step, 's3', 'Dov and Mira talked to');
+    await game((g) => {
+      g.open('inventory');
+      g.render();
+    });
+    await tap('[data-screen=inventory] .ui-cell[data-item=training_wraps]');
+    await tap('[data-screen=inventory] [data-act=equip]');
+    const eq = await game((g) => {
+      const w = g.state().inv.equip.wraps;
+      g.closeAll();
+      return w;
+    });
+    assert.ok(eq, 'the Training Wraps are equipped with taps');
+    const b = await game((g) => {
+      const M = window.__M;
+      M.kill('mq2', (e) => e.questTag === 'mq2_raid');
+      // Durn: die once in the arena and take the Retry.
+      let boss = null;
+      for (let k = 0; k < 20 && !boss; k++) {
+        boss = g.ctx.ents.list('boss').find((x) => x.alive) || null;
+        if (!boss) M.run(10);
+      }
+      if (boss) g.teleport(boss.pos.x + 6, boss.pos.z + 6);
+      M.dbg = { boss: !!boss, bosses: g.ctx.ents.list('boss').map((x) => x.defId + x.alive), top: g.top(), q: M.step('mq2') };
+      M.run(10);
+      g.god(false);
+      g.kill(g.player().id);
+      const retried = M.deathTap('retry');
+      g.god(true);
+      const restarted = g.events(['boss:start']).filter((e) => e.payload.bossId === 'durn').length;
+      M.boss('mq2', 'durn');
+      M.run(200);
+      M.talk('mq2', 'kerrin');
+      M.gotoStep('mq2');
+      M.destroy('mq2', 'siphon_1');
+      M.talk('mq2', 'sela');
+      g.closeAll();
+      const st = g.state();
+      const bev = g.events(['boss:start', 'boss:end', 'boss:phase', 'player:died', 'player:respawned']).map((x) => x.type + JSON.stringify(x.payload));
+      return { bev, retried, restarted, mq2: g.questState('mq2'), level: g.ctx.rpg.level, forms: st.player.forms, techs: st.player.techs,
+        active: g.ctx.quests.active().map((x) => x.questId + ':' + x.stepId), log: M.log.slice(), fallbacks: M.fallbacks, dbg: M.dbg };
+    });
+    console.log('    ' + JSON.stringify(b));
+    assert.ok(b.retried, 'died in the Durn fight and took the Retry');
+    assert.ok(b.restarted >= 2, 'the boss fight restarted');
+    assert.equal(b.mq2, 'done', 'MQ2 complete');
+    assert.ok(b.level >= 2, 'levelled up');
+    await snap('play-main-path-01-mq2');
+
+    // ---- A shop purchase and a technique learned and slotted, with taps.
+    await game((g) => {
+      g.shells(400);
+      g.open('shop', { shopId: 'dov_stall' });
+      g.render();
+    });
+    const sh0 = await game((g) => ({ shells: g.state().inv.shells, fruit: g.ctx.rpg.count('sunfruit') }));
+    await tap('[data-screen=shop] [data-row="0"] .ui-row .ui-btn:last-child');
+    await tap('[data-screen=shop] [data-buy="0"]');
+    const sh1 = await game((g) => ({ shells: g.state().inv.shells, fruit: g.ctx.rpg.count('sunfruit') }));
+    await snap('play-main-path-02-shop');
+    // A pause-tab screen hides the HUD (nothing shows through the backdrop).
+    const ch = await game((g) => {
+      g.closeAll();
+      g.open('character');
+      g.render();
+      g.render();
+      const hud = document.querySelector('.ui-hud');
+      return { top: g.top(), hud: !!hud && !hud.hidden };
+    });
+    await snap('play-main-path-02b-character');
+    assert.equal(ch.hud, false, 'the HUD is hidden under the character screen');
+    assert.ok(sh1.fruit > sh0.fruit && sh1.shells < sh0.shells, 'bought in the shop');
+    await game((g) => {
+      g.closeAll();
+      window.__M.level(8);
+      g.open('techniques');
+      g.render();
+    });
+    const learnSel = await game((g) => {
+      for (const b of ['fist', 'flare', 'spirit']) {
+        document.querySelector(`[data-screen=techniques] .ui-tab[data-tab=${b}]`).click();
+        g.render();
+        const el = document.querySelector('[data-screen=techniques] [data-learn]');
+        if (el) return { tab: b, id: el.getAttribute('data-learn') };
+      }
+      return null;
+    });
+    assert.ok(learnSel, 'a technique node can be learned');
+    await tap(`[data-screen=techniques] .ui-tab[data-tab=${learnSel.tab}]`);
+    await tap(`[data-screen=techniques] [data-learn="${learnSel.id}"]`);
+    await snap('play-main-path-03-techniques');
+    const learned = await game((g) => {
+      const st = g.state().player;
+      return { nodes: st.nodes.slice(), slots: st.slots.slice() };
+    });
+    assert.ok(learned.nodes.includes(learnSel.id), 'learned with a tap');
+    const slotSel = await game((g) => {
+      for (const b of ['fist', 'flare', 'spirit']) {
+        document.querySelector(`[data-screen=techniques] .ui-tab[data-tab=${b}]`).click();
+        g.render();
+        for (const li of document.querySelectorAll('[data-screen=techniques] .ui-li[data-node]')) {
+          li.click();
+          g.render();
+          const btn = document.querySelector('[data-screen=techniques] [data-slot="1"]');
+          if (btn) return { tab: b, node: li.getAttribute('data-node') };
+        }
+      }
+      return null;
+    });
+    if (slotSel) {
+      await tap(`[data-screen=techniques] .ui-tab[data-tab=${slotSel.tab}]`);
+      await tap(`[data-screen=techniques] .ui-li[data-node="${slotSel.node}"]`);
+      await tap('[data-screen=techniques] [data-slot="1"]');
+    }
+    const slots = await game((g) => {
+      const s = g.state().player.slots.slice();
+      g.closeAll();
+      return s;
+    });
+    console.log('    learned ' + learnSel.id + ' slots ' + JSON.stringify(slots) + ' slotSel ' + JSON.stringify(slotSel));
+    assert.ok(slotSel && slots[1], 'a technique slotted with taps');
+
+    // ---- MQ3 up to the middle, then save, reload the page, restore the journey code and continue.
+    const c = await game((g) => {
+      const M = window.__M;
+      M.level(10);
+      M.talk('mq3', 'talia');
+      const lm = g.ctx.world.landmark('bramble_hollow');
+      M.go(lm.x + 120, lm.z + 120);
+      M.kill('mq3', (e) => e.defId === 'bramble_boar', () => g.spawn('bramble_boar', { dist: 9, aggro: true }));
+      // Die in the open and Rise at the Ringstone.
+      g.god(false);
+      g.kill(g.player().id);
+      const rose = M.deathTap('rise');
+      g.god(true);
+      return { step: M.step('mq3'), rose, log: M.log.slice(-3) };
+    });
+    console.log('    ' + JSON.stringify(c));
+    assert.equal(c.step, 's3', 'MQ3 at the goto step');
+    assert.ok(c.rose, 'died and took Rise');
+    const code = await game(async (g) => {
+      g.save();
+      return g.exportCode();
+    });
+    const before = await game((g) => ({ level: g.ctx.rpg.level, active: g.ctx.quests.active().map((x) => x.questId + ':' + x.stepId + ':' + x.count).sort(), shells: g.state().inv.shells }));
+    await harness.reload();
+    await game((g) => {
+      g.ctx.session.end({ toTitle: false });
+      g.closeAll();
+      g.open('title');
+      g.render();
+    });
+    await tap('[data-screen=title] .ui-menu .ui-btn:nth-child(3)');
+    await game((g, text) => {
+      const ta = document.querySelector('[data-screen=savecode] textarea[data-code=in]');
+      ta.value = text;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      const btn = ta.parentElement.querySelector('.ui-btn');
+      btn.click();
+    }, code);
+    for (let i = 0; i < 40 && (await game((g) => g.top())) !== 'hud'; i++) await game(() => new Promise((r) => setTimeout(r, 100)));
+    const restoreMsg = await game(() => {
+      const m = document.querySelector('[data-screen=savecode] .ui-tag.ui-bad');
+      return m && !m.hidden ? m.textContent : '';
+    });
+    assert.equal(restoreMsg, '', 'the journey code is accepted');
+    await setup();
+    const after = await game((g) => {
+      window.__P.sim(10);
+      return { level: g.ctx.rpg.level, active: g.ctx.quests.active().map((x) => x.questId + ':' + x.stepId + ':' + x.count).sort(), shells: g.state().inv.shells, top: g.top() };
+    });
+    console.log('    reload: ' + JSON.stringify({ before, after }));
+    assert.deepEqual(after.active, before.active, 'the quests continue where they were saved');
+    assert.equal(after.level, before.level);
+
+    // ---- The rest of MQ3, MQ4 (Dawn Lance through the pillar), MQ5, MQ6.
+    const d = await game((g) => {
+      const M = window.__M;
+      M.gotoStep('mq3');
+      M.boss('mq3', 'bramblehorn');
+      M.destroy('mq3', 'siphon_2');
+      M.talk('mq3', 'talia');
+      M.level(10);
+      M.talk('mq4', 'bren');
+      // Dawn Lance: lock on the pillar, hold the technique to charge, release; three times.
+      const pil = g.ctx.quests.objects().find((o) => o.id === 'saltglass_pillar');
+      const lances = [];
+      for (let k = 0; k < 6 && M.step('mq4') === 's2'; k++) {
+        const e = pil && pil.entId ? g.ctx.ents.get(pil.entId) : null;
+        if (!e) {
+          M.go(pil.x + 14, pil.z + 14);
+          continue;
+        }
+        g.teleport(e.pos.x + 12, e.pos.z + 12, { yaw: Math.atan2(-12, -12) });
+        M.run(4);
+        g.heal();
+        g.lock(e.id);
+        const slot = g.state().player.slots.indexOf('dawn_lance');
+        const act = slot === 0 ? 'tech1' : 'tech2';
+        g.hold(act, true);
+        window.__P.sim(70);
+        g.hold(act, false);
+        M.run(60);
+        // Dawn Lance has an 8 s cooldown.
+        for (let w = 0; w < 30 && !g.ctx.combat.canUse(g.ctx.player, 'dawn_lance'); w++) M.run(30);
+        lances.push(act + ':' + (g.ctx.quests.active().find((x) => x.questId === 'mq4') || {}).count);
+      }
+      M.kill('mq4', (e) => e.questTag === 'mq4_wave');
+      M.destroy('mq4', 'siphon_3');
+      M.talk('mq4', 'bren');
+      M.level(15);
+      M.talk('mq5', 'yael');
+      M.gotoStep('mq5');
+      M.boss('mq5', 'gorrumaw');
+      M.destroy('mq5', 'siphon_4');
+      M.talk('mq5', 'yael');
+      M.level(20);
+      M.talk('mq6', 'noa');
+      for (const bell of ['bell_1', 'bell_2', 'bell_3']) M.interact('mq6', bell);
+      M.gotoStep('mq6');
+      M.boss('mq6', 'iskra');
+      M.talk('mq6', 'noa');
+      M.destroy('mq6', 'siphon_5');
+      g.closeAll();
+      return { lances, q: ['mq3', 'mq4', 'mq5', 'mq6', 'mq7'].map((q) => q + ':' + M.step(q)), log: M.log.slice(), fallbacks: M.fallbacks, phases: M.phases, siphons: g.state().world.siphons };
+    });
+    console.log('    ' + JSON.stringify(d));
+    assert.deepEqual(d.q.slice(0, 4), ['mq3:done', 'mq4:done', 'mq5:done', 'mq6:done'], 'MQ3 to MQ6 complete');
+    await snap('play-main-path-04-mq6');
+
+    // ---- MQ7: Sela, the gate, Vorrhal and the tethers, the ending, the epilogue.
+    const e = await game((g, tsrc) => {
+      const M = window.__M;
+      const tick = (0, eval)('(' + tsrc + ')');
+      M.level(26);
+      M.talk('mq7', 'sela');
+      M.kill('mq7', (x) => x.questTag === 'mq7_gate');
+      M.boss('mq7', 'vorrhal', tick);
+      M.run(60);
+      const bev = g.events(['boss:start', 'boss:end', 'boss:phase', 'quest:step', 'actor:died', 'player:died']).filter((x) => x.type !== 'actor:died' || x.payload.kind === 'boss').map((x) => x.type + JSON.stringify(x.payload).slice(0, 90));
+      return { bev, step: M.step('mq7'), top: g.top(), tethers: M.tethers || 0, form: g.player().formId, log: M.log.slice(-4), phases: M.phases.vorrhal };
+    }, tetherTick.toString());
+    console.log('    ' + JSON.stringify(e));
+    // Script promise chains (say -> wait -> open) settle between evaluate calls, as between real frames.
+    let top = e.top;
+    for (let i = 0; i < 8 && top !== 'ending'; i++) top = await game((g) => (window.__M.run(30), g.top()));
+    assert.equal(top, 'ending', 'the ending screen is shown');
+    await snap('play-main-path-05-ending');
+    await tap('[data-screen=ending] .ui-btn');
+    for (let i = 0; i < 4; i++) await game(() => window.__M.run(20));
+    const f = await game((g) => {
+      const M = window.__M;
+      M.run(60);
+      M.talk('mq7', 'sela');
+      M.run(30);
+      return { mq7: g.questState('mq7'), top: g.top(), credits: !!g.state().quests.flags.credits, fallbacks: M.fallbacks, deaths: M.deaths };
+    });
+    console.log('    ' + JSON.stringify(f));
+    assert.equal(f.mq7, 'done', 'MQ7 complete: the game can be finished');
+    await snap('play-main-path-06-epilogue');
+  },
+};
+
 export const scenarios = [
   firstTen('play-first-ten-portrait', 400, 860),
   firstTen('play-first-ten-landscape', 844, 390),
+  mainPath,
 ];

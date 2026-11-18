@@ -64,6 +64,7 @@ export function createQuests(ctx, rpgInternals) {
     quests: () => ctx.defs.all('quest'),
     level: () => ctx.rpg.level,
     siphons: () => S().world.siphons.length,
+    destroyed: (objId) => S().world.siphons.indexOf(objId) >= 0 || !!Q().flags['obj.' + objId + '.destroyed'],
     flag: (k) => Q().flags[k],
     count: (id) => ctx.rpg.count(id),
     removeItem: (id, n) => ctx.rpg.removeItem(id, n),

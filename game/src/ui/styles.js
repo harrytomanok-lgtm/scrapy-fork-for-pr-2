@@ -335,9 +335,9 @@ export const UI_CSS = `
 /* title and loading */
 .ui-title{flex-direction:column;justify-content:space-between;align-items:stretch;background:linear-gradient(to bottom,rgba(27,22,38,.62),rgba(27,22,38,.3) 22%,rgba(27,22,38,0) 42%,rgba(27,22,38,.75))}
 .ui-logo{display:flex;flex-direction:column;align-items:center;gap:2px;margin-block-start:4vh;padding:10px 28px 14px;align-self:center;text-align:center;
-  background:radial-gradient(ellipse closest-side,rgba(27,22,38,.72),rgba(27,22,38,.45) 60%,rgba(27,22,38,0))}
-.ui-logo-main{position:relative;margin:0;font:400 clamp(44px,11vw,96px)/1 var(--font-display);color:var(--paper);letter-spacing:.03em;
-  text-shadow:${OUTLINE},0 4px 0 var(--ink),0 0 28px rgba(127,242,224,.55);overflow:hidden}
+  background:radial-gradient(ellipse closest-side,rgba(27,22,38,.8),rgba(27,22,38,.55) 55%,rgba(27,22,38,0))}
+.ui-logo-main{position:relative;margin:0;padding:0 .12em .08em;font:700 clamp(48px,12vw,104px)/1 var(--font-display);color:var(--paper);letter-spacing:.03em;
+  text-shadow:-2px -2px 0 var(--ink),2px -2px 0 var(--ink),-2px 2px 0 var(--ink),2px 2px 0 var(--ink),0 5px 0 var(--ink),0 0 18px rgba(127,242,224,.8),0 0 40px rgba(27,22,38,.9);overflow:hidden}
 .ui-logo-main::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 35%,rgba(255,255,255,.55) 50%,transparent 65%);
   transform:translateX(-120%);animation:ui-sweep 5s ease-in-out 1s infinite;mix-blend-mode:overlay}
 .ui-logo-sub{font:400 clamp(16px,3.4vw,24px)/1.2 var(--font-display);color:var(--accent);text-shadow:${OUTLINE},0 2px 0 var(--ink);letter-spacing:.06em}
