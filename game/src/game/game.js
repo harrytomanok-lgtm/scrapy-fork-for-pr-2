@@ -105,6 +105,8 @@ export function installGlue(ctx, hooks) {
       if (!ctx.flags.test) ctx.time.pause('hidden');
     } else {
       savedWhileHidden = false;
+      // No catch-up burst for the time spent in the background.
+      if (ctx.loop) ctx.loop.resync();
       if (!ctx.flags.test) ctx.time.resume('hidden');
     }
   };

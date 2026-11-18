@@ -185,6 +185,81 @@ test('start drives frames from requestAnimationFrame timestamps; stop cancels', 
   assert.equal(ctx.loop.running, false);
 });
 
+/** A context driven by a manual rAF with a fake clock; frames counts presented frame passes. */
+function rafSetup(flags = {}) {
+  let cb = null;
+  let nowMs = 0;
+  const ctx = createContext({ flags, log: fakeLog(), loop: { raf: (f) => { cb = f; return 1; }, caf() {}, now: () => nowMs } });
+  const probe = { steps: 0, frames: 0, dts: [] };
+  ctx.systems.add({ id: 't.s', phase: 'script', step() { probe.steps++; } });
+  ctx.systems.add({ id: 't.f', phase: 'render', frame(c, dt) { probe.frames++; probe.dts.push(dt); nowMs += 2; } });
+  ctx.loop.start();
+  let t = 1000;
+  /** @param {number} hz @param {number} n */
+  const vsyncs = (hz, n) => {
+    for (let i = 0; i < n; i++) {
+      t += 1000 / hz;
+      cb(t);
+    }
+  };
+  /** @param {number} ms */
+  const gap = (ms) => {
+    t += ms;
+    cb(t);
+  };
+  cb(t);
+  return { ctx, probe, vsyncs, gap };
+}
+
+test('frame cap: 60 presented frames per second on a 120 Hz screen, the sim stays at 60 Hz, frames get real time', () => {
+  const { ctx, probe, vsyncs } = rafSetup();
+  probe.frames = 0;
+  vsyncs(120, 240);
+  assert.ok(Math.abs(probe.frames - 120) <= 1, 'two seconds at 120 Hz present 120 frames (' + probe.frames + ')');
+  assert.ok(Math.abs(probe.steps - 120) <= 2, 'the sim ran 120 steps (' + probe.steps + ')');
+  for (const dt of probe.dts.slice(2)) assert.ok(Math.abs(dt - 1 / 60) < 1e-6, 'each frame receives the real elapsed time');
+  assert.ok(ctx.loop.stats.costMs > 0 && ctx.loop.stats.costMs < 5, 'costMs measures the work, not the interval');
+  assert.equal(ctx.loop.stats.cap, 60);
+});
+
+test('frame cap: paused at most 30; fpscap=0 presents every vsync', () => {
+  const a = rafSetup();
+  a.ctx.time.pause('menu');
+  a.probe.frames = 0;
+  a.vsyncs(120, 240);
+  assert.ok(Math.abs(a.probe.frames - 60) <= 1, 'paused: 30 per second (' + a.probe.frames + ')');
+  a.ctx.time.pause('debug');
+  a.ctx.time.resume('menu');
+  a.probe.frames = 0;
+  a.vsyncs(120, 240);
+  assert.ok(Math.abs(a.probe.frames - 120) <= 1, 'the debug pause (tests) keeps 60');
+  const b = rafSetup({ fpscap: false });
+  b.probe.frames = 0;
+  b.vsyncs(120, 240);
+  assert.equal(b.probe.frames, 240);
+});
+
+test('catch-up is clamped after a long frame, and a background gap resyncs without a burst', () => {
+  const { ctx, probe, vsyncs, gap } = rafSetup();
+  vsyncs(60, 30);
+  let s0 = probe.steps;
+  gap(400); // one very long frame (GC, slow device): at most MAX_STEPS, the rest is dropped
+  assert.ok(probe.steps - s0 <= MAX_STEPS, 'at most MAX_STEPS steps after a long frame');
+  vsyncs(60, 1);
+  assert.ok(probe.steps - s0 <= MAX_STEPS + 2, 'no spiral after it');
+  s0 = probe.steps;
+  const f0 = probe.frames;
+  gap(30000); // the page was hidden: rAF stopped for 30 s
+  assert.equal(probe.steps, s0, 'returning from the background runs no catch-up steps');
+  vsyncs(60, 1);
+  assert.ok(probe.steps - s0 <= 1, 'the first frame after the return runs one step at most');
+  assert.ok(probe.frames > f0);
+  ctx.loop.resync();
+  s0 = probe.steps;
+  gap(200);
+  assert.equal(probe.steps, s0, 'resync forgets the last timestamp (visibilitychange)');
+});
+
 test('time without a bus still works (standalone clock)', () => {
   const t = createTime();
   t.pause('cine');
