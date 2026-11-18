@@ -36,6 +36,8 @@ export const MOVER = Object.freeze({
   terminal: 55,
   coyote: 0.1,
   jumpBuffer: 0.12,
+  /** A Jump pressed while a technique locks the body fires when the lock ends (s). */
+  lockJumpBuffer: 0.6,
   takeOffSpeed: 6,
   flightDamping: M.flightDamping,
   boostSurge: 3.2,
@@ -89,14 +91,14 @@ export function createIntent() {
 /**
  * Private per-entity mover record.
  * @typedef {{ boostT:number, dashT:number, dashVx:number, dashVy:number, dashVz:number, lockSlow:number, faceYaw:number,
- *   coyoteT:number, bufT:number, jumped:boolean, spin:number, hangT:number, hangScale:number, cols:any[], contact:any, nrm:any }} MoveRec
+ *   coyoteT:number, bufT:number, lockBufT:number, lockBufFly:boolean, jumped:boolean, spin:number, hangT:number, hangScale:number, cols:any[], contact:any, nrm:any }} MoveRec
  */
 
 /** @returns {MoveRec} */
 export function createRec() {
   return {
     boostT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashVz: 0, lockSlow: 1, faceYaw: NaN,
-    coyoteT: 0, bufT: 0, jumped: false, spin: 0, hangT: 0, hangScale: 1,
+    coyoteT: 0, bufT: 0, lockBufT: 0, lockBufFly: false, jumped: false, spin: 0, hangT: 0, hangScale: 1,
     cols: [], contact: createContact(),
     nrm: { x: 0, y: 1, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } },
   };
@@ -105,7 +107,7 @@ export function createRec() {
 /** Reset the transient parts of a record (teleport, init). @param {MoveRec} r */
 export function resetRec(r) {
   r.boostT = 0; r.dashT = 0; r.dashVx = 0; r.dashVy = 0; r.dashVz = 0; r.lockSlow = 1; r.faceYaw = NaN;
-  r.coyoteT = 0; r.bufT = 0; r.jumped = false; r.spin = 0; r.hangT = 0; r.hangScale = 1;
+  r.coyoteT = 0; r.bufT = 0; r.lockBufT = 0; r.lockBufFly = false; r.jumped = false; r.spin = 0; r.hangT = 0; r.hangScale = 1;
 }
 
 /* ------------------------------------------------------------------ helpers -- */
@@ -269,8 +271,18 @@ function stepGround(ent, r, dt, it, world, sink) {
   }
 
   // Jump, coyote jump, take-off and the jump buffer.
-  const jump = it ? it.jump : false;
-  const flyToggle = it ? it.flyToggle : false;
+  let jump = it ? it.jump : false;
+  let flyToggle = it ? it.flyToggle : false;
+  // A Jump pressed during a technique's movement lock is kept and fires when the lock ends.
+  if ((jump || flyToggle) && m.lockT > 0) {
+    r.lockBufT = MOVER.lockJumpBuffer;
+    r.lockBufFly = flyToggle;
+  } else if (r.lockBufT > 0 && m.lockT <= 0) {
+    if (r.lockBufFly) flyToggle = true;
+    else jump = true;
+    r.lockBufT = 0;
+  }
+  if (r.lockBufT > 0) r.lockBufT -= dt;
   if ((jump || flyToggle) && m.lockT <= 0) {
     if (flyToggle && m.canFly) {
       takeOff(ent, r, sink);
