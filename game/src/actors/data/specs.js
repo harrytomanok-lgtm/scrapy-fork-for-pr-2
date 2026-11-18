@@ -519,7 +519,7 @@ function vorrhal() {
   const build = { height: 2.4, shoulder: 0.46, bulk: 0.25, head: 0.95 };
   const k = build.height / 1.8;
   const parts = person({
-    build, detail: 'hero', face: true, boots: 'short', hair: 'crop', noNeck: false, skirt: { slot: 'robe', len: 0.95, r: 0.23 },
+    build, detail: 'hero', face: true, boots: 'short', hair: 'crop', noNeck: false, skirt: { slot: 'robe', len: 1.12, r: 0.44 },
     slots: { top: 'robe', legs: 'robe', boots: 'robe', skin: 'skin', hair: 'robe', eye: 'ink', upper: 'robe', fore: 'robe', hand: 'skin' },
   });
   parts.push(P('head', 'sphere', [0.27 * k, 0.29 * k, 0.28 * k], [0, 0.14 * k, -0.05 * k], [0.15, 0, 0], 'robe', { seg: 8 }));
