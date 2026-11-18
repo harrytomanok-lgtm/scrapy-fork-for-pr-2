@@ -495,6 +495,55 @@ const flows = [
       assert.equal(back, start);
     },
   },
+  {
+    // "Continue" shows only when a journey exists (the hidden button used to stay visible), and restoring a journey
+    // code over an existing journey asks first (S6).
+    name: 'ui-title-restore',
+    async run({ page, game, assert, shot }) {
+      const shown = () => {
+        const b = document.querySelector('[data-screen=title] .ui-menu .ui-btn');
+        return !!b && getComputedStyle(b).display !== 'none' && b.getClientRects().length > 0;
+      };
+      const none = await game((g, fn) => {
+        g.ctx.save.erase(1);
+        g.closeAll();
+        g.open('title');
+        g.render();
+        return (0, eval)('(' + fn + ')')();
+      }, shown.toString());
+      assert.equal(none, false, 'no journey: no Continue');
+      const some = await game((g, fn) => {
+        g.save();
+        g.closeAll();
+        g.open('title');
+        g.render();
+        return (0, eval)('(' + fn + ')')();
+      }, shown.toString());
+      assert.equal(some, true, 'a saved journey: Continue');
+      const code = await game(async (g) => {
+        g.closeAll();
+        const c = await g.ctx.save.exportCode();
+        g.grantXp(500);
+        g.save();
+        return c;
+      });
+      const xp0 = await game((g) => g.ctx.store.state.player.xp + g.ctx.store.state.player.level * 1e6);
+      await game((g) => {
+        g.open('savecode', { tab: 'restore' });
+        g.render();
+      });
+      await page.locator('[data-screen=savecode] textarea[data-code=in]').fill(code);
+      await tap(page, '[data-screen=savecode] .ui-btn.ui-accent:visible');
+      const asked = await game((g) => g.top());
+      await shot('ui-restore-confirm');
+      assert.equal(asked, 'confirm', 'restoring over a journey asks first');
+      await tap(page, '[data-screen=confirm] .ui-btn.ui-ghostbtn');
+      await page.waitForTimeout(100);
+      assert.notEqual(await game((g) => g.top()), 'confirm', 'the confirm closed');
+      const kept = await game((g) => g.ctx.store.state.player.xp + g.ctx.store.state.player.level * 1e6);
+      assert.equal(kept, xp0, 'declining keeps the journey');
+    },
+  },
 ];
 
 const flowScenarios = [];
