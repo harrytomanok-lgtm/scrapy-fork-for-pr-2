@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
  * Package discovery (ARCHITECTURE 2.3): looks for `src/<dir>/index.js` in the fixed order of REGISTRY_ORDER and
- * writes `src/game/registry.gen.js`, which imports the manifests that exist and exports them as PACKAGES.
- * A directory without `index.js` is skipped, so its stand-in stays active.
+ * writes `src/game/registry.gen.js`, which imports the manifests that exist and exports them as PACKAGES, plus
+ * STANDINS: only the stand-in modules whose slot no discovered package provides (a stand-in that would be replaced
+ * at boot is neither imported nor installed, so it stays out of the production bundle). A directory without
+ * `index.js` is skipped, so its stand-in stays active.
  * Usage: node tools/gen-registry.mjs
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -11,6 +13,28 @@ import { fileURLToPath } from 'node:url';
 
 /** Service-root directories in install order (2.3). */
 export const REGISTRY_ORDER = Object.freeze(['render', 'vfx', 'world', 'env', 'audio', 'actors', 'control', 'combat', 'ai', 'rpg', 'ui']);
+
+/**
+ * Stand-in modules (src/standins/<name>.js) in install order, each with the package directory that replaces it.
+ * `content` (every stand-in definition and the stand-in content strings) is needed while any package is missing;
+ * with every package present it is replaced by `residual` (the definitions no package registers, see residual.js).
+ */
+export const STANDIN_ORDER = Object.freeze([
+  ['render', 'render'], ['vfx', 'vfx'], ['world', 'world'], ['env', 'env'], ['audio', 'audio'], ['actors', 'actors'],
+  ['move', 'control'], ['cam', 'control'], ['combat', 'combat'], ['ai', 'ai'], ['rpg', 'rpg'], ['quests', 'rpg'], ['ui', 'ui'],
+]);
+
+/**
+ * The stand-in modules to import and install for a set of discovered packages, in install order.
+ * @param {string[]} found directory names that have an index.js
+ * @returns {string[]} stand-in module names (file names under src/standins without .js)
+ */
+export function standinsFor(found) {
+  const all = REGISTRY_ORDER.every((d) => found.includes(d));
+  const out = [all ? 'residual' : 'content'];
+  for (const [name, dir] of STANDIN_ORDER) if (!found.includes(dir)) out.push(name);
+  return out;
+}
 
 /** The game folder (parent of tools/). */
 export const GAME_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -26,7 +50,11 @@ export function registrySource(found) {
     '// Feature packages found under src/<dir>/index.js, in the install order of ARCHITECTURE 2.3.',
   ];
   found.forEach((dir, i) => lines.push(`import { pkg as p${i} } from '../${dir}/index.js';`));
+  const standins = standinsFor(found);
+  standins.forEach((name, i) => lines.push(`import * as s${i} from '../standins/${name}.js';`));
   lines.push('');
+  lines.push(`/** Stand-in modules still needed (no package provides their slot), in install order: [name, module]. */`);
+  lines.push(`export const STANDINS = Object.freeze([${standins.map((n, i) => `['${n}', s${i}]`).join(', ')}]);`);
   lines.push(`/** Directories with a package manifest. */`);
   lines.push(`export const PACKAGE_DIRS = Object.freeze(${JSON.stringify(found)});`);
   lines.push(`/** Package manifests in install order. */`);
@@ -37,7 +65,7 @@ export function registrySource(found) {
 /**
  * Discover the packages and write the registry (only when its content changed, so watch mode does not loop).
  * @param {{ root?:string, write?:boolean }} [opts] root: the game folder (tests pass a temporary one)
- * @returns {{ found:string[], file:string, source:string, changed:boolean }}
+ * @returns {{ found:string[], standins:string[], file:string, source:string, changed:boolean }}
  */
 export function genRegistry(opts = {}) {
   const root = opts.root || GAME_ROOT;
@@ -50,10 +78,10 @@ export function genRegistry(opts = {}) {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, source);
   }
-  return { found, file, source, changed };
+  return { found, standins: standinsFor(found), file, source, changed };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const r = genRegistry();
-  console.log(`registry: ${r.found.length ? r.found.join(', ') : '(no feature packages)'}${r.changed ? '' : ' (unchanged)'}`);
+  console.log(`registry: ${r.found.length ? r.found.join(', ') : '(no feature packages)'}; stand-ins: ${r.standins.join(', ')}${r.changed ? '' : ' (unchanged)'}`);
 }

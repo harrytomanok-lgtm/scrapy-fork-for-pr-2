@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createDefs } from '../../src/core/defs.js';
 import { IDS } from '../../src/core/ids.js';
 import { standinDefs } from '../../src/standins/content.js';
+import { musicDefs, install as installResidual } from '../../src/standins/residual.js';
 
 /** IDS keys that are catalogs of assets or keys, not defs kinds (3.8): they have no definitions. */
 const NOT_DEFS = ['prop', 'clip', 'vfx', 'sfx', 'feel', 'modKey'];
@@ -25,4 +26,11 @@ test('with zero feature packages defs.validate() passes on the stand-in content 
   const r = defs.validate();
   assert.deepEqual(r.errors, []);
   assert.equal(r.ok, true);
+});
+
+test('the residual stand-in registers a music definition for every id of IDS.music', () => {
+  const defs = createDefs({ strict: true });
+  installResidual({ defs });
+  assert.deepEqual(defs.all('music').map((d) => d.id), IDS.music.slice());
+  assert.deepEqual(standinDefs().music, musicDefs());
 });
