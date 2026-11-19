@@ -577,7 +577,7 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
  */
 function deviceFacts(ctx) {
   /** @type {Record<string, any>} */
-  const d = { gpu: '', cssW: 0, cssH: 0, dpr: 1, canvasW: 0, canvasH: 0, scale: 1, tier: '', costMs: NaN, cap: 0, drawCalls: 0, triangles: 0, heapMb: 0, audio: '-', storage: '-', bake: '-', device: '-', ua: '' };
+  const d = { gpu: '', cssW: 0, cssH: 0, dpr: 1, canvasW: 0, canvasH: 0, scale: 1, tier: '', costMs: NaN, cap: 0, drawCalls: 0, triangles: 0, programs: 0, linkFailures: 0, heapMb: 0, audio: '-', storage: '-', bake: '-', device: '-', ua: '' };
   try {
     const win = ctx.dom.doc.defaultView || window;
     d.cssW = win.innerWidth;
@@ -602,6 +602,8 @@ function deviceFacts(ctx) {
     d.scale = typeof st.scale === 'number' ? st.scale : ctx.render.scale;
     d.tier = ctx.render.tier;
     d.drawCalls = st.drawCalls || 0;
+    d.programs = st.programs || 0;
+    d.linkFailures = st.linkFailures || 0;
     d.triangles = st.triangles || 0;
     d.costMs = ctx.loop.stats.costMs;
     d.cap = ctx.loop.stats.cap;

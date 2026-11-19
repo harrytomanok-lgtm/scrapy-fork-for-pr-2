@@ -19,6 +19,7 @@
     "lint": "node tools/lint-strings.mjs && node tools/check-ip.mjs && node tools/check-imports.mjs",
     "smoke": "node tools/smoke.mjs",
     "scenarios": "node tools/scenarios.mjs",
-    "check": "npm run lint && npm test && npm run build && npm run smoke"
+    "check": "npm run lint && npm test && npm run build && npm run smoke",
+    "android": "node tools/android-check.mjs"
   }
 }

@@ -44,6 +44,8 @@ export function createRender(ctx) {
   let lastReal = -1;
   let compiling = false;
   let software = false;
+  /** Programs the driver failed to link at the last warm-up (0 on a healthy device). */
+  let linkFailures = 0;
   let fixedScale = 1;
   const lastCam = new Vector3(NaN, NaN, NaN);
   const onWindowResize = () => {
@@ -260,6 +262,22 @@ export function createRender(ctx) {
       renderer.setRenderTarget(target);
       renderer.compile(scene, camera);
     }
+    // three inspects a program the first time it draws with it (uniform and attribute tables, link status and info
+    // logs): synchronous round trips to the GPU that cost a hitch each. Do them now, behind the loading screen,
+    // instead of in the first fight; and count the programs the driver refused, for the device report.
+    try {
+      const gl = renderer.getContext();
+      const list = renderer.info.programs || [];
+      let failed = 0;
+      for (let i = 0; i < list.length; i++) {
+        list[i].getUniforms();
+        list[i].getAttributes();
+        if (list[i].program && !gl.getProgramParameter(list[i].program, gl.LINK_STATUS)) failed++;
+      }
+      linkFailures = failed;
+    } catch (err) {
+      // diagnostics only
+    }
     renderer.setRenderTarget(null);
     for (let i = 0; i < hidden.length; i++) hidden[i].visible = false;
     warm.visible = false;
@@ -320,6 +338,14 @@ export function createRender(ctx) {
         software = /swiftshader|llvmpipe|software/i.test(name);
       } catch (err) {
         software = false;
+      }
+      try {
+        // Rendering to half-float targets is an extension in WebGL2 and some phones lack it: the high tier then
+        // uses 8-bit targets instead of raising GL errors.
+        const gl2 = renderer.getContext();
+        post.hdr = !!(gl2.getExtension('EXT_color_buffer_half_float') || gl2.getExtension('EXT_color_buffer_float'));
+      } catch (err) {
+        post.hdr = false;
       }
       const canvas = renderer.domElement;
       canvas.style.display = 'block';
@@ -521,6 +547,7 @@ export function createRender(ctx) {
         geometries: info ? info.memory.geometries : 0,
         textures: info ? info.memory.textures : 0,
         programs: info && info.programs ? info.programs.length : 0,
+        linkFailures,
         scale: render.scale, tier: render.tier,
         particles: vfx && typeof vfx.count === 'function' ? vfx.count() : 0,
         outlines: outlines.shown, blobs: blobs.count(),

@@ -136,8 +136,40 @@ export function createSystems(ctx) {
     return null;
   }
 
+  // Optional profiler (diagnostics only): total milliseconds and calls per system, split into step and frame.
+  /** @type {Map<string, number[]>|null} id -> [stepMs, steps, frameMs, frames] */
+  let prof = null;
+  const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  /** @param {string} id @param {0|1} kind @param {number} ms */
+  function note(id, kind, ms) {
+    const m = /** @type {Map<string, number[]>} */ (prof);
+    let a = m.get(id);
+    if (!a) {
+      a = [0, 0, 0, 0];
+      m.set(id, a);
+    }
+    a[kind * 2] += ms;
+    a[kind * 2 + 1]++;
+  }
+
   /** @type {Systems} */
   const systems = {
+    /**
+     * Start (true) or stop (false) timing every system. Returns the report collected so far, slowest first:
+     * milliseconds per call for the step and the frame callback of each system.
+     * @param {boolean} on
+     * @returns {{ id:string, stepMs:number, frameMs:number, steps:number, frames:number }[]}
+     */
+    profile(on) {
+      const out = [];
+      if (prof) {
+        for (const [id, a] of prof) out.push({ id, stepMs: a[1] ? a[0] / a[1] : 0, frameMs: a[3] ? a[2] / a[3] : 0, steps: a[1], frames: a[3] });
+        out.sort((x, y) => (y.stepMs + y.frameMs) - (x.stepMs + x.frameMs));
+      }
+      prof = on ? new Map() : null;
+      return out;
+    },
+
     add(system) {
       if (!system || typeof system.id !== 'string' || system.id === '') throw new Error('systems.add: system.id is required');
       if (typeof system.step !== 'function' && typeof system.frame !== 'function') {
@@ -217,11 +249,13 @@ export function createSystems(ctx) {
         for (let i = 0; i < list.length; i++) {
           const e = list[i];
           if (e.removed || e.disabled) continue;
+          const t0 = prof ? clock() : 0;
           try {
             /** @type {Function} */ (e.sys.step).call(e.sys, ctx, dt);
           } catch (err) {
             fault(e, err);
           }
+          if (prof) note(e.id, 0, clock() - t0);
         }
       }
     },
@@ -233,11 +267,13 @@ export function createSystems(ctx) {
         for (let i = 0; i < list.length; i++) {
           const e = list[i];
           if (e.removed || e.disabled) continue;
+          const t0 = prof ? clock() : 0;
           try {
             /** @type {Function} */ (e.sys.frame).call(e.sys, ctx, dt, alpha);
           } catch (err) {
             fault(e, err);
           }
+          if (prof) note(e.id, 1, clock() - t0);
         }
       }
     },

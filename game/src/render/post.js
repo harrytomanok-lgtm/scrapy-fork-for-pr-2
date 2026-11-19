@@ -288,6 +288,8 @@ export function createPost(internal) {
     },
     /** True while the high chain resources exist. */
     enabled: false,
+    /** False when the device cannot render to half-float targets: the chain then uses 8-bit targets. */
+    hdr: true,
     /** @returns {any} the scene target (high) */
     target() {
       return sceneRT;
@@ -301,10 +303,11 @@ export function createPost(internal) {
       h = Math.max(2, Math.round(height * scale));
       if (!api.enabled) return;
       if (!sceneRT) {
-        sceneRT = new WebGLRenderTarget(w, h, { type: HalfFloatType, samples: 4, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: true });
+        const hdrType = api.hdr ? HalfFloatType : UnsignedByteType;
+        sceneRT = new WebGLRenderTarget(w, h, { type: hdrType, samples: 4, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: true });
         ldrRT = new WebGLRenderTarget(w, h, { type: UnsignedByteType, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: false });
         for (let i = 0; i < 4; i++) {
-          bloomRT.push(new WebGLRenderTarget(4, 4, { type: HalfFloatType, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: false }));
+          bloomRT.push(new WebGLRenderTarget(4, 4, { type: hdrType, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: false }));
         }
         sceneRT.texture.colorSpace = LinearSRGBColorSpace;
       }

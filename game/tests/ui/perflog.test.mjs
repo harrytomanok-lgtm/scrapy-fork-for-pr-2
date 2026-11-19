@@ -22,11 +22,12 @@ test('perf log: averages, the 1% low, slow frames and the window', () => {
 });
 
 test('device report: says so when there is not enough play, and prints the numbers when there is', () => {
-  const d = { gpu: 'Mali-G78', cssW: 412, cssH: 915, dpr: 2.625, canvasW: 412, canvasH: 915, scale: 1, tier: 'low', costMs: 6.24, cap: 60, drawCalls: 44, triangles: 120500, heapMb: 58.2, audio: 'running', storage: 'saved on device', bake: 'worker', device: 'touch', ua: 'Mozilla/5.0 (Linux; Android 14)' };
+  const d = { gpu: 'Mali-G78', cssW: 412, cssH: 915, dpr: 2.625, canvasW: 412, canvasH: 915, scale: 1, tier: 'low', costMs: 6.24, cap: 60, drawCalls: 44, triangles: 120500, programs: 21, linkFailures: 0, heapMb: 58.2, audio: 'running', storage: 'saved on device', bake: 'worker', device: 'touch', ua: 'Mozilla/5.0 (Linux; Android 14)' };
   const few = formatDeviceReport({ frames: 10, seconds: 0.2, avgFps: 60, lowFps: 60, worstMs: 17, slowPct: 0 }, d);
   assert.match(few, /not enough play yet/);
   const full = formatDeviceReport({ frames: 3600, seconds: 61.2, avgFps: 58.8, lowFps: 41.3, worstMs: 48, slowPct: 1.25 }, d);
   assert.match(full, /gpu: Mali-G78/);
+  assert.match(full, /shaders 21\/21 ok/);
   assert.match(full, /avg 59, 1% low 41, worst frame 48 ms, slow frames 1\.3%/);
   assert.match(full, /412x915 css, dpr 2\.63, canvas 412x915, scale 1\.00, tier low/);
   assert.match(full, /audio running, storage saved on device, world bake worker, input touch/);

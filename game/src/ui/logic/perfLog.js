@@ -75,7 +75,7 @@ export function formatDeviceReport(p, d) {
     ? 'fps: not enough play yet (play for a minute, then open this page again)'
     : `fps (last ${f(p.seconds)} s of play): avg ${f(p.avgFps)}, 1% low ${f(p.lowFps)}, worst frame ${f(p.worstMs)} ms, slow frames ${f(p.slowPct, 1)}%`);
   lines.push(`frame cost: ${f(d.costMs, 1)} ms (sim + draw, JS), cap ${d.cap || '-'}`);
-  lines.push(`draw calls ${d.drawCalls}, triangles ${f(d.triangles / 1000)}k, heap ${d.heapMb ? f(d.heapMb) + ' MB' : '-'}`);
+  lines.push(`draw calls ${d.drawCalls}, triangles ${f(d.triangles / 1000)}k, shaders ${d.programs - d.linkFailures}/${d.programs} ok, heap ${d.heapMb ? f(d.heapMb) + ' MB' : '-'}`);
   lines.push(`audio ${d.audio}, storage ${d.storage}, world bake ${d.bake}, input ${d.device}`);
   lines.push('ua: ' + String(d.ua || '').slice(0, 110));
   return lines.join('\n');
