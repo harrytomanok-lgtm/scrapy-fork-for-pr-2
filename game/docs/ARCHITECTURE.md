@@ -1940,3 +1940,16 @@ Each package reported where its code differs from, or adds to, the contract abov
 - ARCHITECTURE 7.1 dynamic resolution rule: the decisions now use the measured frame cost (ctx.loop.stats.costMs) rather than the presented fps alone, the presented rate still acts as a guard against GPU-bound frames, and the controller holds while ctx.loop.stats.cap is below the tier's target. DynRes.update gained two optional arguments (costMs, cap). Without cost samples it behaves as before.
 - ART_UX 5 portrait framing: framePortrait changed from 0.62 to 0.48, and a portrait rest pitch 3 degrees steeper applies to explore, combat and lock (-15 degrees for explore). This was requested by the task; landscape is unchanged.
 - Hero spec: the head went from 9 to 8 segments, and the eye and iris spheres from 5 to 4, to keep hero_a under the 1800-triangle budget after adding the eye lids.
+
+### Android check and real-touch fixes
+
+- New tool `tools/android-check.mjs` (`npm run android`): Chromium with Android device profiles, the published fragment in a sandboxed iframe, REAL touch input through the browser (CDP `Input.dispatchTouchEvent`, several fingers), rotation, background and return, a soak, a slowed CPU and a WebGL2 context without optional extensions. The scenario suites dispatch synthetic PointerEvents on the controls, which bypasses hit-testing and browser gestures: anything about touch must also pass this tool.
+- ui: the screens layer has `pointer-events: none` while no screen is open (`manager.syncLayer`); closed screens stay in the layer hidden, and the foundation CSS gives a non-empty screens layer all pointer input.
+- core/theme: `html`, `body` and `#app` use `overflow: clip` (after the `hidden` fallback) and a scroll listener resets any scroll of these roots, so a focus or `scrollIntoView` inside a screen cannot shift the game.
+- core/input (kbm source): compatibility mouse events that follow a touch (`sourceCapabilities.firesTouchEvents`, or a mouse event within 1.2 s of a touch) are ignored: a tap is never `attack`, never asks for pointer lock and never makes 'kbm' the active device.
+- control/touch: on a coarse pointer the active device starts as 'touch', and any real touch anywhere sets it (not in test mode without `autoplay=1`).
+- ui: a tap anywhere on the dialogue screen completes or advances the line, not only on the text panel.
+- render: programs are inspected behind the loading screen at warm-up (`getUniforms`, `getAttributes`, link status), so the first fight has no first-use hitches; `render.stats().linkFailures` counts programs the driver refused. `post.hdr` is false when the device cannot render to half-float targets, and the high tier then uses 8-bit targets.
+- core/systems: `ctx.systems.profile(on)` times every system's step and frame callbacks (diagnostics).
+- ui: `ui.perfLog` records presented frame intervals during play; Settings > Graphics shows a device report (GPU, resolution and scale, frame rate over the last minute, shaders linked, audio, storage, input) for players to send back from a real phone.
+

@@ -161,3 +161,7 @@ Ultimate, R3 lock-on, D-pad up interact, down quick item, right next item, left 
 Touch: a floating stick on the left half, camera drag on the right half, and the action buttons on the right
 (Attack, Bolt, Jump, Dash and the contextual ones). Touch controls are never mirrored; a left-handed layout setting
 swaps the sides.
+
+## Checking phones
+
+`npm run android` (tools/android-check.mjs) runs the game the way a phone does, as far as a machine without a phone can: Android device profiles, a sandboxed iframe, real multi-touch through the browser, rotation, background and return, a slowed CPU and a bare WebGL2 context. It is not a real device: the GPU is software, so frame rates mean nothing there. For a real phone, play for a minute and open Settings > Graphics: the device report shows the frame rate, the GPU and the resolution the game runs at.
