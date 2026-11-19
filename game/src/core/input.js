@@ -514,25 +514,41 @@ export function createKbmSource(input) {
     if (m) look[m[0]] -= m[1];
   }
 
+  // Touch screens send compatibility mouse events after a tap (mousemove, mousedown, mouseup, click). They are not
+  // the mouse: without this filter every tap outside a button would press `attack`, ask for pointer lock and make
+  // 'kbm' the active device (keyboard glyphs on a phone). Chromium marks them (sourceCapabilities); elsewhere a
+  // mouse event shortly after a touch is treated the same way.
+  let lastTouchT = -1e9;
+  function onTouchSeen() {
+    lastTouchT = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+  /** @param {MouseEvent} e */
+  function fromTouch(e) {
+    const caps = /** @type {any} */ (e).sourceCapabilities;
+    if (caps && caps.firesTouchEvents) return true;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    return now - lastTouchT < 1200;
+  }
+
   /** @param {MouseEvent} e */
   function onMouseDown(e) {
+    if (fromTouch(e)) return;
     if (isInteractive(e.target) || isEditable(e.target)) return;
     const a = /** @type {Record<number, string>} */ (KBM_MOUSE)[e.button];
     if (a) count(a, true);
-    // Touch screens send compatibility mouse events: a tap never asks for pointer lock.
-    const caps = /** @type {any} */ (e).sourceCapabilities;
-    if (caps && caps.firesTouchEvents) return;
     if (e.button === 0 && !locked && !lockRefused && input.context === 'game') input.requestPointerLock();
   }
 
   /** @param {MouseEvent} e */
   function onMouseUp(e) {
+    if (fromTouch(e)) return;
     const a = /** @type {Record<number, string>} */ (KBM_MOUSE)[e.button];
     if (a) count(a, false);
   }
 
   /** @param {MouseEvent} e */
   function onMouseMove(e) {
+    if (fromTouch(e)) return;
     if (!locked && (e.buttons & 6) === 0) return;
     const dx = e.movementX || 0;
     const dy = e.movementY || 0;
@@ -572,6 +588,8 @@ export function createKbmSource(input) {
     [window, 'keydown', onKeyDown, false],
     [window, 'keyup', onKeyUp, false],
     [window, 'blur', releaseAll, false],
+    [window, 'touchstart', onTouchSeen, { passive: true, capture: true }],
+    [window, 'touchend', onTouchSeen, { passive: true, capture: true }],
     [window, 'mousedown', onMouseDown, false],
     [window, 'mouseup', onMouseUp, false],
     [window, 'mousemove', onMouseMove, false],

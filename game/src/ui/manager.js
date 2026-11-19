@@ -45,6 +45,16 @@ export function createManager(ctx, kit) {
   let swallowBack = -1;
   const pScreen = { id: '', open: false };
 
+  /**
+   * The screens layer covers the whole game and takes pointer events whenever it has children (foundation CSS).
+   * Screens stay in it, hidden, after they close, so while no screen is open the layer must let every touch through
+   * to the touch controls and the HUD underneath it.
+   */
+  function syncLayer() {
+    layer.style.pointerEvents = stack.length > 0 ? '' : 'none';
+  }
+  syncLayer();
+
   /** @param {string} id @param {boolean} open */
   function emit(id, open) {
     pScreen.id = id;
@@ -178,6 +188,7 @@ export function createManager(ctx, kit) {
         if (o) o.el.hidden = true;
       }
       stack.push(id);
+      syncLayer();
       openedAt.set(id, frameNo);
       s.el.hidden = false;
       layer.appendChild(s.el);
@@ -202,6 +213,7 @@ export function createManager(ctx, kit) {
       if (i < 0) return;
       const wasTop = i === stack.length - 1;
       stack.splice(i, 1);
+      syncLayer();
       hide(cid);
       if (focused && screens.get(cid) && screens.get(cid).el.contains(focused)) setFocus(null);
       if (stack.length === 0) {
@@ -237,6 +249,7 @@ export function createManager(ctx, kit) {
         return;
       }
       stack.pop();
+      syncLayer();
       hide(cur);
       setFocus(null);
       emit(cur, false);

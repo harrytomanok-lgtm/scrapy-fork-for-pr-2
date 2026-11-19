@@ -12,6 +12,7 @@ import { icon } from '../icons.js';
 import { shell, tabRow, chips, switchRow, sliderRow, itemRing, itemNameKey, speakerKey } from './common.js';
 import { setLang } from './boot.js';
 import { formatInt, typedChars } from '../logic/format.js';
+import { formatDeviceReport } from '../logic/perfLog.js';
 
 const CPS = 45;
 
@@ -67,6 +68,13 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
     const q = chips(kit, pages.gfx, ['auto', 'low', 'high'].map((id) => ({ id, key: 'ui.set.quality.' + id })), (id) => set('quality', id));
     kit.el('p', 'ui-small', pages.gfx, 'ui.set.quality.desc');
     syncs.push(() => q.set(S().quality));
+    // Device report: how the game runs on this device, as text the player can screenshot or copy and send back.
+    kit.el('h3', 'ui-h3', pages.gfx, 'ui.set.device');
+    kit.el('p', 'ui-small', pages.gfx, 'ui.set.deviceHint');
+    const report = kit.el('pre', 'ui-devrep k-select', pages.gfx);
+    syncs.push(() => {
+      report.textContent = formatDeviceReport(/** @type {any} */ (ui).perfLog.summary(), deviceFacts(ctx));
+    });
     // Audio
     for (const [k, key] of [['volMaster', 'ui.set.volMaster'], ['volMusic', 'ui.set.volMusic'], ['volSfx', 'ui.set.volSfx']]) {
       syncs.push(sliderRow(kit, pages.audio, key, { min: 0, max: 1, step: 0.05 }, () => S()[k], (v) => set(k, v)).sync);
@@ -351,7 +359,8 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
         if (ctx.quests) ctx.quests.advance(0);
       }
     }
-    panel.addEventListener('click', tap);
+    // The whole screen advances the dialogue, not only the text panel: on a phone a tap anywhere means "continue".
+    root.addEventListener('click', tap);
     function renderLine() {
       if (!cur) return;
       const sk = speakerKey(ctx, cur.speakerId);
@@ -559,4 +568,49 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
       },
     };
   });
+}
+
+/**
+ * Facts for the device report. Every read is guarded: this runs on unknown hardware.
+ * @param {any} ctx
+ * @returns {Record<string, any>}
+ */
+function deviceFacts(ctx) {
+  /** @type {Record<string, any>} */
+  const d = { gpu: '', cssW: 0, cssH: 0, dpr: 1, canvasW: 0, canvasH: 0, scale: 1, tier: '', costMs: NaN, cap: 0, drawCalls: 0, triangles: 0, heapMb: 0, audio: '-', storage: '-', bake: '-', device: '-', ua: '' };
+  try {
+    const win = ctx.dom.doc.defaultView || window;
+    d.cssW = win.innerWidth;
+    d.cssH = win.innerHeight;
+    d.dpr = win.devicePixelRatio || 1;
+    d.ua = win.navigator.userAgent;
+    const mem = /** @type {any} */ (win.performance).memory;
+    if (mem && mem.usedJSHeapSize) d.heapMb = mem.usedJSHeapSize / 1048576;
+  } catch (e) { /* keep defaults */ }
+  try {
+    const r = ctx.three && ctx.three.renderer;
+    if (r) {
+      const gl = r.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      d.gpu = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER));
+      d.canvasW = r.domElement.width;
+      d.canvasH = r.domElement.height;
+    }
+  } catch (e) { /* keep defaults */ }
+  try {
+    const st = ctx.render.stats();
+    d.scale = typeof st.scale === 'number' ? st.scale : ctx.render.scale;
+    d.tier = ctx.render.tier;
+    d.drawCalls = st.drawCalls || 0;
+    d.triangles = st.triangles || 0;
+    d.costMs = ctx.loop.stats.costMs;
+    d.cap = ctx.loop.stats.cap;
+  } catch (e) { /* keep defaults */ }
+  try {
+    d.audio = ctx.audio && ctx.audio.debug ? ctx.audio.debug().state : '-';
+    d.storage = ctx.save.memoryOnly ? 'memory only' : 'saved on device';
+    d.bake = ctx.world && ctx.world.bakeMode ? ctx.world.bakeMode : '-';
+    d.device = ctx.input.device;
+  } catch (e) { /* keep defaults */ }
+  return d;
 }

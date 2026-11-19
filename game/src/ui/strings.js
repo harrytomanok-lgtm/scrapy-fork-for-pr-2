@@ -206,6 +206,8 @@ const ROWS = [
   ['ui.set.quality.low', 'Low', 'נמוכה'],
   ['ui.set.quality.high', 'High', 'גבוהה'],
   ['ui.set.quality.desc', 'Automatic picks low on phones and high on desktops.', 'אוטומטי בוחר נמוכה בטלפונים וגבוהה במחשבים.'],
+  ['ui.set.device', 'Device report', 'דוח מכשיר'],
+  ['ui.set.deviceHint', 'After a minute of play, open this page and send a screenshot of it.', 'אחרי דקה של משחק אפשר לפתוח את הדף הזה ולשלוח צילום מסך שלו.'],
   ['ui.set.volMaster', 'Master volume', 'עוצמה כללית'],
   ['ui.set.volMusic', 'Music', 'מוזיקה'],
   ['ui.set.volSfx', 'Sound effects', 'אפקטים קוליים'],

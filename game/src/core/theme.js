@@ -47,12 +47,14 @@ export function baseCss() {
   const scale = Object.entries(TYPE_SCALE).map(([k, v]) => `--fs-${k}:calc(${v}rem * var(--text-scale));`).join('');
   const hygiene = GAME_LAYERS.map((n) => `.k-layer-${n}`).join(',');
   return [
-    'html,body{height:100%;margin:0;padding:0;overflow:hidden;background:#1B1626;overscroll-behavior:none;}',
+    // overflow:clip (after the hidden fallback) forbids programmatic scrolling too: a focus() or scrollIntoView()
+    // inside a screen must never shift the whole game, which overflow:hidden allows.
+    'html,body{height:100%;margin:0;padding:0;overflow:hidden;overflow:clip;background:#1B1626;overscroll-behavior:none;}',
     'body{-webkit-text-size-adjust:100%;text-size-adjust:100%;}',
     `#app{${tokens}${scale}--text-scale:1;--font-body:${FONT_STACKS.body};--font-display:${FONT_STACKS.display};`,
     '--safe-top:max(16px, env(safe-area-inset-top));--safe-bottom:max(16px, env(safe-area-inset-bottom));',
     '--safe-left:max(16px, env(safe-area-inset-left));--safe-right:max(16px, env(safe-area-inset-right));',
-    'position:relative;width:100%;height:100%;overflow:hidden;background:var(--ink);color:var(--paper);',
+    'position:relative;width:100%;height:100%;overflow:hidden;overflow:clip;background:var(--ink);color:var(--paper);',
     'font-family:var(--font-body);font-size:var(--fs-body);line-height:1.4;font-variant-numeric:tabular-nums;',
     'user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}',
     '#app *,#app *::before,#app *::after{box-sizing:border-box;}',
@@ -115,6 +117,20 @@ export function applyTheme(dom) {
     if (!(t && typeof t.closest === 'function' && t.closest('.k-select'))) e.preventDefault();
   });
   dom.guardTouch(dom.layer('canvas'));
+  // Safety net behind overflow:clip: nothing may leave the page or the game root scrolled (an on-screen keyboard
+  // or a focus call can scroll roots that are not scrollable by the user), or the whole game would sit shifted.
+  const doc = dom.root.ownerDocument;
+  const win = doc && doc.defaultView;
+  if (doc && win && typeof win.addEventListener === 'function') {
+    const unscroll = () => {
+      const se = doc.scrollingElement || doc.documentElement;
+      if (se && (se.scrollTop || se.scrollLeft)) { se.scrollTop = 0; se.scrollLeft = 0; }
+      if (doc.body && (doc.body.scrollTop || doc.body.scrollLeft)) { doc.body.scrollTop = 0; doc.body.scrollLeft = 0; }
+      if (dom.root.scrollTop || dom.root.scrollLeft) { dom.root.scrollTop = 0; dom.root.scrollLeft = 0; }
+    };
+    dom.root.addEventListener('scroll', unscroll, { passive: true });
+    win.addEventListener('scroll', unscroll, { passive: true });
+  }
 }
 
 /**

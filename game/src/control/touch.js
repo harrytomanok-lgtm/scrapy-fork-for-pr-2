@@ -416,6 +416,18 @@ export function createTouch(ctx, shared) {
   relabel();
 
   const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  // A phone has no keyboard: on a coarse pointer the active device starts as 'touch', so the first prompts show
+  // touch glyphs, and any real touch, also on a menu, makes touch the active device. Not in test mode without
+  // autoplay, where real devices are ignored.
+  const flags = ctx.flags || {};
+  if (!(flags.test && !flags.autoplay)) {
+    const markTouch = () => {
+      const inp = input();
+      if (inp && inp.device !== 'touch') inp.setDevice('touch');
+    };
+    if (coarse) markTouch();
+    listen(window, 'pointerdown', (/** @type {PointerEvent} */ e) => { if (e.pointerType === 'touch') markTouch(); }, { capture: true, passive: true });
+  }
   let shown = false;
   let disposed = false;
   let slowT = 1;

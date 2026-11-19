@@ -253,6 +253,7 @@ export const UI_CSS = `
 .ui-h3{margin:0;font-family:var(--font-display);font-size:var(--fs-body);font-weight:400;color:var(--paper-dim);letter-spacing:.04em}
 .ui-p{margin:0;font-size:var(--fs-body);line-height:1.45;color:var(--paper)}
 .ui-small{font-size:var(--fs-small);color:var(--paper-dim);line-height:1.4}
+.ui-devrep{margin:0;padding:10px;background:var(--ink);border:1px solid var(--line);color:var(--paper);font:12px/1.5 ui-monospace,monospace;direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word;user-select:text;-webkit-user-select:text}
 .ui-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .ui-col{display:flex;flex-direction:column;gap:8px;min-inline-size:0}
 .ui-spread{display:flex;gap:8px;align-items:center;justify-content:space-between}

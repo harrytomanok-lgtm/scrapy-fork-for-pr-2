@@ -14,6 +14,7 @@ import { createHud } from './hud.js';
 import { registerBootScreens } from './screens/boot.js';
 import { registerMenuScreens } from './screens/menu.js';
 import { registerOtherScreens } from './screens/other.js';
+import { createPerfLog } from './logic/perfLog.js';
 
 const OWNER = 'ui';
 /** Screens that cover the HUD completely. */
@@ -40,7 +41,10 @@ export function createUi(ctx) {
   let deathBoss = null;
   let loadingT = 0;
 
+  // Presented frame intervals during play, for the device report in Settings.
+  const perfLog = createPerfLog();
   const ui = {
+    perfLog,
     /** @param {string} screenId @param {any} [params] */
     open(screenId, params) {
       if (screenId === 'hud') {
@@ -163,6 +167,7 @@ export function createUi(ctx) {
         ui.open('death', { bossId: deathBoss });
       }
       const top = mgr.top();
+      if (top === 'hud' && c.session && c.session.running) perfLog.push(dt);
       if (top === 'dialogue') {
         const s = /** @type {any} */ (mgr.screens.get('dialogue'));
         if (s) s.tick(dt > 0 ? dt : 0);
