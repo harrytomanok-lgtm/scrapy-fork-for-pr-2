@@ -436,6 +436,13 @@ export function createTouch(ctx, shared) {
     if (coarse) markTouch();
     listen(window, 'pointerdown', (/** @type {PointerEvent} */ e) => { if (e.pointerType === 'touch') markTouch(); }, { capture: true, passive: true });
   }
+  // A tap anywhere skips a skippable in-game camera shot (the transformation, the ultimate, a boss intro): a phone
+  // has no Enter key, and the touch controls are hidden while the shot plays.
+  listen(window, 'pointerdown', () => {
+    const cam = ctx.cam;
+    const inp = input();
+    if (cam && cam.busy && inp && inp.context === 'cine' && typeof cam.skip === 'function') cam.skip();
+  }, { capture: true, passive: true });
   let shown = false;
   let disposed = false;
   let slowT = 1;

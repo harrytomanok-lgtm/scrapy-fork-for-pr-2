@@ -66,7 +66,7 @@ export function ringfallScript(ctx, ent, def, c, r) {
       const cam = ctx.cam;
       if (cam && cam.play && !cam.busy && ctx.player === ent) {
         try {
-          const pr = cam.play('combat.ringfall', ringfallShots(ctx, ent, color), { skippable: false, freeze: false });
+          const pr = cam.play('combat.ringfall', ringfallShots(ctx, ent, color), { skippable: true, freeze: false });
           if (pr && pr.catch) pr.catch(() => {});
         } catch (e) {
           if (ctx.log) ctx.log.warn('combat', 'ringfall shot failed', String(e));

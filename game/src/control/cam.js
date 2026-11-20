@@ -19,6 +19,7 @@ import { KIND_MASK, TAG } from '../core/ents.js';
 import { clamp, angleDelta, wrapAngle, lerp, smoothstep } from '../core/math.js';
 import {
   CAM, CAM_MODES, spring, noise1, kickEnvelope, frameShift, horizontalFov, lockFraming, easeToward, interpAngle, restPitch,
+  LOCK_BAND, lockPitch, recentreStep,
 } from './logic/camMath.js';
 
 const D2R = Math.PI / 180;
@@ -40,6 +41,8 @@ export function createCam(ctx, shared) {
     stepYaw0: 0, stepPitch0: -12 * D2R,
     // Camera push (finisher): fraction of the arm, start (real s) and duration.
     pushAmt: 0, pushStart: -10, pushDur: 0.9,
+    // The last placed camera (position and vertical FOV in radians) for the lock-on readability band.
+    camX: 0, camY: 0, camZ: 0, vfov: 60 * D2R,
   };
   const sDist = { x: 5.5, v: 0 };
   const sHeight = { x: 1.6, v: 0 };
@@ -382,6 +385,15 @@ export function createCam(ctx, shared) {
         const k = 1 - Math.exp((-3 / CAM.lockEase) * dt);
         st.yaw = wrapAngle(st.yaw + angleDelta(st.yaw, lockOut.yaw) * k);
         if (idle > 0.5) st.pitch += (rest - st.pitch) * (1 - Math.exp(-4 * dt));
+        // Keep the target's body inside the readable band: under the HUD target frame, above the hero and the deck.
+        const ty = lockEnt.pos.y + lockEnt.height * 0.5;
+        const edx = lockEnt.pos.x - st.camX;
+        const edz = lockEnt.pos.z - st.camZ;
+        const elev = Math.atan2(ty - st.camY, Math.sqrt(edx * edx + edz * edz) || 1);
+        const portraitNow = st.aspect < 1;
+        const want = lockPitch(st.pitch, elev, st.vfov * 0.5, portraitNow ? LOCK_BAND.topPortrait : LOCK_BAND.top,
+          portraitNow ? LOCK_BAND.bottomPortrait : LOCK_BAND.bottom);
+        st.pitch = clamp(st.pitch + (want - st.pitch) * (1 - Math.exp(-6 * dt)), CAM.pitchMin, CAM.pitchMax);
         st.threatT = 0;
       } else if (mode === 'flight' || mode === 'boost') {
         if (idle > 0.4 && vh > 3) {
@@ -404,7 +416,12 @@ export function createCam(ctx, shared) {
       } else if (mode !== 'dialogue') {
         let framed = false;
         if (mode === 'combat' && isPlayer && c.spatial) {
-          const t = c.spatial.nearest(target.pos.x, target.pos.y, target.pos.z, 30, KIND_MASK.HOSTILE_TARGETS, threatFilter);
+          // Frame the enemy the next attack goes to (the soft target), else the nearest threat.
+          const cb = c.combat;
+          const sid = cb && typeof cb.softTarget === 'function' ? cb.softTarget() : 0;
+          const se = sid ? c.ents.get(sid) : null;
+          const t = se && se.alive && threatFilter(se) ? se
+            : c.spatial.nearest(target.pos.x, target.pos.y, target.pos.z, 30, KIND_MASK.HOSTILE_TARGETS, threatFilter);
           if (t) {
             const bearing = Math.atan2(t.pos.x - target.pos.x, t.pos.z - target.pos.z);
             const off = angleDelta(st.yaw, bearing);
@@ -425,8 +442,8 @@ export function createCam(ctx, shared) {
         if (!framed && vh > 1.5 && idle > delay && target.move && target.move.grounded !== undefined) {
           // Recentre behind forward running; pure strafing and backpedalling never spin the camera.
           const fwd = isPlayer ? (myA > 0.3 ? clamp(1 - mxA * 1.5, 0, 1) : 0) : 1;
-          const rate = CAM.recentreRate * dt * fwd;
-          st.yaw = wrapAngle(st.yaw + clamp(angleDelta(st.yaw, Math.atan2(vx, vz)), -rate, rate));
+          // Eased in after the delay and slowed near the heading; any drag resets `idle` and stops it at once.
+          st.yaw = wrapAngle(st.yaw + recentreStep(angleDelta(st.yaw, Math.atan2(vx, vz)), CAM.recentreRate * fwd, idle - delay, dt));
           st.pitch += clamp(rest - st.pitch, -30 * D2R * dt, 30 * D2R * dt);
         } else if (idle > delay + 1.5 && Math.abs(st.pitch - rest) > 1e-3) {
           // A camera left pitched far up or down drifts home on its own.
@@ -480,10 +497,18 @@ export function createCam(ctx, shared) {
         wantDist += CAM.portraitPullBack;
         wantHeight += CAM.portraitRise;
       }
-      const wantFov = portrait ? row.fovP : row.fovL;
+      let wantFov = portrait ? row.fovP : row.fovL;
       const vx = target.vel.x;
       const vz = target.vel.z;
       const vh = Math.sqrt(vx * vx + vz * vz);
+      if (mode === 'boost') {
+        // Sense of speed: the view widens with speed and a fine buffeting rides on it (Sonic Boost more).
+        const v3 = Math.sqrt(vh * vh + target.vel.y * target.vel.y);
+        wantFov += clamp((v3 - 25) * 0.16, 0, 8);
+        const floor = target.move && target.move.boost === 2 ? 0.26 : 0.14;
+        const rm = s && s.reducedMotion ? 0 : 1;
+        if (st.trauma < floor * rm) st.trauma = floor * rm;
+      }
 
       // Pivot target: the followed body plus the mode's height, look-ahead, or the lock blend.
       let px = p.x;
@@ -612,6 +637,7 @@ export function createCam(ctx, shared) {
       const oz = amt * CAM.shakeMetres * noise1(tt, 3) + pZ.x;
 
       camera.position.set(cx + ox, cy + oy, cz + oz);
+      st.camX = cx; st.camY = cy; st.camZ = cz;
       camera.up.set(0, 1, 0);
       camera.lookAt(lookX + ox, lookY + oy, lookZ + oz);
 
@@ -635,6 +661,7 @@ export function createCam(ctx, shared) {
 
       const kick = kickEnvelope(st.kickPeak, real - st.kickStart, st.kickDur, st.kickHold);
       const fovNow = clamp(fov + kick, 20, 120);
+      st.vfov = fovNow * D2R;
       if (Math.abs(camera.fov - fovNow) > 0.01) {
         camera.fov = fovNow;
         camera.updateProjectionMatrix();
