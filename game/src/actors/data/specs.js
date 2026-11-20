@@ -58,48 +58,57 @@ export function person(o) {
   const S = o.slots;
   const limb = 5;
   const out = [];
-  // head and face
-  // hero detail: the face normals lean up so the face from the front shades like the arms (lead note: a dark patch)
-  out.push(P('head', 'sphere', [0.22 * k * hk, 0.25 * k * hk, 0.235 * k * hk], [0, 0.12 * k, 0.005 * k], null, S.skin, hero ? { seg: 8, normalUp: 0.6 } : { seg: 8 }));
-  if (!o.noNeck) out.push(hero ? P('neck', 'capsule', [0.05 * k * b, 0.07 * k], [0, 0.03 * k, 0], null, S.skin, { seg: 5 }) : P('neck', 'cylinder', [0.05 * k * b, 0.12 * k], [0, 0.03 * k, 0], null, S.skin, { seg: limb }));
-  if (o.face) {
-    for (const s of [1, -1]) {
-      out.push(P('head', 'sphere', [0.06 * k * hk, 0.044 * k * hk, 0.026 * k], [s * 0.047 * k, 0.11 * k, 0.108 * k], [0, s * 0.42, s * -0.12], S.eye, { seg: S.lid ? 4 : 5 }));
-      if (S.iris) out.push(P('head', 'sphere', [0.03 * k, 0.037 * k, 0.012 * k], [s * 0.043 * k, 0.108 * k, 0.12 * k], [0, s * 0.42, 0], S.iris, { seg: S.lid ? 4 : 5 }));
-      // an ink upper lid line over a light eye, so the eye shape reads at play distance
-      if (S.lid) out.push(P('head', 'box', [0.064 * k * hk, 0.011 * k, 0.012 * k], [s * 0.047 * k, 0.129 * k, 0.116 * k], [0, s * 0.42, s * -0.14], S.lid));
-      out.push(P('head', 'box', [0.016 * k, 0.016 * k, 0.008 * k], [s * 0.038 * k, 0.12 * k, 0.126 * k], [0, s * 0.42, 0], 'glint'));
-      // hero brows: thicker and a little proud of the fringe so they read at medium distance
-      out.push(P('brow' + side(s), 'box', hero ? [0.07 * k, 0.025 * k, 0.022 * k] : [0.064 * k, 0.019 * k, 0.018 * k], [s * 0.003 * k, (hero ? -0.003 : 0.002) * k, (hero ? 0.008 : 0.002) * k], [0, s * 0.35, s * 0.1], S.hair));
-    }
-    out.push(P('head', 'box', [0.02 * k, 0.044 * k, 0.026 * k], [0, 0.083 * k, 0.118 * k], [0.28, 0, 0], S.skin));
-    out.push(P('jaw', 'box', [0.042 * k, 0.011 * k, 0.012 * k], [0, -0.003 * k, 0.044 * k], null, 'ink'));
+  // head: a cranium and, on detailed characters, a narrower lower face so the head tapers to a chin
+  // (face normals lean up so the face from the front shades like the arms instead of a dark patch)
+  if (hero) {
+    out.push(P('head', 'sphere', [0.222 * k * hk, 0.235 * k * hk, 0.232 * k * hk], [0, 0.132 * k, -0.008 * k], null, S.skin, { seg: 10, normalUp: 0.6 }));
+    out.push(P('head', 'sphere', [0.168 * k * hk, 0.15 * k * hk, 0.17 * k * hk], [0, 0.064 * k, 0.032 * k], [0.15, 0, 0], S.skin, { seg: 8, normalUp: 0.6 }));
+  } else {
+    out.push(P('head', 'sphere', [0.22 * k * hk, 0.25 * k * hk, 0.235 * k * hk], [0, 0.12 * k, 0.005 * k], null, S.skin, { seg: 8 }));
   }
+  if (!o.noNeck) out.push(hero ? P('neck', 'capsule', [0.052 * k * b, 0.07 * k], [0, 0.03 * k, 0], null, S.skin, { seg: 6 }) : P('neck', 'cylinder', [0.05 * k * b, 0.12 * k], [0, 0.03 * k, 0], null, S.skin, { seg: limb }));
+  if (o.face) out.push(...face(o, k, hk, hero, S));
   // torso
-  out.push(P('chest', 'lathe', [0.13 * w * b, 0.165 * w * b, 0.15 * w * b, 0.3 * k, 0.66], [0, 0.08 * k, 0], null, S.top, { seg: hero ? 7 : 6 }));
-  out.push(hero ? P('spine', 'lathe', [0.125 * w * b, 0.12 * w * b, 0.13 * w * b, 0.2 * k, 0.7], [0, 0.09 * k, 0], null, S.abdomen || S.top, { seg: 7 })
+  out.push(P('chest', 'lathe', hero ? [0.122 * w * b, 0.168 * w * b, 0.16 * w * b, 0.3 * k, 0.64] : [0.13 * w * b, 0.165 * w * b, 0.15 * w * b, 0.3 * k, 0.66], [0, 0.08 * k, 0], null, S.top, { seg: hero ? 8 : 6 }));
+  out.push(hero ? P('spine', 'lathe', [0.125 * w * b, 0.118 * w * b, 0.13 * w * b, 0.2 * k, 0.7], [0, 0.09 * k, 0], null, S.abdomen || S.top, { seg: 8 })
     : P('spine', 'cylinder', [0.125 * w * b, 0.22 * k, 0.135 * w * b], [0, 0.09 * k, 0], [0, 0, 0], S.abdomen || S.top, { seg: 6 }));
   out.push(P('hips', 'sphere', [0.29 * w * b, 0.2 * k, 0.2 * w * b], [0, 0, 0], null, S.legs, { seg: hero ? 8 : 6 }));
-  // arms
+  // arms: on detailed characters a tapered upper arm (deltoid to elbow), a forearm wider at the elbow with two
+  // leather ties, and a large closed fist with a thumb (hands read x1.15 at phone size)
   for (const s of [1, -1]) {
     const L = side(s);
-    out.push(P('arm' + L, 'capsule', [0.05 * k * b, 0.19 * k], [0, -0.14 * k, 0], null, S.upper || S.top, { seg: limb }));
-    out.push(P('fore' + L, hero ? 'capsule' : 'cylinder', hero ? [0.053 * k * b, 0.17 * k] : [0.046 * k * b, 0.24 * k, 0.04 * k * b], [0, -0.13 * k, 0], null, S.fore || S.upper || S.top, { seg: limb }));
-    out.push(P('hand' + L, 'sphere', [0.09 * k, 0.1 * k, 0.078 * k], [0, -0.045 * k, 0.005 * k], null, S.hand || S.skin, { seg: hero ? 6 : 5 }));
+    if (hero) {
+      out.push(P('arm' + L, 'lathe', [0.04 * k * b, 0.05 * k * b, 0.058 * k * b, 0.26 * k], [0, -0.13 * k, 0], null, S.upper || S.top, { seg: 7 }));
+      out.push(P('fore' + L, 'lathe', [0.04 * k * b, 0.05 * k * b, 0.054 * k * b, 0.25 * k], [0, -0.125 * k, 0.004 * k], null, S.fore || S.upper || S.top, { seg: 7 }));
+      for (const y of [-0.06, -0.2]) out.push(P('fore' + L, 'cylinder', [(y < -0.1 ? 0.045 : 0.054) * k * b, 0.018 * k], [0, y * k, 0.004 * k], [0, 0, s * 0.12], S.tie || S.boots, { seg: 7 }));
+      out.push(P('hand' + L, 'sphere', [0.088 * k, 0.1 * k, 0.092 * k], [0, -0.05 * k, 0.012 * k], null, S.hand || S.skin, { seg: 7 }));
+      out.push(P('hand' + L, 'box', [0.078 * k, 0.03 * k, 0.07 * k], [0, -0.092 * k, 0.018 * k], [0.25, 0, 0], S.hand || S.skin));
+      out.push(P('hand' + L, 'capsule', [0.019 * k, 0.04 * k], [-s * 0.032 * k, -0.045 * k, 0.05 * k], [0.5, 0, s * 0.5], S.hand || S.skin, { seg: 5 }));
+    } else {
+      out.push(P('arm' + L, 'capsule', [0.05 * k * b, 0.19 * k], [0, -0.14 * k, 0], null, S.upper || S.top, { seg: limb }));
+      out.push(P('fore' + L, 'cylinder', [0.046 * k * b, 0.24 * k, 0.04 * k * b], [0, -0.13 * k, 0], null, S.fore || S.upper || S.top, { seg: limb }));
+      out.push(P('hand' + L, 'sphere', [0.09 * k, 0.1 * k, 0.078 * k], [0, -0.045 * k, 0.005 * k], null, S.hand || S.skin, { seg: 5 }));
+    }
   }
-  // legs
+  // legs: wide gathered trousers bloused over tall soft boots with a flared top and a dark sole
   for (const s of [1, -1]) {
     const L = side(s);
-    out.push(hero ? P('thigh' + L, 'lathe', [0.078 * k * b, 0.088 * k * b, 0.07 * k * b, 0.44 * k], [0, -0.2 * k, 0], null, S.legs, { seg: limb })
+    out.push(hero ? P('thigh' + L, 'lathe', [0.078 * k * b, 0.1 * k * b, 0.084 * k * b, 0.44 * k], [0, -0.2 * k, 0], null, S.legs, { seg: 7 })
       : P('thigh' + L, 'cylinder', [0.064 * k * b, 0.44 * k, 0.085 * k * b], [0, -0.2 * k, 0], null, S.legs, { seg: limb }));
     if (o.boots === 'tall') {
-      if (hero) out.push(P('shin' + L, 'lathe', [0.075 * k * b, 0.085 * k * b, 0.068 * k * b, 0.13 * k], [0, -0.05 * k, 0], null, S.shin || S.legs, { seg: 5 }));
-      out.push(P('shin' + L, 'cylinder', hero ? [0.072 * k * b, 0.33 * k, 0.084 * k * b] : [0.066 * k * b, 0.33 * k, 0.074 * k * b], [0, -0.24 * k, 0.003 * k], null, S.boots, { seg: limb }));
+      if (hero) {
+        out.push(P('shin' + L, 'lathe', [0.07 * k * b, 0.092 * k * b, 0.08 * k * b, 0.14 * k], [0, -0.045 * k, 0], null, S.shin || S.legs, { seg: 7 }));
+        out.push(P('shin' + L, 'lathe', [0.056 * k * b, 0.068 * k * b, 0.082 * k * b, 0.32 * k], [0, -0.24 * k, 0.004 * k], null, S.boots, { seg: 7 }));
+      } else {
+        out.push(P('shin' + L, 'cylinder', [0.066 * k * b, 0.33 * k, 0.074 * k * b], [0, -0.24 * k, 0.003 * k], null, S.boots, { seg: limb }));
+      }
     } else {
       out.push(P('shin' + L, 'cylinder', [0.05 * k * b, 0.4 * k, 0.065 * k * b], [0, -0.2 * k, 0], null, S.shin || S.legs, { seg: limb }));
     }
-    if (hero) out.push(P('foot' + L, 'capsule', [0.066 * k, 0.16 * k, 0.72], [0, -0.035 * k, 0.055 * k], [PI / 2, 0, 0], S.boots, { seg: 5 }));
-    else out.push(P('foot' + L, 'box', [0.11 * k, 0.08 * k, 0.24 * k], [0, -0.04 * k, 0.05 * k], null, S.boots || S.legs));
+    if (hero) {
+      out.push(P('foot' + L, 'capsule', [0.064 * k, 0.17 * k, 0.72], [0, -0.032 * k, 0.06 * k], [PI / 2, 0, 0], S.boots, { seg: 6 }));
+      out.push(P('foot' + L, 'box', [0.1 * k, 0.022 * k, 0.27 * k], [0, -0.066 * k, 0.06 * k], null, S.sole || 'ink'));
+    } else out.push(P('foot' + L, 'box', [0.11 * k, 0.08 * k, 0.24 * k], [0, -0.04 * k, 0.05 * k], null, S.boots || S.legs));
   }
   if (o.skirt) {
     const sk = o.skirt;
@@ -110,32 +119,89 @@ export function person(o) {
 }
 
 /**
- * Hair: a cap set back on the head so the face shows, plus swept tufts (never an upward crown).
+ * A geometric face (ART_UX 2.1): almond eyes on the 'eyes' bone (flattened for a blink), an ink upper lid with an
+ * outward flick, an iris with a pupil and a glint, brow boxes on the brow bones, a nose wedge and a mouth line on
+ * the jaw. Detailed faces get larger eyes and heavier brows that read at medium distance.
+ * @param {any} o @param {number} k @param {number} hk @param {boolean} hero @param {any} S
+ */
+function face(o, k, hk, hero, S) {
+  const out = [];
+  const e = hero ? 1.12 : 1;
+  for (const s of [1, -1]) {
+    const x = s * (hero ? 0.05 : 0.047) * k;
+    out.push(P('eyes', 'sphere', [0.062 * k * hk * e, 0.046 * k * hk * e, 0.026 * k], [x, 0, 0.008 * k], [0, s * 0.42, s * -0.1], S.eye, { seg: S.lid ? 5 : 5 }));
+    if (S.iris) {
+      out.push(P('eyes', 'sphere', [0.032 * k * e, 0.04 * k * e, 0.012 * k], [x - s * 0.004 * k, -0.002 * k, 0.02 * k], [0, s * 0.42, 0], S.iris, { seg: 5 }));
+      out.push(P('eyes', 'box', [0.014 * k * e, 0.022 * k * e, 0.006 * k], [x - s * 0.006 * k, -0.003 * k, 0.026 * k], [0, s * 0.42, 0], 'ink'));
+    }
+    // an ink upper lid with an outward flick, so the eye shape reads at play distance and the blink closes onto it
+    if (S.lid) {
+      out.push(P('eyes', 'box', [0.07 * k * hk * e, (hero ? 0.015 : 0.011) * k, 0.012 * k], [x, 0.02 * k * e, 0.014 * k], [0, s * 0.42, s * -0.14], S.lid));
+      if (hero) out.push(P('eyes', 'box', [0.02 * k, 0.011 * k, 0.01 * k], [x + s * 0.036 * k, 0.017 * k, 0.0], [0, s * 0.9, s * 0.45], S.lid));
+    }
+    out.push(P('eyes', 'box', [0.014 * k * e, 0.014 * k * e, 0.008 * k], [x - s * 0.012 * k, 0.01 * k, 0.026 * k], [0, s * 0.42, 0], 'glint'));
+    out.push(P('brow' + side(s), 'box', hero ? [0.074 * k, 0.024 * k, 0.024 * k] : [0.064 * k, 0.019 * k, 0.018 * k], [s * 0.004 * k, (hero ? 0.002 : 0.002) * k, (hero ? 0.012 : 0.002) * k], [0, s * 0.35, s * 0.1], S.hair));
+  }
+  out.push(P('head', 'box', [0.022 * k, 0.046 * k, 0.03 * k], [0, 0.078 * k, (hero ? 0.122 : 0.118) * k], [0.32, 0, 0], S.skin));
+  out.push(P('jaw', 'box', [hero ? 0.046 * k : 0.042 * k, 0.011 * k, 0.012 * k], [0, -0.004 * k, (hero ? 0.05 : 0.044) * k], null, 'ink'));
+  return out;
+}
+
+/**
+ * Hair: a cap set back on the head so the face shows, plus swept tufts (never an upward crown). The hero's 'tail'
+ * has volume swept back over the crown, an asymmetric fringe, long locks framing the face and a low tail on three
+ * spring bones with a wrap and a bronze ring.
  * @param {string} style 'tail'|'knot'|'short'|'braid'|'bob'|'crop' @param {number} k @param {number} hk @param {string} slot @param {any} o
  */
 function hair(style, k, hk, slot, o) {
   const out = [];
   const t = o.detail === 'hero';
   const q = k * hk;
-  out.push(P('head', 'sphere', [0.245 * q, 0.25 * q, 0.25 * q], [0, 0.165 * k, -0.05 * k], [0.32, 0, 0], slot, { seg: 8 }));
-  // bangs swept to the left, hanging over the forehead
-  const bangs = t ? [[0.05, -0.5, 0.12, 0.3], [-0.02, -0.6, 0.13, 0.1], [-0.08, -0.35, 0.11, -0.15]] : [[0.04, -0.55, 0.11, 0.25], [-0.045, -0.55, 0.11, -0.1]];
-  if (style !== 'knot' && style !== 'crop') {
+  if (t) {
+    out.push(P('head', 'sphere', [0.248 * q, 0.245 * q, 0.262 * q], [0, 0.168 * k, -0.036 * k], [0.32, 0, 0], slot, { seg: 10 }));
+    // crown volume swept back over the skull toward the tie (a smooth mass, never spikes)
+    out.push(P('head', 'sphere', [0.232 * q, 0.13 * q, 0.25 * q], [0.008 * q, 0.262 * q, -0.045 * q], [0.22, 0, -0.05], slot, { seg: 9 }));
+    // asymmetric fringe from a part over the right eye, swept to the left
+    for (const [x, rx, len, rz, wd] of [[-0.045, -0.75, 0.15, 0.62, 0.11], [0.03, -0.7, 0.14, 0.42, 0.1], [-0.1, -0.45, 0.12, 0.15, 0.07]]) {
+      out.push(P('head', 'tuft', [wd * q, len * q, 0.036 * q, 0.4], [x * q, 0.255 * q, 0.075 * q], [rx, 0, rz], slot, { seg: 5 }));
+    }
+  } else {
+    out.push(P('head', 'sphere', [0.245 * q, 0.25 * q, 0.25 * q], [0, 0.165 * k, -0.05 * k], [0.32, 0, 0], slot, { seg: 8 }));
+  }
+  const bangs = [[0.04, -0.55, 0.11, 0.25], [-0.045, -0.55, 0.11, -0.1]];
+  if (!t && style !== 'knot' && style !== 'crop') {
     for (const [x, rx, len, rz] of bangs) out.push(P('head', 'tuft', [0.075 * q, len * q, 0.03 * q, 0.35], [x * q, 0.255 * q, 0.06 * q], [rx, 0, rz], slot, { seg: 4 }));
   }
   if (style === 'tail') {
     const len = (o.hairLen || 0.3) * k;
-    for (const s of o.sideLock ? [1] : [1, -1]) out.push(P('head', 'tuft', [0.06 * q, 0.15 * q, 0.03 * q, 0.2], [s * 0.112 * q, 0.19 * q, 0.03 * q], [-0.2, 0, s * 0.12], slot, { seg: 4 }));
-    out.push(P('tail1', 'tuft', [0.085 * k, len, 0.065 * k, -0.12], [0, 0, -0.005 * k], [0.12, 0, 0], slot, { seg: 5 }));
-    out.push(P('tail1', 'torus', [0.03 * k, 0.011 * k], [0, -0.035 * k, -0.01 * k], null, o.ringSlot || slot, { seg: 5 }));
-    if (o.sideLock) out.push(P('head', 'tuft', [0.06 * q, 0.26 * q, 0.035 * q, 0.15], [-0.11 * q, 0.15 * q, 0.04 * q], [-0.1, 0, -0.08], slot, { seg: 4 }));
+    if (t) {
+      // long locks framing the face (left one longer), and two back layers falling to the nape
+      for (const s of [1, -1]) {
+        out.push(P('head', 'tuft', [0.07 * q, (s > 0 ? 0.25 : 0.2) * q, 0.035 * q, 0.22], [s * 0.112 * q, 0.2 * q, 0.035 * q], [-0.12, 0, s * 0.1], slot, { seg: 4 }));
+        out.push(P('head', 'tuft', [0.12 * q, 0.2 * q, 0.05 * q, -0.2], [s * 0.065 * q, 0.2 * q, -0.1 * q], [0.35, 0, s * 0.15], slot, { seg: 5 }));
+      }
+      if (o.sideLock) out.push(P('head', 'tuft', [0.06 * q, 0.34 * q, 0.035 * q, 0.15], [-0.118 * q, 0.15 * q, 0.03 * q], [-0.08, 0, -0.06], slot, { seg: 4 }));
+      // the tail: three tapering segments on three spring bones, wrapped at the tie with a bronze ring
+      const l3 = Math.max(0.1, len - 0.24 * k);
+      out.push(P('tail1', 'tuft', [0.088 * k, (0.14 + (o.hairLen || 0.3) * 0.05) * k, 0.07 * k, -0.06], [0, 0.005 * k, -0.004 * k], [0.08, 0, 0], slot, { seg: 6 }));
+      out.push(P('tail2', 'tuft', [0.08 * k, 0.16 * k, 0.062 * k, -0.06], [0, 0.01 * k, 0], [0.04, 0, 0], slot, { seg: 6 }));
+      out.push(P('tail3', 'tuft', [0.07 * k, l3, 0.05 * k, -0.1], [0, 0.01 * k, 0], null, slot, { seg: 5 }));
+      out.push(P('tail1', 'cylinder', [0.034 * k, 0.05 * k, 0.03 * k], [0, -0.005 * k, -0.004 * k], [0.08, 0, 0], o.wrapSlot || slot, { seg: 7 }));
+      out.push(P('tail1', 'torus', [0.035 * k, 0.01 * k], [0, -0.035 * k, -0.006 * k], [0.08, 0, 0], o.ringSlot || slot, { seg: 7 }));
+    } else {
+      for (const s of o.sideLock ? [1] : [1, -1]) out.push(P('head', 'tuft', [0.06 * q, 0.15 * q, 0.03 * q, 0.2], [s * 0.112 * q, 0.19 * q, 0.03 * q], [-0.2, 0, s * 0.12], slot, { seg: 4 }));
+      out.push(P('tail1', 'tuft', [0.085 * k, len, 0.065 * k, -0.12], [0, 0, -0.005 * k], [0.12, 0, 0], slot, { seg: 5 }));
+      out.push(P('tail1', 'torus', [0.03 * k, 0.011 * k], [0, -0.035 * k, -0.01 * k], null, o.ringSlot || slot, { seg: 5 }));
+    }
   } else if (style === 'knot') {
     out.push(P('head', 'sphere', [0.11 * q, 0.1 * q, 0.11 * q], [0, 0.275 * q, -0.06 * q], null, slot, { seg: 6 }));
     out.push(P('head', 'torus', [0.04 * q, 0.012 * q], [0, 0.235 * q, -0.06 * q], [0.4, 0, 0], o.ringSlot || slot, { seg: 6 }));
   } else if (style === 'short') {
     for (const [x, z, rz] of [[0.09, -0.06, 0.9], [-0.1, -0.03, -1.1], [0.02, -0.12, 0.2]]) out.push(P('head', 'tuft', [0.08 * q, 0.12 * q, 0.035 * q, 0.3], [x * q, 0.24 * q, z * q], [0.3, 0, rz], slot, { seg: 4 }));
   } else if (style === 'braid') {
-    out.push(P('tail1', 'capsule', [0.032 * k, (o.hairLen || 0.32) * k], [0, -(o.hairLen || 0.32) * k * 0.5, -0.01 * k], null, slot, { seg: 5 }));
+    const L = (o.hairLen || 0.32) * k;
+    out.push(P('tail1', 'capsule', [0.032 * k, 0.12 * k], [0, -0.06 * k, -0.01 * k], null, slot, { seg: 4 }));
+    out.push(P('tail2', 'capsule', [0.028 * k, Math.max(0.06, L - 0.13 * k)], [0, -Math.max(0.06, L - 0.13 * k) * 0.5, -0.005 * k], null, slot, { seg: 4 }));
   } else if (style === 'bob') {
     for (const s of [1, -1]) out.push(P('head', 'tuft', [0.09 * q, 0.2 * q, 0.05 * q, 0.1], [s * 0.1 * q, 0.2 * q, -0.01 * q], [0, 0, s * 0.15], slot, { seg: 4 }));
   }
@@ -156,13 +222,13 @@ function hero(v) {
   const w = build.shoulder / 0.44;
   const b = 0.7 + build.bulk * 0.55;
   const parts = person({
-    build, detail: 'hero', face: true, boots: 'tall', hair: 'tail', hairLen: v === 'a' ? 0.24 : 0.4, sideLock: v === 'b', ringSlot: 'bronze',
-    slots: { top: 'coat', legs: 'trousers', shin: 'trousers', boots: 'boots', skin: 'skin', hair: 'hair', eye: 'sclera', iris: 'eye', lid: 'ink', upper: 'skin', fore: 'wraps', hand: 'skin' },
+    build, detail: 'hero', face: true, boots: 'tall', hair: 'tail', hairLen: v === 'a' ? 0.4 : 0.56, sideLock: v === 'b', ringSlot: 'bronze', wrapSlot: 'wraps',
+    slots: { top: 'coat', legs: 'trousers', shin: 'trousers', boots: 'boots', skin: 'skin', hair: 'hair', eye: 'sclera', iris: 'eye', lid: 'ink', upper: 'skin', fore: 'wraps', hand: 'skin', tie: 'boots', sole: 'ink' },
   });
   // a sand cuff on each (now leather) boot top: outfit detail that reads at play distance
   for (const s of [1, -1]) {
     const L = side(s);
-    parts.push(P('shin' + L, 'cylinder', [0.085 * k * b, 0.055 * k, 0.088 * k * b], [0, -0.085 * k, 0.003 * k], null, 'wraps', { seg: 7 }));
+    parts.push(P('shin' + L, 'cylinder', [0.084 * k * b, 0.05 * k, 0.09 * k * b], [0, -0.09 * k, 0.004 * k], null, 'wraps', { seg: 8 }));
   }
   // high collar, front lining, belt and ring
   parts.push(P('chest', 'cylinder', [0.085 * w, 0.1 * k, 0.098 * w], [0, 0.245 * k, -0.008 * k], [-0.08, 0, 0], 'coat', { seg: 7 }));
@@ -171,11 +237,14 @@ function hero(v) {
   parts.push(P('spine', 'torus', [0.028 * k, 0.009 * k], [0.07 * w, 0.0, 0.1 * w * b], [PI / 2, 0, 0.2], 'bronze', { seg: 5 }));
   // shoulder edges of the sleeveless coat
   for (const s of [1, -1]) parts.push(P('shoulder' + side(s), 'sphere', [0.16 * w * b, 0.1 * k, 0.165 * w * b], [s * 0.11 * w, 0.005 * k, 0], null, 'coat', { seg: 6 }));
-  // coat hem: two front panels and a back split into two flaps
+  // coat hem: two front panels with a lining edge, and the split back hem as two flaps on spring bones
   for (const s of [1, -1]) {
+    const L = side(s);
     parts.push(P('hips', 'box', [0.15 * w, 0.3 * k, 0.022], [s * 0.085 * w, -0.13 * k, 0.1 * w * b], [-0.12, 0, s * 0.12], 'coat'));
     parts.push(P('hips', 'box', [0.152 * w, 0.032 * k, 0.026], [s * (0.085 * w + 0.016 * k), -0.265 * k, 0.1 * w * b + 0.017 * k], [-0.12, 0, s * 0.12], 'coatLining'));
-    parts.push(P('hips', 'box', [0.15 * w, 0.34 * k, 0.022], [s * 0.088 * w, -0.14 * k, -0.105 * w * b], [0.16, 0, s * 0.14], 'coat'));
+    const bz = -0.105 * w * b + 0.12 * k;
+    parts.push(P('hem' + L, 'box', [0.15 * w, 0.36 * k, 0.022], [s * 0.01 * w, -0.09 * k, bz], [0.12, 0, s * 0.12], 'coat'));
+    parts.push(P('hem' + L, 'box', [0.152 * w, 0.03 * k, 0.026], [s * (0.01 * w + 0.03 * k), -0.255 * k, bz - 0.02 * k], [0.12, 0, s * 0.12], 'coatLining'));
   }
   // the sash: across the chest from the left shoulder, a knot, then the long trailing tail on three spring bones
   parts.push(P('chest', 'box', [0.065, 0.44 * k, 0.014], [0.005, 0.06 * k, 0.118 * w * b], [0, 0, -0.62], 'sash'));
@@ -200,10 +269,10 @@ function hero(v) {
     }
     return out;
   };
-  const tailLen = (v === 'a' ? 0.24 : 0.4) * k;
-  const hairTips = [P('tail1', 'tuft', [0.075 * k, 0.1 * k, 0.05 * k, -0.1], [0, -tailLen * 0.8, -0.012 * k], [0.12, 0, 0], 'ora', { seg: 4 })];
+  const tailLen = Math.max(0.1, (v === 'a' ? 0.4 : 0.56) * k - 0.24 * k);
+  const hairTips = [P('tail3', 'tuft', [0.06 * k, 0.09 * k, 0.045 * k, -0.1], [0, -tailLen * 0.78, -0.004 * k], null, 'ora', { seg: 4 })];
   for (const [x, rz] of [[0.05, 0.3], [-0.08, -0.15]]) {
-    hairTips.push(P('head', 'blade', [0.05 * k, 0.07 * k, 0.014 * k], [(x + rz * 0.12) * k, 0.15 * k, 0.124 * k], [-0.4, 0, PI + rz], 'ora'));
+    hairTips.push(P('head', 'blade', [0.05 * k, 0.07 * k, 0.014 * k], [(x + rz * 0.12) * k, 0.17 * k, 0.13 * k], [-0.4, 0, PI + rz], 'ora'));
   }
   // Tempest mantle: four wide ribbons flaring from the shoulders like a wind-torn cape, plus two swept wind-vanes
   // at the temples (ART_UX 2.3). Wide enough to change the silhouette at phone size.
@@ -416,7 +485,7 @@ function namedNpcs() {
     npc_talia: [P('foreL', 'cylinder', [0.13, 0.12, 0.15], [0.12, -0.12, 0.08], null, 'prop', { seg: 8 }), P('foreL', 'torus', [0.1, 0.012], [0.12, -0.02, 0.08], [0, 0, PI / 2], 'prop', { seg: 6 })],
     npc_eli: [P('handL', 'box', [0.16, 0.22, 0.04], [0, -0.06, 0.08], [-0.6, 0, 0], 'prop')],
     npc_oren: [P('extra1', 'box', [0.36, 0.62, 0.06], [0, -0.2, -0.08], null, 'prop'), P('extra1', 'box', [0.3, 0.26, 0.2], [0, -0.1, -0.2], null, 'hat')],
-    npc_ilan: [P('shoulderR', 'sphere', [0.34, 0.26, 0.24], [-0.08, 0.12, -0.04], [0, 0, 0.3], 'prop', { seg: 6 })],
+    npc_ilan: [P('shoulderR', 'sphere', [0.34, 0.26, 0.24], [-0.08, 0.12, -0.04], [0, 0, 0.3], 'prop', { seg: 5 })],
     npc_rina: [P('handR', 'cylinder', [0.018, 1.6], [0, -0.05, 0.05], null, 'prop', { seg: 5 }), P('handR', 'torus', [0.1, 0.016], [0.1, 0.74, 0.05], [PI / 2, 0, 0], 'prop', { seg: 8 })],
     npc_gal: [P('extra1', 'box', [0.5, 0.6, 0.03], [0, -0.12, -0.05], [0, 0, PI / 4], 'prop'), P('extra1', 'box', [0.012, 0.75, 0.01], [0, -0.12, -0.07], null, 'hat')],
   };
@@ -783,7 +852,7 @@ export function buildSpecs() {
 
 /** Triangle budgets (ART_UX 2.1) by spec id. */
 export function budgetOf(id) {
-  if (id === 'hero_a' || id === 'hero_b') return 1800;
+  if (id === 'hero_a' || id === 'hero_b') return 3500;
   if (id.startsWith('npc_')) return 900;
   if (id === 'durn' || id === 'bramblehorn' || id === 'gorrumaw' || id === 'iskra' || id === 'vorrhal') return 3500;
   if (id === 'rust_golem' || id === 'choir_vanguard') return 1200;

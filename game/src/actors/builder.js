@@ -10,6 +10,9 @@ import { mergeSpec } from './logic/mesh.js';
 import { DEFAULT_CHAINS, UPPER, SOCKETS, SOCKET_OFFSET, buildScale } from './logic/rigs.js';
 import { family } from './logic/poses.js';
 
+/** Spring chain kinds, by index: hanging cloth, hair, creature tail, ear, trailing ribbon, coat-hem flap. */
+export const CHAIN_KINDS = Object.freeze(['cloth', 'hair', 'tail', 'ear', 'ribbon', 'hem']);
+
 /** Socket names in a fixed order (4.5). */
 export const SOCKET_NAMES = Object.freeze(['handR', 'handL', 'chest', 'head', 'feet', 'back']);
 
@@ -55,7 +58,16 @@ export function buildRig(spec, warn) {
       if (i >= 0) idx.push(i);
     }
     if (!idx.length) continue;
-    chains.push({ idx: Int8Array.from(idx), stiffness: c.stiffness || 40, damping: c.damping || 6, start: springN, trail: !/^sash|^tail1$/.test(c.bones[0]) || spec.rig !== 'humanoid' });
+    // ancestors of the chain root (not the root bone): their pose pitch and roll tilt the chain's hanging frame
+    const anc = [];
+    for (let p = base.parent[idx[0]]; p > 0; p = base.parent[p]) anc.push(p);
+    // how far behind the hips the chain hangs (a turn swings it outward)
+    const back = Math.max(0, -base.bind[idx[0] * 3 + 2]);
+    const kind = c.kind || (/^sash/.test(c.bones[0]) ? 'cloth' : /^tail/.test(c.bones[0]) && spec.rig === 'humanoid' ? 'hair' : 'tail');
+    chains.push({ idx: Int8Array.from(idx), anc: Int8Array.from(anc), kind: CHAIN_KINDS.indexOf(kind) < 0 ? 2 : CHAIN_KINDS.indexOf(kind),
+      stiffness: c.stiffness || 40, damping: c.damping || 6, start: springN, back,
+      // a hem flap is pushed by the thigh on its side; a sash streams longer in flight
+      leg: kind === 'hem' ? base.bones.indexOf(/L$/.test(c.bones[0]) ? 'thighL' : 'thighR') : -1, stretch: /^sash/.test(c.bones[0]) && idx.length > 1 });
     springN += idx.length;
   }
   const sockMap = SOCKETS[spec.rig] || SOCKETS.humanoid;
@@ -80,7 +92,7 @@ export function buildRig(spec, warn) {
     offScale: sy * scale, upper, chains, springN, socketBone, socketOff, geos, sphere,
     triangles: base.triangles, radius: spec.radius, height: H, hover: !!spec.hover, face: !!spec.face,
     browL: base.bones.indexOf('browL'), browR: base.bones.indexOf('browR'), jaw: base.bones.indexOf('jaw'),
-    hips: base.bones.indexOf('hips'), chest: base.bones.indexOf('chest'), spine: base.bones.indexOf('spine'),
+    hips: base.bones.indexOf('hips'), eyes: base.bones.indexOf('eyes'), chest: base.bones.indexOf('chest'), spine: base.bones.indexOf('spine'),
     head: base.bones.indexOf('head'), neck: base.bones.indexOf('neck'), extra: base.bones.indexOf('extra1'),
     slots: base.slots, slotIndex, stride: H / (fam === 'humanoid' ? 1.8 : fam === 'quadruped' ? 1.2 : 1),
   };

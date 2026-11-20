@@ -1,0 +1,143 @@
+/**
+ * cast scenarios: the character gallery (pose sheets). Each shot is a contact sheet: one character in several key
+ * poses side by side, or the hero from front, three-quarter, side and back. Phone sizes (412x915 portrait and
+ * 915x412 landscape) on the low tier at res=1. Display actors use the actors debug commands (actorsLineup,
+ * actorsPose, actorsStage); every sheet also checks that no bone matrix is NaN.
+ * Run with `node tools/scenarios.mjs cast [--only name]`. Screenshots go to tools/out/shots/cast-*.png.
+ */
+
+const PORTRAIT = { width: 412, height: 915, query: 'res=1&quality=low' };
+const LANDSCAPE = { width: 915, height: 412, query: 'res=1&quality=low' };
+
+/** Boot state: AI and ambient spawns off, noon, nothing alive around. */
+async function opening(game, assert) {
+  const p = await game((g) => g.player());
+  assert.ok(p, 'the player exists after boot');
+  await game((g) => {
+    g.ai(false);
+    g.ambient(false);
+    g.setHour(12);
+    g.killAll();
+    g.step(2);
+  });
+}
+
+/**
+ * In the page: spawn a row of display actors, each frozen in a clip at a time, turned by `turn` from facing the
+ * camera, with an optional expression and Form; frame the row with the stage camera. Returns the entity ids.
+ * Kept as a string so every page call can share it.
+ */
+const SHEET = `(g, o) => {
+  const ids = g.cmd.actorsLineup({ ids: o.items.map((it) => it.id), dist: o.dist, gap: o.gap, back: o.back, up: o.up, look: o.look });
+  const p = g.ctx.player;
+  const face = p.yaw + Math.PI + Math.PI;
+  ids.forEach((id, i) => {
+    const it = o.items[i];
+    const e = g.ctx.ents.get(id);
+    if (!e) return;
+    e.yaw = face + (it.turn || 0) + (o.turn || 0);
+    if (it.form) g.cmd.actorsForm(id, it.form);
+    if (it.expr) g.cmd.actorsExpr(id, it.expr);
+  });
+  for (let k = 0; k < 4; k++) g.step(15);
+  ids.forEach((id, i) => {
+    const it = o.items[i];
+    if (it.clip) g.cmd.actorsPose(id, it.clip, it.t || 0);
+  });
+  for (let k = 0; k < 6; k++) g.step(15);
+  return ids;
+}`;
+
+/** @param {any} game @param {any} assert @param {any} o */
+async function sheet(game, assert, o) {
+  const ids = await game((g, src, opts) => (0, eval)('(' + src + ')')(g, opts), SHEET, o);
+  assert.equal(ids.filter((x) => x > 0).length, o.items.length, 'every display actor spawned');
+  const nan = await game((g) => g.cmd.actorsNaN());
+  assert.equal(nan, 0, 'no NaN bone matrices');
+  return ids;
+}
+
+const hero = (clip, t, extra) => Object.assign({ id: 'hero_a', clip, t }, extra || {});
+const FOES = ['ember_wisp', 'tusk_boar', 'bramble_boar', 'choir_acolyte', 'choir_caster', 'scuttlecrab', 'rust_golem', 'frost_harrier', 'choir_vanguard'];
+const BOSSES = ['durn', 'iskra', 'vorrhal', 'bramblehorn', 'gorrumaw'];
+
+export const scenarios = [
+  {
+    name: 'cast-hero-views',
+    ...LANDSCAPE,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await sheet(game, assert, { items: [hero('idle', 0.3), hero('idle', 0.3, { turn: -0.7 }), hero('idle', 0.3, { turn: -Math.PI / 2 }), hero('idle', 0.3, { turn: Math.PI })], dist: 5, gap: 0.1, back: 3.3, up: 1.0, look: 0.95 });
+      await shot('cast-hero-views');
+      await sheet(game, assert, { items: [hero('idle', 0.3, { turn: -0.2 }), hero('idle', 0.3, { expr: 'angry', turn: -0.2 }), hero('idle', 0.3, { expr: 'hurt', turn: -0.2 }), hero('idle', 0.3, { expr: 'shout', turn: -0.2 })], dist: 3, gap: -0.42, back: 1.15, up: 1.6, look: 1.57 });
+      await shot('cast-hero-faces');
+    },
+  },
+  {
+    name: 'cast-hero-portrait',
+    ...PORTRAIT,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await sheet(game, assert, { items: [hero('idle', 0.3, { turn: -0.5 })], dist: 3, back: 2.6, up: 1.2, look: 1.0 });
+      await shot('cast-hero-portrait');
+      await sheet(game, assert, { items: [hero('idle', 0.3, { turn: 2.6 })], dist: 3, back: 2.6, up: 1.3, look: 1.0 });
+      await shot('cast-hero-back');
+    },
+  },
+  {
+    name: 'cast-hero-strikes',
+    ...LANDSCAPE,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await sheet(game, assert, { items: [hero('attack1', 0.1), hero('attack2', 0.11), hero('attack3', 0.12), hero('attack4', 0.15), hero('attack5', 0.16), hero('heavy', 0.1)], dist: 6, gap: 0.3, back: 4, up: 1.0, look: 0.95, turn: -0.9 });
+      await shot('cast-hero-strikes');
+      await sheet(game, assert, { items: [hero('heavy_charge', 0.2), hero('beam_charge', 0.2), hero('beam_loop', 0.1), hero('gather', 0.3), hero('guard', 0.3), hero('flicker', 0.1)], dist: 6, gap: 0.3, back: 4, up: 1.0, look: 0.95, turn: -0.9 });
+      await shot('cast-hero-techniques');
+    },
+  },
+  {
+    name: 'cast-hero-moves',
+    ...LANDSCAPE,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await sheet(game, assert, { items: [hero('run', 0.0), hero('sprint', 0.14), hero('jump', 0.3), hero('land', 0.06), hero('fly_cruise', 0.5), hero('fly_boost', 0.1)], dist: 6, gap: 0.35, back: 4, up: 1.0, look: 0.95, turn: -1.3 });
+      await shot('cast-hero-moves');
+      await sheet(game, assert, { items: [hero('stagger', 0.2), hero('hurtle', 0.2), hero('down', 0.5), hero('getup', 0.3), hero('death', 1), hero('transform', 0.6), hero('victory', 0.6)], dist: 6, gap: 0.3, back: 4.4, up: 1.0, look: 0.85, turn: -0.9 });
+      await shot('cast-hero-reactions');
+    },
+  },
+  {
+    name: 'cast-enemies',
+    ...LANDSCAPE,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await sheet(game, assert, { items: FOES.map((id) => ({ id, clip: 'idle', t: 0.3 })), dist: 10, gap: 0.3, back: 6.2, up: 1.3, look: 1.0 });
+      await shot('cast-enemies-idle');
+      await sheet(game, assert, { items: FOES.map((id) => ({ id, clip: 'charge_windup', t: 0.25 })), dist: 10, gap: 0.3, back: 6.2, up: 1.3, look: 1.0, turn: -0.6 });
+      await shot('cast-enemies-windup');
+      await sheet(game, assert, { items: FOES.map((id) => ({ id, clip: 'stagger', t: 0.15 })), dist: 10, gap: 0.3, back: 6.2, up: 1.3, look: 1.0, turn: -0.6 });
+      await shot('cast-enemies-hit');
+    },
+  },
+  {
+    name: 'cast-bosses',
+    ...LANDSCAPE,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      await sheet(game, assert, { items: BOSSES.map((id) => ({ id, clip: 'idle', t: 0.3 })), dist: 20, gap: 0.6, back: 12, up: 2.6, look: 2.4 });
+      await shot('cast-bosses');
+      await sheet(game, assert, { items: BOSSES.map((id) => ({ id, clip: 'roar', t: 0.5 })), dist: 20, gap: 0.6, back: 12, up: 2.6, look: 2.4, turn: -0.4 });
+      await shot('cast-bosses-intro');
+    },
+  },
+  {
+    name: 'cast-villagers',
+    ...LANDSCAPE,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const ids = ['npc_sela', 'npc_kerrin', 'npc_dov', 'npc_mira', 'npc_bren', 'npc_yael', 'npc_noa', 'npc_villager_1', 'npc_villager_2', 'npc_villager_3', 'npc_villager_4', 'npc_villager_5', 'npc_villager_6'];
+      await sheet(game, assert, { items: ids.map((id, i) => ({ id, clip: i % 3 === 1 ? 'talk' : 'idle', t: 0.4 + i * 0.1 })), dist: 9, gap: 0.1, back: 5.6, up: 1.0, look: 0.95 });
+      await shot('cast-villagers');
+    },
+  },
+];
