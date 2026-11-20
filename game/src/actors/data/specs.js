@@ -526,7 +526,8 @@ function caster() {
   const build = { height: 2.0, shoulder: 0.4, bulk: 0.3, head: 1 };
   const strips = [];
   for (const [x, z, rx, rz] of [[0.08, 0.1, -0.08, 0.06], [-0.08, 0.1, -0.08, -0.06], [0.09, -0.1, 0.1, 0.08], [-0.09, -0.1, 0.1, -0.08]]) {
-    strips.push(P('hips', 'box', [0.12, 0.95, 0.016], [x, -0.42, z], [rx, 0, rz], 'robe'));
+    // the back strips hang from the hem bones and swing; the front ones stay with the hips
+    strips.push(z < 0 ? P(x > 0 ? 'hemL' : 'hemR', 'box', [0.12, 0.95, 0.016], [x - Math.sign(x) * 0.08, -0.36, z + 0.12], [rx, 0, rz], 'robe') : P('hips', 'box', [0.12, 0.95, 0.016], [x, -0.42, z], [rx, 0, rz], 'robe'));
   }
   return choir('choir_caster', build, 1, {}, { skirt: false, hover: true, radius: 0.42 }, [
     ...strips,
@@ -673,7 +674,7 @@ function boar(id, hide, thorns) {
     const L = side(s);
     parts.push(P('head', 'cone', [0.03, 0.24], [s * 0.09, -0.08, 0.3], [-1.05, 0, s * -0.2], 'tusk', { seg: 5 }));
     parts.push(P('head', 'sphere', [0.045, 0.04, 0.03], [s * 0.1, 0.05, 0.2], null, 'glass', { seg: 4 }));
-    parts.push(P('head', 'cone', [0.06, 0.12], [s * 0.12, 0.15, 0.0], [-0.4, 0, s * -0.5], 'hide', { seg: 4 }));
+    parts.push(P('ear' + L, 'cone', [0.06, 0.13], [0, 0.0, 0.02], [-0.4, 0, s * -0.55], 'hide', { seg: 4 }));
     for (const fb of ['F', 'B']) {
       parts.push(P('leg' + fb + L, 'capsule', [0.075, 0.2], [0, -0.16, 0], null, 'hide', { seg: 5 }));
       parts.push(P('foot' + fb + L, 'cylinder', [0.05, 0.28, 0.06], [0, -0.17, 0], null, 'dark', { seg: 5 }));
@@ -782,6 +783,7 @@ function bramblehorn() {
     const L = side(s);
     parts.push(P('head', 'cone', [0.035, 0.26], [s * 0.1, -0.1, 0.34], [-1.05, 0, s * -0.2], 'tusk', { seg: 5 }));
     parts.push(P('head', 'sphere', [0.06, 0.05, 0.04], [s * 0.12, 0.06, 0.22], null, 'glass', { seg: 6 }));
+    parts.push(P('ear' + L, 'cone', [0.05, 0.14], [s * 0.03, -0.04, 0.0], [-0.2, 0, s * -1.1], 'bark', { seg: 4 }));
     // antlers: main beam sweeping out and up, tines, violet glass wraps
     parts.push(P('extra2', 'cylinder', [0.04, 0.6, 0.025], [s * 0.26, -0.02, 0], [0, 0, s * -1.05], 'bark', { seg: 6 }));
     parts.push(P('extra2', 'cylinder', [0.03, 0.5, 0.015], [s * 0.62, 0.22, -0.05], [-0.3, 0, s * -0.55], 'bark', { seg: 5 }));

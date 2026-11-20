@@ -85,6 +85,27 @@ export const scenarios = [
     },
   },
   {
+    // secondary motion over time: run, stop, sprint-jump, land, fly (the player, seen from the side)
+    name: 'cast-motion',
+    ...LANDSCAPE,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const frames = [
+        ['run', (g) => { g.cmd.actorsFollow(3.6, 1.5, 0.2); g.move(0, 1); for (let i = 0; i < 6; i++) g.step(10); }],
+        ['stop', (g) => { g.move(0, 0); g.step(8); }],
+        ['settle', (g) => { g.step(12); }],
+        ['jump', (g) => { g.hold('sprint', true); g.move(0, 1); for (let i = 0; i < 4; i++) g.step(10); g.press('jump'); g.step(10); g.step(8); }],
+        ['land', (g) => { for (let i = 0; i < 12; i++) { g.step(4); if (g.ctx.player.move.grounded) break; } g.step(3); }],
+        ['fly', (g) => { g.hold('sprint', false); g.press('flyToggle'); g.step(15); g.hold('jump', true); g.step(30); g.hold('jump', false); g.move(0, 1); g.hold('sprint', true); for (let i = 0; i < 6; i++) g.step(10); }],
+      ];
+      for (const [name, fn] of frames) {
+        await game((g, src) => (0, eval)('(' + src + ')')(g), fn.toString());
+        assert.equal(await game((g) => g.cmd.actorsNaN()), 0, 'no NaN bone matrices');
+        await shot('cast-motion-' + name);
+      }
+    },
+  },
+  {
     name: 'cast-hero-strikes',
     ...LANDSCAPE,
     async run({ game, assert, shot }) {
