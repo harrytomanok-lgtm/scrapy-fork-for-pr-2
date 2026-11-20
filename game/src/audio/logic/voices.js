@@ -116,7 +116,7 @@ export const STEP_SURFACE = Object.freeze({
   stone: Object.freeze(['step_stone', 1]),
   snow: Object.freeze(['step_snow', 1]),
   water: Object.freeze(['step_water', 1]),
-  sand: Object.freeze(['step_grass', 0.7]),
+  sand: Object.freeze(['step_sand', 1]),
 });
 
 /** Hit sound by feel class of `combat:hit` (IDS.feel). */

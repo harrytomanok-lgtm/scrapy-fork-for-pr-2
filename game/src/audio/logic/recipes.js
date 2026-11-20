@@ -19,6 +19,7 @@ export const SFX_RATE = 32000;
  * @property {string|null} cap    voice group
  * @property {number} [peak]      normalisation peak (default 0.9)
  * @property {boolean} [live]     live loop: not rendered
+ * @property {boolean} [internal] played by the audio package itself (ambience, sand steps); not an IDS.sfx id
  * @property {boolean} [duck]     big impact: ducks the music
  * @property {number} [duckDb]     duck depth when it is not the default -6 dB (dialogue blips: a gentle -5 dB)
  * @property {(s:Synth, v:number, k:number)=>void} [render]   k = variant factor (1, 0.96, 1.045)
@@ -83,7 +84,7 @@ function swish(s, k, f0, f1) {
 export const RECIPES = {
   // foley
   step_grass: { len: 0.12, mix: -10, cap: 'step', render(s, v, k) { s.noise('pink', { a: 2, d: 45, gain: 1.3, filter: { type: 'bp', f: 1300 * k, q: 0.9 } }); s.noise('brown', { a: 2, d: 50, gain: 0.25, filter: { type: 'lp', f: 600 * k, q: 0.7 } }); s.noise('white', { a: 1, d: 20, gain: 0.1, filter: { type: 'bp', f: 3500 * k, q: 1 } }); } },
-  step_stone: { len: 0.1, mix: -10, cap: 'step', render(s, v, k) { s.noise('brown', { a: 1, d: 50, gain: 1.4, filter: { type: 'bp', f: 1800 * k, q: 2 } }); s.osc('sine', 260 * k, 180 * k, { a: 1, d: 25, gain: 0.25 }); } },
+  step_stone: { len: 0.1, mix: -7, cap: 'step', render(s, v, k) { s.noise('brown', { a: 1, d: 50, gain: 1.4, filter: { type: 'bp', f: 1800 * k, q: 2 } }); s.osc('sine', 260 * k, 180 * k, { a: 1, d: 25, gain: 0.25 }); } },
   step_snow: { len: 0.18, mix: -10, cap: 'step', render(s, v, k) { s.noise('pink', { a: 10, d: 110, gain: 1, filter: { type: 'bp', f: 2000 * k, q: 0.8 }, trem: 55, tremDepth: 0.6 }); s.noise('brown', { a: 6, d: 70, gain: 0.45, filter: { type: 'lp', f: 600, q: 0.7 } }); } },
   step_water: { len: 0.16, mix: -10, cap: 'step', render(s, v, k) { s.noise('pink', { a: 2, d: 90, filter: { type: 'bp', f: 1200 * k, q: 1.2 } }); s.osc('sine', 500 * k, 1100 * k, { at: 0.015, a: 2, d: 45, gain: 0.25 }); } },
   jump: { len: 0.14, mix: -10, cap: null, render(s, v, k) { s.osc('tri', 440 * k, 700 * k, { a: 3, d: 70, gain: 0.45 }); s.noise('pink', { a: 2, d: 45, gain: 1.2, filter: { type: 'bp', f: 1600, q: 1 } }); } },
@@ -153,7 +154,7 @@ export const RECIPES = {
   player_death: { len: 2.2, mix: 0, cap: null, render(s, v, k) { pad(s, [mtof(50), mtof(57), mtof(62), mtof(65)], { a: 150, hold: 400, d: 1500, gain: 1.6, lp: 1100, drop: Math.pow(2, -6 / 12) }); s.osc('sine', 80, 40, { a: 2, d: 900, gain: 0.8, sweep: 1 }); } },
   heal: { len: 0.6, mix: -6, cap: null, render(s, v, k) { const n = [D5, FS5, A5]; for (let i = 0; i < 3; i++) s.osc('tri', n[i] * k, n[i] * k, { at: i * 0.07, a: 3, d: 300, gain: 0.5 }); } },
   // rewards
-  xp_orb: { len: 0.2, mix: -3, cap: 'pickup', render(s, v, k) { s.osc('sine', D6 * k, D6 * k * 1.02, { a: 2, d: 140, gain: 0.7 }); s.osc('sine', D6 * 2 * k, D6 * 2 * k, { a: 2, d: 70, gain: 0.15 }); } },
+  xp_orb: { len: 0.2, mix: 0, cap: 'pickup', render(s, v, k) { s.osc('sine', D6 * k, D6 * k * 1.02, { a: 2, d: 140, gain: 0.7 }); s.osc('sine', D6 * 2 * k, D6 * 2 * k, { a: 2, d: 70, gain: 0.15 }); } },
   pickup_item: { len: 0.6, mix: -6, cap: 'pickup', render(s, v, k) { const n = [mtof(81), mtof(85), mtof(88), mtof(93)]; for (let i = 0; i < 4; i++) s.osc('tri', n[i] * k, n[i] * k, { at: i * 0.05, a: 2, d: 250, gain: 0.5 }); s.clicks(8, 0.1, 0.45, 0.12, 7000); } },
   shells: { len: 0.35, mix: -8, cap: 'pickup', render(s, v, k) { s.osc('sine', 2600 * k, 2600 * k, { a: 1, d: 200, gain: 0.5 }); s.osc('sine', 3100 * k, 3100 * k, { at: 0.07, a: 1, d: 220, gain: 0.5 }); } },
   level_up: { len: 1.8, mix: -2, cap: null, render(s, v, k) {
@@ -176,13 +177,26 @@ export const RECIPES = {
   ringstone: { len: 1.4, mix: -4, cap: null, render(s, v, k) { s.osc('sine', 660 * k, 660 * k, { a: 300, hold: 100, d: 900, gain: 0.5 }); s.osc('sine', 990 * k, 990 * k, { a: 300, hold: 100, d: 900, gain: 0.4, trem: 5, tremDepth: 0.3 }); s.osc('sine', 1320 * k, 1320 * k, { a: 400, d: 700, gain: 0.12 }); } },
   shrine: { len: 1.6, mix: -4, cap: null, render(s, v, k) { const f = [1318, 1568, 1975, 2637]; for (let i = 0; i < 4; i++) s.fm(f[i] * k, 3.5, 1.2, { at: i * 0.07 + s.rng.next() * 0.05, a: 1, d: 1200, gain: 0.3 }); } },
   chest_open: { len: 0.7, mix: -2, cap: null, render(s, v, k) { for (let i = 0; i < 2; i++) { s.noise('white', { at: i * 0.08, a: 1, d: 40, gain: 0.8, filter: { type: 'bp', f: 900 * k, q: 4 } }); s.osc('sine', 300 * k, 260 * k, { at: i * 0.08, a: 1, d: 45, gain: 0.5 }); } for (let i = 0; i < 6; i++) s.osc('sine', (2000 + 2000 * s.rng.next()) * k, 3000 * k, { at: 0.15 + i * 0.05, a: 1, d: 150, gain: 0.12 }); } },
-  ring_gate: { len: 0.45, mix: -2, cap: null, render(s, v, k) { s.osc('sine', 880 * k, 1320 * k, { a: 2, d: 300, gain: 0.6, sweep: 0.06 }); s.osc('sine', 1320 * k, 1980 * k, { a: 2, d: 200, gain: 0.2, sweep: 0.06 }); } },
+  ring_gate: { len: 0.45, mix: 1, cap: null, render(s, v, k) { s.osc('sine', 880 * k, 1320 * k, { a: 2, d: 300, gain: 0.6, sweep: 0.06 }); s.osc('sine', 1320 * k, 1980 * k, { a: 2, d: 200, gain: 0.2, sweep: 0.06 }); } },
   race_start: { len: 1.7, mix: -4, cap: null, render(s, v, k) { for (let i = 0; i < 3; i++) s.osc('sine', 1000, 1000, { at: i * 0.35, a: 1, d: 60, gain: 0.5 }); horn(s, D5 * k, 1.05, 0.4, 1.2); } },
   race_end: { len: 1.9, mix: -3, cap: null, render(s, v, k) { const n = [D5, D5, A5, D6]; const t = [0, 0.15, 0.3, 0.55]; for (let i = 0; i < 4; i++) horn(s, n[i] * k, t[i], i === 3 ? 0.8 : 0.1, 1); } },
   // siphons
   siphon_loop: { len: 0, mix: -6, cap: null, live: true },
   siphon_core: { len: 0.7, mix: -3, cap: null, render(s, v, k) { s.noise('white', { a: 1, d: 200, gain: 0.9, filter: { type: 'bp', f: 1800 * k, q: 6 } }); s.osc('square', 140 * k, 120 * k, { a: 1, d: 150, gain: 0.5, filter: { type: 'lp', f: 900 } }); s.fm(420 * k, 1.41, 3, { a: 1, d: 500, gain: 0.5 }); s.clip(1.4); } },
   siphon_break: { len: 1.8, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { for (let i = 0; i < 6; i++) s.noise('white', { at: i * 0.05 + s.rng.next() * 0.03, a: 1, d: 80, gain: 0.8, filter: { type: 'hp', f: 4000 * k } }); s.clicks(14, 0, 0.5, 0.3, 6000); pad(s, [mtof(62) * k, mtof(69) * k, mtof(74) * k, mtof(78) * k], { at: 0.3, a: 600, hold: 200, d: 600, gain: 1.2, lp: 2000 }); } },
+  // internal (not in IDS.sfx): ambience critters and sand steps, played by the wiring only
+  step_sand: { len: 0.16, mix: -11, cap: 'step', internal: true, render(s, v, k) { s.noise('pink', { a: 5, d: 80, gain: 4, filter: { type: 'bp', f: 950 * k, q: 0.7 }, trem: 70, tremDepth: 0.5 }); s.noise('brown', { a: 4, d: 60, gain: 0.25, filter: { type: 'lp', f: 500, q: 0.7 } }); } },
+  amb_bird: { len: 0.7, mix: -14, cap: 'amb', internal: true, render(s, v, k) {
+    const n = 3 + Math.floor(s.rng.next() * 3);
+    for (let i = 0; i < n; i++) {
+      const f0 = (2300 + 900 * s.rng.next()) * k;
+      s.osc('sine', f0, f0 * (1.15 + 0.3 * s.rng.next()), { at: i * 0.1 + 0.02 * s.rng.next(), a: 4, d: 40, len: 0.07, gain: 0.6, sweep: 0.05 });
+    }
+  } },
+  amb_bird2: { len: 0.9, mix: -24, cap: 'amb', internal: true, render(s, v, k) { s.osc('sine', 2100 * k, 2150 * k, { a: 15, hold: 140, d: 90, gain: 0.6, vib: 11, vibDepth: 0.4 }); s.osc('sine', 1650 * k, 1600 * k, { at: 0.32, a: 15, hold: 220, d: 160, gain: 0.55, vib: 11, vibDepth: 0.4 }); } },
+  amb_cricket: { len: 1.3, mix: -24, cap: 'amb', internal: true, render(s, v, k) { for (let i = 0; i < 3; i++) s.osc('sine', 3300 * k, 3300 * k, { at: i * 0.42, a: 10, hold: 220, d: 40, gain: 0.5, trem: 32, tremDepth: 1 }); } },
+  amb_gull: { len: 1.0, mix: -20, cap: 'amb', internal: true, render(s, v, k) { for (let i = 0; i < 2; i++) { s.osc('tri', 1350 * k, 880 * k, { at: i * 0.38, a: 20, hold: 120, d: 120, gain: 0.55, sweep: 0.28, vib: 9, vibDepth: 0.5 }); s.noise('pink', { at: i * 0.38, a: 20, d: 160, gain: 1.2, filter: { type: 'bp', f: 1500, q: 2 } }); } } },
+  amb_rumble: { len: 2.4, mix: -17, cap: 'amb', internal: true, render(s, v, k) { s.noise('brown', { a: 400, hold: 300, d: 1400, gain: 0.8, filter: { type: 'lp', f: 300 * k, q: 0.7 } }); s.noise('pink', { a: 500, hold: 200, d: 1300, gain: 3.5, filter: { type: 'bp', f: 520 * k, f1: 380 * k, q: 0.9 } }); } },
   // UI
   ui_move: { len: 0.05, mix: -12, cap: 'ui', render(s, v, k) { s.osc('sine', 1400 * k, 1400 * k, { a: 1, d: 30, gain: 0.8 }); } },
   ui_confirm: { len: 0.12, mix: -12, cap: 'ui', render(s, v, k) { s.osc('sine', 880 * k, 1320 * k, { a: 2, d: 80, gain: 0.8, sweep: 0.04 }); } },
@@ -194,14 +208,14 @@ export const RECIPES = {
 };
 
 /** Voice caps per recipe group (ART_UX 9.1). */
-export const CAPS = Object.freeze({ bolt: 6, hit: 8, step: 2, explosion: 4, ui: 3, pickup: 4 });
+export const CAPS = Object.freeze({ bolt: 6, hit: 8, step: 2, explosion: 4, ui: 3, pickup: 4, amb: 2 });
 
 /** Render order: the sounds needed first come first; the rest follow in catalog order. */
 export const PRIORITY = ['ui_confirm', 'ui_move', 'ui_back', 'ui_open', 'ui_close', 'hit_light', 'hit_heavy', 'bolt_fire', 'bolt_hit', 'level_up',
   'step_grass', 'step_stone', 'jump', 'land', 'whoosh', 'hit_finisher', 'explosion_s', 'xp_orb', 'player_hurt', 'guard_on', 'guard_block'];
 
 /** Long, dark recipes render at a lower rate (cheaper to render, nothing lost above their content). */
-const LOW_RATE = new Set(['player_death', 'quest_complete', 'transform_rise', 'ult_rise', 'boss_roar', 'beam_charge', 'explosion_l', 'ult_impact', 'nova', 'land_heavy', 'land']);
+const LOW_RATE = new Set(['amb_rumble', 'player_death', 'quest_complete', 'transform_rise', 'ult_rise', 'boss_roar', 'beam_charge', 'explosion_l', 'ult_impact', 'nova', 'land_heavy', 'land']);
 
 /** @param {string} id @returns {number} sample rate of the recipe's buffers */
 export function recipeRate(id) {

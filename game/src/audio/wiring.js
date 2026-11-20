@@ -9,6 +9,7 @@
 
 import { STEP_SURFACE, HIT_CLASS } from './logic/voices.js';
 import { RECIPES } from './logic/recipes.js';
+import { bedFor, createCritters } from './logic/ambience.js';
 import { IDS } from '../core/ids.js';
 import { BALANCE } from '../core/balance.js';
 
@@ -23,6 +24,8 @@ const CAMP_RANGE = 140;
 /** The Siphon drone starts within this distance of a standing Siphon and stops beyond SIPHON_LOOP_OFF (m). */
 const SIPHON_LOOP_ON = 170;
 const SIPHON_LOOP_OFF = 210;
+/** The surf bed plays when the sea is within this distance (m). */
+const SHORE_RANGE = 70;
 /** Tracked technique sounds per entity. */
 const TRACK = 16;
 
@@ -47,9 +50,13 @@ export function installWiring(ctx, audio, engine, music) {
   const st = {
     gatherVoice: 0, gatherT: 0, gatherFull: false, windVoice: 0, ambVoice: 0, boss: false,
     orbStep: 0, orbT: -10, healT: -10, beamT: -10, finT: -10, regionPalette: 'warm', checkT: 0, lastPalette: '', lastSettlement: false,
-    siphonVoice: 0, siphonId: '', nearSiphon: '', nearSiphonD: Infinity, nearCamp: '', palette: 'warm',
+    bed: '', siphonVoice: 0, siphonId: '', nearSiphon: '', nearSiphonD: Infinity, nearCamp: '', palette: 'warm',
   };
   const LOOP_AT = { x: 0, y: 0, z: 0, vol: 1 };
+  /** The visual stream, read at call time (ctx.rng is a service). */
+  const fxRng = { next: () => ctx.rng.fx.next() };
+  const critters = createCritters(fxRng);
+  const CRIT = { id: '', dx: 0, dy: 0, dz: 0, vol: 1, pitch: 1 };
   /** @type {Map<string, boolean>} camp POI id -> its spawn group is a Choir group (from the region's camp table) */
   const choirCamp = new Map();
   /** @type {Set<string>} Siphons destroyed this session */
@@ -438,7 +445,7 @@ export function installWiring(ctx, audio, engine, music) {
     },
     ended() {
       for (let i = 0; i < TRACK; i++) if (track[i].entId) clearTrack(track[i], 0.2);
-      st.gatherVoice = 0; st.windVoice = 0; st.ambVoice = 0; st.siphonVoice = 0; st.siphonId = '';
+      st.gatherVoice = 0; st.windVoice = 0; st.ambVoice = 0; st.siphonVoice = 0; st.siphonId = ''; st.bed = '';
       engine.stopAll();
       music.stopAll();
     },
@@ -501,6 +508,18 @@ export function installWiring(ctx, audio, engine, music) {
   bus.on('quality:changed', on.quality, OWNER);
   bus.on('game:loaded', on.loaded, OWNER);
   bus.on('game:ended', on.ended, OWNER);
+
+  /** The sea (ground under sea level) within SHORE_RANGE of x, z: eight probes on a ring. */
+  function nearSea(w, x, z) {
+    if (!w || !w.groundAt) return false;
+    const sea = typeof w.seaLevel === 'number' ? w.seaLevel : 0;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      const g = w.groundAt(x + Math.cos(a) * SHORE_RANGE, z + Math.sin(a) * SHORE_RANGE);
+      if (Number.isFinite(g) && g < sea) return true;
+    }
+    return false;
+  }
 
   /** A Siphon is standing unless it was silenced this session or in the saved journey. @param {string} id */
   function standing(id) {
@@ -603,7 +622,7 @@ export function installWiring(ctx, audio, engine, music) {
   return {
     /** Place state for tests and the debug command. */
     place() {
-      return { palette: st.palette, nearSiphon: st.nearSiphon, nearSiphonD: st.nearSiphonD, nearCamp: st.nearCamp, siphonLoop: st.siphonVoice !== 0, siphonId: st.siphonId };
+      return { palette: st.palette, nearSiphon: st.nearSiphon, nearSiphonD: st.nearSiphonD, nearCamp: st.nearCamp, siphonLoop: st.siphonVoice !== 0, siphonId: st.siphonId, bed: st.bed };
     },
     /** Place check without an AudioContext (noaudio, before unlock): 1 Hz. @param {number} dt */
     idle(dt) {
@@ -637,6 +656,22 @@ export function installWiring(ctx, audio, engine, music) {
           const ground = w && w.groundAt ? w.groundAt(p.pos.x, p.pos.z) : 0;
           const alt = Math.max(0, p.pos.y - (Number.isFinite(ground) ? ground : 0));
           engine.setParam(st.ambVoice, 'level', Math.min(1, 0.3 + alt / 220));
+          // the bed: high air, the shore (sea within SHORE_RANGE), else the region's own
+          const region = w && w.regionAt ? w.regionAt(p.pos.x, p.pos.z) : 'meadows';
+          const bed = bedFor(region, alt, nearSea(w, p.pos.x, p.pos.z));
+          if (bed !== st.bed) {
+            st.bed = bed;
+            engine.setParam(st.ambVoice, 'bed', bed);
+          }
+        }
+      }
+      // sparse critters around the listener (birds by day, crickets at dusk and night, gulls, a far rumble)
+      if (st.ambVoice && st.bed && !engine.paused) {
+        const env = c.env;
+        const ph = env && typeof env.phase === 'string' ? env.phase : 'day';
+        if (critters.step(dt, st.bed, ph === 'night' || ph === 'dusk', CRIT)) {
+          const L = engine.listener;
+          playPos(CRIT.id, L.x + CRIT.dx, L.y + CRIT.dy, L.z + CRIT.dz, CRIT.vol, CRIT.pitch);
         }
       }
     },

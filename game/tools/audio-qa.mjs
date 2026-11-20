@@ -345,9 +345,16 @@ async function pageRun(only) {
     if (AQ.BEDS) {
       for (const bed of Object.keys(AQ.BEDS)) {
         let vid = 0;
-        const r = await offline(16, 'low', (t, eng, music) => {
-          if (t === 0) { music.set({ mode: 'silent' }); vid = eng.loop('ambience', { vol: 1 }); eng.setParam(vid, 'bed', bed); eng.setParam(vid, 'level', 0.5); }
-          if (eng.ambient) eng.ambient(t, bed);
+        let crit = null;
+        const call = { id: '', dx: 0, dy: 0, dz: 0, vol: 1, pitch: 1 };
+        const r = await offline(16, 'low', (t, eng, music, ctx) => {
+          if (t === 0) {
+            music.set({ mode: 'silent' });
+            vid = eng.loop('ambience', { vol: 1 }); eng.setParam(vid, 'bed', bed); eng.setParam(vid, 'level', 0.5);
+            crit = AQ.createCritters(ctx.rng.fx);
+          }
+          // the critters as the wiring plays them, around a listener facing +x
+          if (crit.step(STEP, bed, false, call)) eng.play(call.id, { x: call.dx, y: call.dy, z: call.dz, vol: call.vol, pitch: call.pitch });
         });
         out.beds.push({ id: 'bed ' + bed, ...QA.analyze(slice(r, 2, 16), SR, 'loop') });
       }

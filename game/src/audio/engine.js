@@ -10,7 +10,7 @@
 import { RECIPES, PRIORITY, CAPS, renderRecipe, recipeRate } from './logic/recipes.js';
 import { INSTRUMENTS, INSTRUMENT_IDS, renderInstrument } from './logic/instruments.js';
 import { TIER_VOICES, TIER_VARIANTS, createSlot, findMerge, pickSlot, busyCount, distanceGain } from './logic/voices.js';
-import { createLoopSlot, buildLoop, applyLevel, LOOP_COST, LOOP_GAIN } from './loops.js';
+import { createLoopSlot, buildLoop, applyLevel, applyBed, LOOP_COST, LOOP_GAIN } from './loops.js';
 import { softClip, loopNoise } from './logic/dsp.js';
 
 /** Hard cap of live AudioNodes owned by the engine (ARCHITECTURE 7.1). */
@@ -682,6 +682,7 @@ export function createEngine(ctx, opts = {}) {
         const target = Ls.pan || Ls.out;
         target.connect(bus.sfx);
         const t = ac.currentTime;
+        if (id === 'ambience') applyBed(Ls, 'meadow', t, 0.05);
         Ls.lg = applyLevel(Ls, id === 'ambience' ? 0.5 : 0, t);
         Ls.t0 = t;
         engine.updateLoopPos(Ls);
@@ -739,12 +740,13 @@ export function createEngine(ctx, opts = {}) {
       try { v.src.stop(t + f + 0.01); } catch (err) { releaseVoice(v); }
     },
 
-    /** @param {number} voiceId @param {'vol'|'pitch'|'level'} name @param {number} value */
+    /** @param {number} voiceId @param {'vol'|'pitch'|'level'|'bed'} name @param {number|string} value ('bed': an ambience bed id of logic/ambience.js) */
     setParam(voiceId, name, value) {
       if (!ac || !voiceId) return;
       const t = ac.currentTime;
       const Ls = findLoop(voiceId);
       if (Ls) {
+        if (name === 'bed') { applyBed(Ls, /** @type {any} */ (value), t); return; }
         if (name === 'vol') Ls.vol = Math.max(0, value);
         else if (name === 'level') Ls.level = Math.max(0, Math.min(1, value));
         else if (name === 'pitch' && Ls.sources[0] && Ls.sources[0].playbackRate) Ls.sources[0].playbackRate.setTargetAtTime(value, t, 0.05);
@@ -855,7 +857,7 @@ export function createEngine(ctx, opts = {}) {
       nodeCount -= Ls.nodes.length;
       Ls.nodes.length = 0;
       Ls.sources.length = 0;
-      Ls.out = null; Ls.pan = null; Ls.a = null; Ls.b = null; Ls.c = null;
+      Ls.out = null; Ls.pan = null; Ls.a = null; Ls.b = null; Ls.c = null; Ls.d = null; Ls.e = null; Ls.f = null;
       Ls.id = 0;
       Ls.endAt = 0;
     },

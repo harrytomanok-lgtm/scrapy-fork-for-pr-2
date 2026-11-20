@@ -5,11 +5,13 @@
  * @module audio/loops
  */
 
+import { BEDS } from './logic/ambience.js';
+
 /** Live loop ids handled here (`ambience` is internal and not in IDS.sfx). */
 export const LIVE_IDS = Object.freeze(['wind_loop', 'gather_loop', 'beam_loop', 'siphon_loop', 'ambience']);
 
 /** Node cost of each live loop including its stereo panner (for the node budget). */
-export const LOOP_COST = Object.freeze({ wind_loop: 8, gather_loop: 9, beam_loop: 10, siphon_loop: 7, ambience: 4 });
+export const LOOP_COST = Object.freeze({ wind_loop: 8, gather_loop: 9, beam_loop: 10, siphon_loop: 7, ambience: 10 });
 
 /**
  * @typedef {object} LiveLoop
@@ -29,7 +31,7 @@ export const LOOP_COST = Object.freeze({ wind_loop: 8, gather_loop: 9, beam_loop
 export function createLoopSlot() {
   return {
     id: 0, kind: '', nodes: [], sources: [], out: null, pan: null, a: null, b: null, c: null,
-    level: 0, vol: 1, dist: 1, entId: 0, x: 0, y: 0, z: 0, positional: false, endAt: 0, t0: 0, lg: 1,
+    level: 0, vol: 1, dist: 1, entId: 0, x: 0, y: 0, z: 0, positional: false, endAt: 0, t0: 0, lg: 1, d: null, e: null, f: null, bed: '',
   };
 }
 
@@ -143,11 +145,21 @@ export function buildLoop(ac, L, kind, shared) {
     lfo.connect(lfoG); lfoG.connect(lp.frequency);
     L.a = lp; L.b = null; L.c = null;
   } else {
-    // ambience: a soft, slowly moving air bed
+    // ambience: the region's bed (logic/ambience.js BEDS): a pink-noise band whose gain swells with a slow LFO
+    // (gusts, waves), and a hum (saw through a resonant lowpass) for the Stormwell; applyBed sets the parameters
     const src = noiseSrc(ac, L, shared.pink, 0.5);
-    const lp = biquad(ac, L, 'lowpass', 650, 0.5);
-    src.connect(lp); lp.connect(out);
-    L.a = lp; L.b = null; L.c = null;
+    const band = biquad(ac, L, 'bandpass', 1800, 0.6);
+    const nGain = gain(ac, L, 0);
+    const lfo = osc(ac, L, 'sine', 0.07);
+    const lfoG = gain(ac, L, 0);
+    src.connect(band); band.connect(nGain); nGain.connect(out);
+    lfo.connect(lfoG); lfoG.connect(nGain.gain);
+    const hum = osc(ac, L, 'sawtooth', 110);
+    const humLP = biquad(ac, L, 'lowpass', 400, 4);
+    const hGain = gain(ac, L, 0);
+    hum.connect(humLP); humLP.connect(hGain); hGain.connect(out);
+    L.a = band; L.b = nGain; L.c = hGain; L.d = lfoG; L.e = humLP; L.f = lfo;
+    L.bed = '';
   }
   L.pan = ac.createStereoPanner ? add(ac, L, ac.createStereoPanner()) : null;
   if (L.pan) out.connect(L.pan);
@@ -178,11 +190,33 @@ export function applyLevel(L, level, t) {
     return 0.8 + 0.2 * l;
   }
   if (L.kind === 'ambience') {
-    L.a.frequency.setTargetAtTime(500 + 900 * l, t, 0.5);
-    return 0.35 + 0.65 * l;
+    // level: how exposed the listener is (altitude); the wind bed also brightens with it
+    const B = BEDS[L.bed] || BEDS.meadow;
+    if (L.bed === 'wind') L.a.frequency.setTargetAtTime(B.f * (0.8 + 0.6 * l), t, 0.5);
+    return 0.45 + 0.55 * l;
   }
   return 1;
 }
 
+/**
+ * Glide the ambience loop to a bed over about 3 s (region and shore changes never cut).
+ * @param {LiveLoop} L @param {string} bed @param {number} t @param {number} [tc] glide time constant
+ */
+export function applyBed(L, bed, t, tc = 1) {
+  if (L.kind !== 'ambience' || !L.a) return;
+  const B = BEDS[bed];
+  if (!B) return;
+  L.bed = bed;
+  // every bed is a band (a filter type cannot glide); the surf is simply a very wide one
+  L.a.frequency.setTargetAtTime(B.f, t, tc);
+  L.a.Q.setTargetAtTime(B.q, t, tc);
+  const base = B.noise * (1 - B.lfoDepth * 0.5);
+  L.b.gain.setTargetAtTime(base, t, tc);
+  L.d.gain.setTargetAtTime(B.noise * B.lfoDepth * 0.5, t, tc);
+  L.f.frequency.setTargetAtTime(B.lfoRate, t, tc);
+  L.c.gain.setTargetAtTime(B.hum, t, tc);
+  L.e.frequency.setTargetAtTime(B.humLP, t, tc);
+}
+
 /** Peak gain of each loop before volume and distance. */
-export const LOOP_GAIN = Object.freeze({ wind_loop: 0.5, gather_loop: 0.32, beam_loop: 0.22, siphon_loop: 0.5, ambience: 0.09 });
+export const LOOP_GAIN = Object.freeze({ wind_loop: 0.5, gather_loop: 0.32, beam_loop: 0.22, siphon_loop: 0.5, ambience: 0.12 });

@@ -88,9 +88,12 @@ function engineWithMock(tier = 'low') {
 
 // ------------------------------------------------------------------ recipes
 
-test('every IDS.sfx id has a recipe, and every recipe is a catalog id', () => {
+test('every IDS.sfx id has a recipe, and every recipe is a catalog id or an internal ambience / sand sound', () => {
   for (const id of IDS.sfx) assert.ok(RECIPES[id], 'recipe for ' + id);
-  for (const id of Object.keys(RECIPES)) assert.ok(IDS.sfx.includes(id), id + ' is in IDS.sfx');
+  for (const id of Object.keys(RECIPES)) {
+    if (RECIPES[id].internal) assert.ok(/^(amb_|step_sand$)/.test(id) && !IDS.sfx.includes(id), id + ' is internal');
+    else assert.ok(IDS.sfx.includes(id), id + ' is in IDS.sfx');
+  }
 });
 
 test('live loops are exactly the four _loop ids; every other recipe renders finite, audible, normalised audio', () => {
@@ -146,12 +149,13 @@ test('instruments render and map notes to the nearest sample', () => {
 
 // ------------------------------------------------------------------ mapping
 
-test('the step mapping covers all five surfaces (sand = grass at pitch 0.7)', () => {
+test('the step mapping covers all five surfaces (sand has its own soft step)', () => {
   for (const s of ['grass', 'stone', 'snow', 'water', 'sand']) {
     assert.ok(STEP_SURFACE[s], s);
     assert.ok(RECIPES[STEP_SURFACE[s][0]], s + ' maps to a recipe');
   }
-  assert.deepEqual([...STEP_SURFACE.sand], ['step_grass', 0.7]);
+  assert.deepEqual([...STEP_SURFACE.sand], ['step_sand', 1]);
+  assert.ok(RECIPES.step_sand.internal);
   assert.deepEqual([...STEP_SURFACE.stone], ['step_stone', 1]);
 });
 
