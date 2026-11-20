@@ -63,7 +63,7 @@ export const MODEL = Object.freeze({
    * or flying (the first string hit rises to a flyer, but wisps keep 5-11 m and dart off between hits: measured
    * about 8-9.5 s for three wisps by an Attack-only player in the browser check whatever their HP).
    */
-  switchSeconds: { melee: 1.8, ranged: 1.7, fly: 1.2 },
+  switchSeconds: { melee: 1.8, ranged: 1.7, fly: 1.7 },
   /** Breaker as a tap after the string (s). */
   breakerSeconds: 0.45,
   /** HP fraction a player loses before the first healing item of a boss fight. */
