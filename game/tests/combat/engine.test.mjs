@@ -3,6 +3,7 @@
  * rank, cooldown reduction cap, Surge gains and decay, Form drain to Burnout and lockouts, regen rules, the
  * entity-inside-collider bolt rule, one dash press = one Flicker, technique data validation.
  */
+import { STYLE } from '../../src/combat/logic/style.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeCtx } from './fakeCtx.mjs';
@@ -260,7 +261,8 @@ test('one dash press fires one Flicker; perfect Flicker on an attack inside the 
   assert.equal(perfect.length, 1);
   assert.equal(perfect[0].kind, 'flicker');
   assert.equal(p.stats.hp, p.stats.hpMax);
-  assert.equal(p.combat.surge, BALANCE.surge.perfect);
+  // +8 for the perfect defence, plus the style reward for reaching the first rank (logic/style.js).
+  assert.equal(p.combat.surge, BALANCE.surge.perfect + STYLE.surgePerRank);
 });
 
 test('cooldowns use Swiftness reduction with its cap', () => {

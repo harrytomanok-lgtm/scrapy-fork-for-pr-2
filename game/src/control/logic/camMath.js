@@ -53,6 +53,9 @@ export const CAM = Object.freeze({
   shakeMetres: 0.45,
   shakeRollDeg: 2.5,
   threatOffscreen: 1.0,
+  /** Group combat: an enemy closer than flankRange (m) within flankAngle of the view centre is eased to the side. */
+  flankRange: 9,
+  flankAngle: 20 * D2R,
 });
 
 /**
@@ -208,4 +211,42 @@ export function interpAngle(prev, cur, alpha) {
 export function easeToward(pitch, rest, seconds, dt) {
   const k = 1 - Math.exp((-3 / seconds) * dt);
   return pitch + (rest - pitch) * k;
+}
+
+/**
+ * Lock-on readability band (screen fractions from the centre, + up): the locked target's body centre is kept
+ * below `top` (the HUD target frame sits at the top centre) and above `bottom` (the hero and, in portrait, the
+ * control deck fill the lower part).
+ */
+export const LOCK_BAND = Object.freeze({ top: 0.3, bottom: -0.3, topPortrait: 0.36, bottomPortrait: -0.12 });
+
+/**
+ * Pitch that keeps a point at elevation `elev` (radians, seen from the camera) inside the band [bottom, top] of a
+ * view with vertical half-FOV `half`: the nearest pitch to `pitch` that does.
+ * @param {number} pitch @param {number} elev @param {number} half @param {number} top @param {number} bottom
+ * @returns {number}
+ */
+export function lockPitch(pitch, elev, half, top, bottom) {
+  const th = Math.tan(half);
+  // Screen offset y = tan(elev - pitch) / tan(half); solve for the pitch at both edges.
+  const lo = elev - Math.atan(top * th);
+  const hi = elev - Math.atan(bottom * th);
+  return pitch < lo ? lo : pitch > hi ? hi : pitch;
+}
+
+/**
+ * Auto-recentre step (radians this tick): eases in over `ramp` seconds once the idle delay has passed and slows
+ * within 25 degrees of the heading, so it never starts or stops with a jerk.
+ * @param {number} delta signed angle still to turn @param {number} rate max rad/s
+ * @param {number} sinceDelay idle seconds past the delay @param {number} dt @param {number} [ramp]
+ * @returns {number}
+ */
+export function recentreStep(delta, rate, sinceDelay, dt, ramp = 0.6) {
+  if (!(sinceDelay > 0)) return 0;
+  const u = sinceDelay >= ramp ? 1 : sinceDelay / ramp;
+  const ease = u * u * (3 - 2 * u);
+  const ad = Math.abs(delta);
+  const near = ad < 0.436 ? Math.max(0.2, ad / 0.436) : 1;
+  const step = rate * ease * near * dt;
+  return ad <= step ? delta : delta > 0 ? step : -step;
 }

@@ -67,7 +67,7 @@ function strikeString() {
       hits: [hit({
         f: i === last ? 0.4 : 1.3, radius: i === last ? 2.6 : finisher ? 1.9 : 1.6, shape: i === last ? 'ring' : 'sphere',
         power: h.power, poise: h.poise, knock: h.knock || NONE, juggle: true,
-        feel: finisher ? 'finisher' : i >= 2 ? 'heavyHit' : 'lightHit', maxTargets: i === last ? 8 : 3,
+        feel: finisher ? 'finisher' : i >= 3 ? 'heavyHit' : 'lightHit', maxTargets: i === last ? 8 : 3,
       })],
       motion: i === 0
         ? { kind: 'toTarget', t: 0, seconds: ss.lunge.dist / ss.lunge.speed, dist: ss.lunge.dist, speed: ss.lunge.speed }
@@ -101,7 +101,7 @@ export function playerTechniques() {
       timeline: { windup: 0.1, active: 0.08, recover: 0.34, cancelFrom: 0.14 },
       anim: { windup: 'heavy_charge', active: 'heavy', recover: 'idle' },
       motion: { kind: 'toTarget', t: 0, seconds: 0.1, dist: 4, speed: 30 },
-      hits: [hit({ f: 1.4, radius: 2.0, power: br.power, poise: br.poise, knock: { kind: 'launch', up: br.launch.up }, feel: 'heavyHit', maxTargets: 3 })],
+      hits: [hit({ f: 1.4, radius: 2.0, power: br.power, poise: br.poise, knock: { kind: 'launch', up: br.launch.up }, feel: 'finisher', maxTargets: 3 })],
       fx: { color: 'ora', windup: 'beam_charge', hit: 'hit_heavy' }, sfx: { windup: 'beam_charge', active: 'whoosh', hit: 'hit_heavy' },
       ranks: [{}, { mods: { 'hits.0.unblockable': 1, 'hits.0.poise': br.poise * br.ranks[1].poiseMult } }],
     }),
@@ -111,7 +111,7 @@ export function playerTechniques() {
       anim: { windup: 'heavy_charge', active: 'heavy_air', recover: 'land' },
       move: { lock: 'root', turn: true, air: true, ground: false },
       motion: { kind: 'dive', t: 0.06, seconds: 0.14, dist: 40 },
-      hits: [hit({ f: 0.6, u: 0, radius: 2.8, power: mh.power, poise: mh.poise, knock: mh.knock, feel: 'heavyHit', maxTargets: 4 })],
+      hits: [hit({ f: 0.6, u: 0, radius: 2.8, power: mh.power, poise: mh.poise, knock: mh.knock, feel: 'finisher', maxTargets: 4 })],
       crater: { radius: mh.crater.radius, depth: 1.6, at: 'impact' },
       fx: { color: 'ora', active: 'slam', hit: 'hit_heavy' }, sfx: { active: 'whoosh', hit: 'hit_heavy' },
       ranks: [{}, { mods: { powerMult: mh.ranks[1].powerMult, 'crater.radius': mh.ranks[1].craterRadius } }],

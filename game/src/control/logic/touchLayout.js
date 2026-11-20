@@ -108,7 +108,9 @@ export function touchLayout(o) {
     const rowY = deckTop + 10 + 26;
     left('gather', 12 + 26, rowY, 52);
     left('item', 12 + 52 + 10 + 24, rowY, 48);
-    const stickTop = deckTop + 10 + 52 + 6;
+    // The move zone reaches 40 px above the deck on the left half (Gather and Item sit on top of it), so a stick
+    // thumb landing a little high starts the stick, never a camera turn.
+    const stickTop = deckTop - 40;
     move = { x: 0, y: stickTop, w: Math.round(w / 2), h: h - stickTop };
     look = { x: 0, y: 0, w, h: deckTop };
     ghost = { x: sl + 28 + 54, y: h - sb - 28 - 54, d: 108 };

@@ -15,9 +15,11 @@ import { BALANCE } from '../../core/balance.js';
 import * as F from '../../core/formulas.js';
 import { PALETTE } from '../../core/palette.js';
 import { resolveRank } from './rank.js';
+import { WEIGHT, HAPTICS, HURT } from '../data/weight.js';
+import { STYLE, createStyle, resetStyle, styleHit, styleBonus, styleHurt, styleStep } from './style.js';
 import {
   TAG, KIND_MASK, frontal, isPerfectGuard, isPerfectFlicker, hitAmount, surgeForHit, surgeForHpLoss, surgeDecay,
-  knockVelocity, softScore, relAngle, sweepCapsuleT, nearCollider, falloffPower,
+  knockVelocity, intentScore, relAngle, sweepCapsuleT, nearCollider, falloffPower,
 } from './rules.js';
 
 const CB = BALANCE.combat;
@@ -39,14 +41,25 @@ const STRING_GRACE = 0.7;
 const AIR_HANG_SECONDS = 0.9;
 /** The rising lunge reaches a hovering target at most this far above a grounded hero (m, body to body). */
 const RISE_MAX = 6.5;
-/** Seconds between two hits that keep the combo counter running. */
-const COMBO_WINDOW = 2.0;
+/**
+ * The finisher (the last enemy of a group falls): slow motion scale and unscaled seconds, the camera push
+ * (fraction of the arm and seconds) and the group size from which it plays.
+ */
+const FINISHER = Object.freeze({ slowScale: 0.3, slowSeconds: 0.55, push: 0.22, pushSeconds: 0.9, minGroup: 2, radius: 45 });
 /** Ticks between line-of-sight checks of the hard lock. */
 const LOS_EVERY = 6;
 /** Seconds the player is staggered by a red or violet attack (GDD 6.4). */
 const RED_STAGGER = 0.6;
 /** Radius around the player in which hostiles count for threat. */
 const THREAT_RANGE = 60;
+/**
+ * Aim assist (soft targeting, rules.intentScore): ranges and the cone come from BALANCE.combat.softLock; the
+ * vertical bands (m), the any-side radius, the hysteresis ratio and the re-lock radius after a kill are feel.
+ */
+const AIM = Object.freeze({
+  meleeRange: CB.softLock.meleeRange, oraRange: CB.softLock.oraRange, coneDeg: CB.softLock.coneDeg,
+  closeRange: 10, oraClose: 14, meleeDown: 4, airBand: 10, oraBand: 60, keepRatio: 0.9, relockRange: 40,
+});
 
 /** @param {string} s */
 const isBusy = (s) => s === 'windup' || s === 'active' || s === 'recover';
@@ -85,7 +98,9 @@ export function createCombatEngine(ctx) {
   const chained = new Map();
   /** Forms transformed into this session (the first time plays the long sequence). */
   const seenForms = new Set();
-  const st = { hardTarget: 0, softMelee: 0, softOra: 0, inCombat: false, threat: 0, tick: 0, losLost: 0, comboCount: 0, comboT: 0 };
+  const st = { hardTarget: 0, softMelee: 0, softOra: 0, inCombat: false, threat: 0, tick: 0, losLost: 0, comboCount: 0, comboT: 0, groupPeak: 0, engaged: 0 };
+  /** Combo counter and style rank of the player (logic/style.js). */
+  const style = createStyle();
 
   // Reused event payloads (7.2 rule 1; listeners never retain them).
   const pDamaged = { targetId: 0, sourceId: 0, amount: 0, crit: false, blocked: false, perfect: false, techId: null, kind: 'melee', x: 0, y: 0, z: 0, hpAfter: 0 };
@@ -108,7 +123,7 @@ export function createCombatEngine(ctx) {
   const pLock = { entId: 0, targetId: 0 };
   const pSurge = { value: 0, full: false };
   const pState = { inCombat: false, threat: 0 };
-  const pCombo = { count: 0 };
+  const pCombo = { count: 0, rank: 0, rankId: '', expired: false, best: 0 };
   const pShotOn = { entId: 0, fxId: 'bolt', ownerId: 0, color: 0 };
   const pShotOff = { entId: 0, fxId: 'bolt', hit: false, x: 0, y: 0, z: 0 };
   /** Internal damage request (fields beyond DamageRequest: staggerPlayer, juggle, burn, slamFraction). */
@@ -162,6 +177,7 @@ export function createCombatEngine(ctx) {
       perfectUsed: false, flickerStart: -10, flickX: 0, flickY: 0, flickZ: 0, cdKeys: [], stringHits: 0, stringT: 0, pursuitId: 0, pursuitT: 0, pursuitBonus: 0,
       juggleT: 0, burnT: 0, burnNext: 0, burnEvery: 0.5, burnPower: 0, burnSrc: 0, craterDone: false, formScripted: false, transformT: 0,
       transformLong: false, secondBreathT: 0, slamFraction: 0, scrX: 0, scrY: 0, scrZ: 0, scrFlag: 0, lastHitBy: 0,
+      hurtGraceT: 0,
     };
     recs.set(ent.id, r);
     recList.push(r);
@@ -428,7 +444,11 @@ export function createCombatEngine(ctx) {
     r.def = def;
     r.step = 0;
     armStep(r);
-    aim(ent, r, targetId, o.dirX, o.dirZ);
+    if (!targetId && isPlayer(ent) && def.rating === 'ora' && !(typeof o.dirX === 'number' && (o.dirX !== 0 || o.dirZ !== 0))) {
+      // Nothing to aim at: Ora flies where the camera looks, not where the body happens to face.
+      camDir(ent);
+      aim(ent, r, 0, CAMD.x, CAMD.z);
+    } else aim(ent, r, targetId, o.dirX, o.dirZ);
     if (def.move && def.move.turn && ctx.move && def.id !== 'flicker_step') ctx.move.face(ent, Math.atan2(r.dirX, r.dirZ), true);
     r.charging = !!(o.hold && def.charge);
     r.chargeT = 0;
@@ -516,9 +536,9 @@ export function createCombatEngine(ctx) {
         x = ent.pos.x + dx * k;
         z = ent.pos.z + dz * k;
         if (airborne(t) && (airborne(ent) || r.def.id === 'pursuit')) y = t.pos.y + (t.height - ent.height) * 0.5;
-        else if (isPlayer(ent) && r.def.id === 'strike_string' && r.step === 0 && airborne(t) && (t.tags & TAG.FLYER) !== 0) {
-          // The rising lunge: the opening hit of the string carries a grounded hero up to a target hovering within
-          // RISE_MAX metres (wisps), and the air string continues from there with the usual hang.
+        else if (isPlayer(ent) && r.def.id === 'strike_string' && airborne(t) && (t.tags & TAG.FLYER) !== 0) {
+          // The rising lunge: a string hit from the ground carries the hero up to a target hovering within RISE_MAX
+          // metres (wisps), and the air string continues from there with the usual hang.
           const up = t.pos.y + (t.height - ent.height) * 0.5 - ent.pos.y;
           if (up > 1.0 && up <= RISE_MAX) {
             y = ent.pos.y + up;
@@ -1096,6 +1116,7 @@ export function createCombatEngine(ctx) {
     if (r.pursuitT > 0) r.pursuitT -= dt;
     if (r.juggleT > 0) r.juggleT -= dt;
     if (r.secondBreathT > 0) r.secondBreathT -= dt;
+    if (r.hurtGraceT > 0) r.hurtGraceT -= dt;
     r.stringT += dt;
     if (r.stringHits > 0 && r.stringT > STRING_GRACE && c.techId !== 'strike_string') r.stringHits = 0;
     const keys = r.cdKeys;
@@ -1282,6 +1303,8 @@ export function createCombatEngine(ctx) {
       th = Math.min(1, Math.max(engaged, 1) / 5 + (boss ? 0.5 : 0) + (hp < 0.35 ? 0.25 : 0));
       th = Math.round(th * 4) / 4;
     }
+    st.engaged = engaged;
+    if (on) { if (engaged > st.groupPeak) st.groupPeak = engaged; } else st.groupPeak = 0;
     if (on !== st.inCombat || Math.abs(th - st.threat) >= 0.25) {
       st.inCombat = on;
       st.threat = th;
@@ -1301,7 +1324,8 @@ export function createCombatEngine(ctx) {
     if (st.hardTarget) {
       const t = ctx.ents.get(st.hardTarget);
       const far = t ? (t.pos.x - p.pos.x) * (t.pos.x - p.pos.x) + (t.pos.z - p.pos.z) * (t.pos.z - p.pos.z) > CB.hardLock.breakRange * CB.hardLock.breakRange : true;
-      if (!t || !t.alive || far || (t.combat && t.combat.state === 'dead')) combat.setTarget(0);
+      if (!t || far) combat.setTarget(0);
+      else if (!t.alive || (t.combat && t.combat.state === 'dead')) relock(t);
       else if (st.tick % LOS_EVERY === 0) {
         const w = ctx.world;
         const los = !w || !w.lineOfSight || w.lineOfSight(p.pos.x, p.pos.y + p.height * 0.8, p.pos.z, t.pos.x, t.pos.y + t.height * 0.6, t.pos.z);
@@ -1312,39 +1336,94 @@ export function createCombatEngine(ctx) {
         }
       }
     }
-    // Aim: the stick direction while moving, else the facing.
-    let ax = Math.sin(p.yaw);
-    let az = Math.cos(p.yaw);
+    // Intent: the stick (weighted by its deflection), the camera direction and the distance (rules.intentScore).
     const it = p.intent;
-    if (it && it.mx * it.mx + it.mz * it.mz > 0.04) {
+    let sx = 0;
+    let sz = 0;
+    let sw = 0;
+    if (it && it.mx * it.mx + it.mz * it.mz > 0.0144) {
       const l = Math.sqrt(it.mx * it.mx + it.mz * it.mz);
-      ax = it.mx / l; az = it.mz / l;
+      sx = it.mx / l; sz = it.mz / l; sw = l > 1 ? 1 : l;
     }
-    const n = ctx.spatial.query(p.pos.x, p.pos.z, CB.softLock.oraRange, OUT, KIND_MASK.enemy | KIND_MASK.boss);
+    camDir(p);
+    const air = airborne(p);
+    const SL = AIM;
+    const mUp = air ? SL.airBand : RISE_MAX + 1;
+    const mDown = air ? SL.airBand : SL.meleeDown;
+    const n = ctx.spatial.query(p.pos.x, p.pos.z, SL.oraRange, OUT, KIND_MASK.enemy | KIND_MASK.boss);
     let bestM = null;
     let bestMS = Infinity;
     let bestO = null;
     let bestOS = Infinity;
+    let curMS = -1;
+    let curOS = -1;
     for (let i = 0; i < n; i++) {
       const e = OUT[i];
       if (!hostileOk(e)) continue;
       const dx = e.pos.x - p.pos.x;
       const dz = e.pos.z - p.pos.z;
-      const dy = Math.abs(e.pos.y - p.pos.y);
-      const sm = dy < CB.softLock.meleeRange ? softScore(dx, dz, ax, az, CB.softLock.meleeRange, CB.softLock.coneDeg) : -1;
+      const dy = e.pos.y - p.pos.y;
+      const sm = intentScore(dx, dy, dz, sx, sz, sw, CAMD.x, CAMD.z, SL.meleeRange, SL.coneDeg, mUp, mDown, SL.closeRange);
       if (sm >= 0 && sm < bestMS) { bestMS = sm; bestM = e; }
-      const so = softScore(dx, dz, ax, az, CB.softLock.oraRange, CB.softLock.coneDeg);
+      if (e.id === st.softMelee) curMS = sm;
+      const so = intentScore(dx, dy, dz, sx, sz, sw, CAMD.x, CAMD.z, SL.oraRange, SL.coneDeg, SL.oraBand, SL.oraBand, SL.oraClose);
       if (so >= 0 && so < bestOS) { bestOS = so; bestO = e; }
+      if (e.id === st.softOra) curOS = so;
     }
     for (let i = 0; i < n; i++) OUT[i] = null;
-    st.softMelee = bestM ? bestM.id : 0;
-    st.softOra = bestO ? bestO.id : 0;
+    // Hysteresis: the current soft target stays until another one is clearly better, so a string or a bolt
+    // stream does not hop between two enemies standing side by side.
+    if (curMS >= 0 && bestM && bestM.id !== st.softMelee && bestMS > curMS * SL.keepRatio) bestM = null;
+    else st.softMelee = bestM ? bestM.id : 0;
+    if (curOS >= 0 && bestO && bestO.id !== st.softOra && bestOS > curOS * SL.keepRatio) bestO = null;
+    else st.softOra = bestO ? bestO.id : 0;
+  }
+
+  /** Horizontal camera forward (the player's own facing without a camera) into CAMD. @param {any} p */
+  function camDir(p) {
+    const cam = ctx.cam;
+    const yaw = cam && typeof cam.yaw === 'number' && cam.yaw === cam.yaw ? cam.yaw : p.yaw;
+    CAMD.x = Math.sin(yaw);
+    CAMD.z = Math.cos(yaw);
+  }
+  const CAMD = { x: 0, z: 1 };
+
+  /**
+   * The hard target died: lock the next sensible hostile (the best intent score near the camera direction within
+   * the re-lock range), or release when there is none.
+   * @param {any} dead
+   */
+  function relock(dead) {
+    const p = ctx.player;
+    let best = null;
+    if (p && p.alive) {
+      camDir(p);
+      const SL = AIM;
+      const n = ctx.spatial.query(p.pos.x, p.pos.z, SL.relockRange, OUT, KIND_MASK.enemy | KIND_MASK.boss);
+      let bestS = Infinity;
+      for (let i = 0; i < n; i++) {
+        const e = OUT[i];
+        if (e === dead || !hostileOk(e)) continue;
+        const s = intentScore(e.pos.x - p.pos.x, e.pos.y - p.pos.y, e.pos.z - p.pos.z, 0, 0, 0, CAMD.x, CAMD.z,
+          SL.relockRange, 360, SL.oraBand, SL.oraBand, SL.closeRange);
+        if (s >= 0 && s < bestS) { bestS = s; best = e; }
+      }
+      for (let i = 0; i < n; i++) OUT[i] = null;
+    }
+    st.hardTarget = dead ? dead.id : 0;
+    combat.setTarget(best ? best.id : 0);
   }
 
   /** @param {any} ent @param {number} seconds @param {boolean} broken */
   function staggerEnt(ent, seconds, broken) {
     const c = ent.combat;
     if (!c || c.state === 'dead') return;
+    if (isPlayer(ent)) {
+      // Stun-lock guard: the hero keeps control between two staggers (weight.js HURT.graceSeconds).
+      const pr = recOf(ent);
+      if (pr.hurtGraceT > 0 && seconds < GUARD.breakStagger) return;
+      pr.hurtGraceT = seconds + HURT.graceSeconds;
+    }
     if (isBusy(c.state)) endTech(ent, true);
     if (c.guarding) setGuard(ent, false);
     if (c.gathering) setGather(ent, false);
@@ -1377,6 +1456,11 @@ export function createCombatEngine(ctx) {
     }
     if (kk.kind === 'launch' && kk !== JUGGLE && !WHO.boss && !WHO.player) tr.juggleT = STRING.juggle.maxSeconds;
     if (tr.juggleT <= 0 && KV.gravityScale < 1) KV.gravityScale = 1;
+    if (WHO.player) {
+      // Inside the grace a knock only pushes; otherwise the stun opens a new grace.
+      if (tr.hurtGraceT > 0) KV.stun = 0;
+      else tr.hurtGraceT = KV.stun + HURT.graceSeconds;
+    }
     KNOCK_OPTS.hurtle = KV.hurtle; KNOCK_OPTS.stun = KV.stun; KNOCK_OPTS.gravityScale = KV.gravityScale;
     KNOCK_OPTS.sourceId = src ? src.id : 0; KNOCK_OPTS.slamDamage = KV.hurtle ? amount * CB.slam.damageFraction : 0;
     ctx.move.knock(t, KV.vx, KV.vy, KV.vz, KNOCK_OPTS);
@@ -1578,6 +1662,8 @@ export function createCombatEngine(ctx) {
           pPerfect.entId = t.id; pPerfect.kind = 'flicker'; pPerfect.attackerId = src.id;
           ctx.bus.emit('combat:perfect', pPerfect);
           combat.addSurge(t, FLICK.perfect.surge);
+          styleReward(t, STYLE.perfect);
+          haptic('perfect');
           if (st.hardTarget && ctx.move) {
             const ht = ctx.ents.get(st.hardTarget);
             if (ht && ht.alive) {
@@ -1711,13 +1797,16 @@ export function createCombatEngine(ctx) {
       pHit.blocked = blocked; pHit.perfect = perfect; pHit.crit = crit;
       ctx.bus.emit('combat:hit', pHit);
       hitFeel(t, src, cls, dirX, dirZ, amount, blocked, killed, hurtle);
-      if (sPlayer && amount > 0) {
-        st.comboCount = st.comboT > 0 ? st.comboCount + 1 : 1;
-        st.comboT = COMBO_WINDOW;
-        pCombo.count = st.comboCount;
-        ctx.bus.emit('combat:combo', pCombo);
-      }
+      if (sPlayer && amount > 0 && !blocked) {
+        const sg = styleHit(style, req.techId || null, airborne(src), airborne(t)) + (killed ? styleBonus(style, STYLE.kill) : 0);
+        comboEvent(false);
+        if (sg > 0) combat.addSurge(src, sg);
+      } else if (tPlayer && amount > 0 && !blocked && styleHurt(style)) comboEvent(false);
       if (perfect) {
+        if (tPlayer) {
+          styleReward(t, STYLE.perfect);
+          haptic('perfect');
+        }
         pPerfect.entId = t.id; pPerfect.kind = 'guard'; pPerfect.attackerId = src ? src.id : 0;
         ctx.bus.emit('combat:perfect', pPerfect);
         combat.addSurge(t, GUARD.perfect.surge);
@@ -1733,7 +1822,10 @@ export function createCombatEngine(ctx) {
         else if (tPlayer && req.staggerPlayer && !blocked) staggerEnt(t, RED_STAGGER, false);
         else if (!tPlayer && stt.poiseMax <= 0 && !blocked && !hurtle && amount > 0 && ctx.actors) anim(t, 'stagger', false);
       }
-      if (killed) combat.kill(t, req.sourceId || 0);
+      if (killed) {
+        combat.kill(t, req.sourceId || 0);
+        if (sPlayer && (t.tags & TAG.BOSS) === 0 && t.team === 2) finisherCheck(t);
+      }
       return res;
     },
 
@@ -1793,7 +1885,7 @@ export function createCombatEngine(ctx) {
       ent.alive = false;
       if (ent.intent) { ent.intent.mx = 0; ent.intent.mz = 0; ent.intent.up = 0; }
       anim(ent, 'death', true);
-      if (st.hardTarget === ent.id) combat.setTarget(0);
+      if (st.hardTarget === ent.id) relock(ent);
       if (st.softMelee === ent.id) st.softMelee = 0;
       if (st.softOra === ent.id) st.softOra = 0;
       pDied.entId = ent.id; pDied.sourceId = sourceId; pDied.kind = ent.kind; pDied.defId = ent.defId; pDied.level = ent.level;
@@ -1936,7 +2028,9 @@ export function createCombatEngine(ctx) {
       const range = CB.hardLock.breakRange;
       const cur = st.hardTarget || st.softMelee || st.softOra;
       const ce = cur ? ctx.ents.get(cur) : null;
-      const yaw = p.yaw;
+      // Left and right as the player sees them: around the camera's view direction.
+      const cam = ctx.cam;
+      const yaw = cam && typeof cam.yaw === 'number' && cam.yaw === cam.yaw ? cam.yaw : p.yaw;
       const a0 = ce && ce.alive ? relAngle(ce.pos.x - p.pos.x, ce.pos.z - p.pos.z, yaw) : 0;
       const n = ctx.spatial.query(p.pos.x, p.pos.z, range, OUT, KIND_MASK.enemy | KIND_MASK.boss);
       let best = null;
@@ -2063,23 +2157,95 @@ export function createCombatEngine(ctx) {
     st.losLost = 0;
     st.comboCount = 0;
     st.comboT = 0;
+    st.groupPeak = 0;
+    st.engaged = 0;
+    resetStyle(style);
     seenForms.clear();
   }
 
-  /** The visual feel of one hit that is not automatic through events (actor flash, flinch, camera punch). */
+  /**
+   * The weight of one hit that is not automatic through the core feel table (data/weight.js): the flinch and shove
+   * of the struck body, the camera punch, the haptic pattern, and when the hero is hit, the jolt and the input
+   * softness.
+   */
   function hitFeel(t, src, cls, dirX, dirZ, amount, blocked, killed, hurtle) {
     const a = ctx.actors;
+    const w = WEIGHT[cls] || WEIGHT.lightHit;
+    const tPlayer = isPlayer(t);
     if (a && amount > 0) {
       if (a.flash) a.flash(t, blocked ? 0.04 : 0.07);
-      if (!hurtle && !killed && a.flinch && (t.tags & TAG.BOSS) === 0) a.flinch(t, dirX, dirZ, cls === 'lightHit' || cls === 'boltHit' ? 0.4 : 0.9);
+      if (!hurtle && !killed && a.flinch && (t.tags & TAG.BOSS) === 0) a.flinch(t, dirX, dirZ, tPlayer ? 0.9 : w.flinch);
     }
-    if (isPlayer(src) && ctx.cam && ctx.cam.punch && (cls === 'heavyHit' || cls === 'finisher' || cls === 'burst')) {
-      ctx.cam.punch(dirX, 0, dirZ, cls === 'heavyHit' ? 0.08 : 0.14);
+    if (isPlayer(src)) {
+      if (ctx.cam && ctx.cam.punch && (cls === 'heavyHit' || cls === 'finisher' || cls === 'burst')) {
+        ctx.cam.punch(dirX, 0, dirZ, cls === 'heavyHit' ? 0.08 : 0.14);
+      }
+      if (w.haptic && amount > 0) haptic(blocked ? 'light' : w.haptic);
+    } else if (tPlayer && amount > 0) {
+      const heavy = t.stats && t.stats.hpMax > 0 && amount >= t.stats.hpMax * HURT.heavyFraction;
+      haptic(blocked ? 'light' : 'hurt');
+      // The jolt: the view is shoved along the blow, harder for a heavy one.
+      if (!blocked && ctx.cam && ctx.cam.punch) ctx.cam.punch(dirX, -0.25, dirZ, heavy ? HURT.joltHeavy : HURT.joltLight);
+      // Input softness: a moment of heavier legs, never longer than the hit's own stun.
+      if (!blocked && t.move && ctx.move && t.move.lockT <= 0) {
+        LOCK_OPTS.slow = HURT.softSlow;
+        ctx.move.lock(t, HURT.softSeconds, LOCK_OPTS);
+      }
     }
-    // Light string hits shove grounded grunts a little so contact reads as physical.
-    if (!blocked && !killed && !hurtle && t.move && ctx.move && !isPlayer(t) && (t.tags & TAG.BOSS) === 0 && cls === 'lightHit' && !airborne(t)) {
-      ctx.move.impulse(t, dirX * 1.6, 0, dirZ * 1.6);
+    // Light hits shove grounded grunts a little so contact reads as physical.
+    if (!blocked && !killed && !hurtle && w.shove > 0 && t.move && ctx.move && !tPlayer && (t.tags & TAG.BOSS) === 0 && !airborne(t)) {
+      ctx.move.impulse(t, dirX * w.shove, 0, dirZ * w.shove);
     }
+  }
+
+  /** Play a haptic pattern (input.vibrate honours the Vibration setting and feature detection). @param {string} id */
+  function haptic(id) {
+    const inp = ctx.input;
+    const pat = HAPTICS[id];
+    if (pat && inp && typeof inp.vibrate === 'function') inp.vibrate(pat);
+  }
+
+  /** Emit combat:combo { count, rank, rankId, expired, best } (the UI shows it). @param {boolean} expired */
+  function comboEvent(expired) {
+    pCombo.count = style.count; pCombo.rank = style.rank; pCombo.rankId = style.rank > 0 ? STYLE.rankIds[style.rank - 1] : '';
+    pCombo.expired = expired; pCombo.best = style.best;
+    if (expired) style.count = 0;
+    ctx.bus.emit('combat:combo', pCombo);
+  }
+
+  /** A flat style bonus for the player (kill, slam, perfect defence), with its Surge. */
+  function styleReward(p, pts) {
+    if (!isPlayer(p)) return;
+    const before = style.rank;
+    const sg = styleBonus(style, pts);
+    if (style.rank !== before) comboEvent(false);
+    if (sg > 0) combat.addSurge(p, sg);
+  }
+
+  /**
+   * The finisher: when the player kills the last engaged enemy of a group of at least FINISHER.minGroup, a short
+   * slow motion and a camera push (the camera eases in on the hero, then back).
+   * @param {any} dead
+   */
+  function finisherCheck(dead) {
+    const p = ctx.player;
+    if (!p || !p.alive || st.groupPeak < FINISHER.minGroup) return;
+    const list = ctx.ents.all();
+    const r2 = FINISHER.radius * FINISHER.radius;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (e === dead || e.team !== 2 || !e.alive || e.combat === null || e.kind === 'projectile' || e.combat.state === 'dead') continue;
+      if (e.combat.inCombatT <= 0) continue;
+      const dx = e.pos.x - p.pos.x;
+      const dz = e.pos.z - p.pos.z;
+      if (dx * dx + dz * dz <= r2 || e.combat.targetId === p.id) return;
+    }
+    st.groupPeak = 0;
+    ctx.time.slowMo(FINISHER.slowScale, FINISHER.slowSeconds);
+    const cam = ctx.cam;
+    if (cam && typeof cam.push === 'function') cam.push(FINISHER.push, FINISHER.pushSeconds, dead.id);
+    if (ctx.fx) ctx.fx.impact('finisher', dead.pos.x, dead.pos.y + dead.height * 0.5, dead.pos.z, 1);
+    styleReward(p, STYLE.kill);
   }
 
   const runSystem = {
@@ -2088,7 +2254,10 @@ export function createCombatEngine(ctx) {
     /** @param {any} c @param {number} dt */
     step(c, dt) {
       st.tick++;
-      if (st.comboT > 0) st.comboT -= dt;
+      const sf = styleStep(style, dt);
+      if (sf !== 0) comboEvent((sf & 1) !== 0);
+      st.comboCount = style.count;
+      st.comboT = style.gapT;
       const list = c.ents.all();
       for (let i = 0; i < list.length; i++) {
         const e = list[i];
@@ -2117,7 +2286,10 @@ export function createCombatEngine(ctx) {
         combat.damage(REQ, RES);
       }
       const src = e.sourceId ? ctx.ents.get(e.sourceId) : null;
-      if (src && isPlayer(src)) combat.addSurge(src, CB.slam.surge);
+      if (src && isPlayer(src)) {
+        combat.addSurge(src, CB.slam.surge);
+        styleReward(src, STYLE.slam);
+      }
       const w = ctx.world;
       if (w) {
         const radius = Math.min(CB.crater.deformRadius - 0.5, Math.max(1.5, e.speed / 9));
@@ -2141,5 +2313,5 @@ export function createCombatEngine(ctx) {
     },
   };
 
-  return { combat, runSystem, on, recList, recOf, reset, defOf, state: st, airborne };
+  return { combat, runSystem, on, recList, recOf, reset, defOf, state: st, airborne, style };
 }

@@ -65,6 +65,12 @@ export const MOVER = Object.freeze({
   sonicMult: BALANCE.derived.boost.sonicMult,
   colliderReach: 2.5,
   hangMaxFall: 3,
+  /** Ground bounce of a hurtling body that meets the terrain falling faster than bounceMin (m/s): one bounce at
+   * bounceK of the fall speed, at most bounceMax, keeping bounceKeep of the horizontal speed. */
+  bounceMin: 11,
+  bounceK: 0.3,
+  bounceMax: 6.5,
+  bounceKeep: 0.5,
 });
 
 /** Movement modes in the MoveState union. */
@@ -98,7 +104,7 @@ export function createIntent() {
 export function createRec() {
   return {
     boostT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashVz: 0, lockSlow: 1, faceYaw: NaN,
-    coyoteT: 0, bufT: 0, lockBufT: 0, lockBufFly: false, jumped: false, spin: 0, hangT: 0, hangScale: 1,
+    coyoteT: 0, bufT: 0, lockBufT: 0, lockBufFly: false, jumped: false, spin: 0, bounced: false, hangT: 0, hangScale: 1,
     cols: [], contact: createContact(),
     nrm: { x: 0, y: 1, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } },
   };
@@ -550,6 +556,20 @@ function impact(ent, r, sink, speed, surface) {
   const slam = speed >= MOVER.slamSpeed;
   endHurtle(ent, r);
   const v = ent.vel;
+  const fall = -v.y;
+  if (surface === 'terrain' && !r.bounced && fall > MOVER.bounceMin && ent.alive !== false) {
+    // One readable ground bounce: the body pops back up, then lands for real.
+    r.bounced = true;
+    v.y = Math.min(MOVER.bounceMax, fall * MOVER.bounceK);
+    v.x *= MOVER.bounceKeep;
+    v.z *= MOVER.bounceKeep;
+    m.grounded = false;
+    ent.pos.y += 0.05;
+    if (m.lockT < 0.8) m.lockT = 0.8;
+    r.lockSlow = 0;
+    setMode(ent, sink, 'air');
+    return;
+  }
   // A short skid along the ground keeps the impact readable without a dead stop.
   v.x *= slam ? 0.12 : 0.35;
   v.z *= slam ? 0.12 : 0.35;
@@ -764,6 +784,7 @@ export function knock(ent, r, sink, vx, vy, vz, o) {
   ent.vel.x = vx; ent.vel.y = vy; ent.vel.z = vz;
   const stun = o && typeof o.stun === 'number' ? o.stun : 0.3;
   if (m.lockT < stun) m.lockT = stun;
+  r.bounced = false;
   r.lockSlow = 0;
   r.dashT = 0;
   r.boostT = 0;
