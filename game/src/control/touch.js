@@ -12,6 +12,7 @@
  */
 
 import { touchLayout, TOUCH_BUTTONS } from './logic/touchLayout.js';
+import { isFlick } from './logic/gesture.js';
 
 const ID = 'touch';
 const LOOK_DEG_PER_PX = 0.25;
@@ -309,6 +310,13 @@ export function createTouch(ctx, shared) {
       const r = app.getBoundingClientRect();
       const combat = ctx.combat;
       if (combat && typeof combat.pickAtScreen === 'function') combat.pickAtScreen(e.clientX - r.left, e.clientY - r.top);
+    } else if (e.type === 'pointerup') {
+      // A flick while locked switches the target toward the flick (left or right as seen on screen).
+      const combat = ctx.combat;
+      const fdx = e.clientX - lookP.sx;
+      const fdy = e.clientY - lookP.sy;
+      const ms = (e.timeStamp || 0) - lookP.t;
+      if (combat && typeof combat.target === 'function' && combat.target() && isFlick(fdx, fdy, ms)) combat.cycleTarget(fdx > 0 ? 1 : -1);
     }
   };
   listen(look, 'pointerup', lookUp);

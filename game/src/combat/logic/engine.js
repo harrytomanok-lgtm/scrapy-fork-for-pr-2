@@ -17,7 +17,7 @@ import { PALETTE } from '../../core/palette.js';
 import { resolveRank } from './rank.js';
 import {
   TAG, KIND_MASK, frontal, isPerfectGuard, isPerfectFlicker, hitAmount, surgeForHit, surgeForHpLoss, surgeDecay,
-  knockVelocity, softScore, relAngle, sweepCapsuleT, nearCollider, falloffPower,
+  knockVelocity, intentScore, relAngle, sweepCapsuleT, nearCollider, falloffPower,
 } from './rules.js';
 
 const CB = BALANCE.combat;
@@ -47,6 +47,14 @@ const LOS_EVERY = 6;
 const RED_STAGGER = 0.6;
 /** Radius around the player in which hostiles count for threat. */
 const THREAT_RANGE = 60;
+/**
+ * Aim assist (soft targeting, rules.intentScore): ranges and the cone come from BALANCE.combat.softLock; the
+ * vertical bands (m), the any-side radius, the hysteresis ratio and the re-lock radius after a kill are feel.
+ */
+const AIM = Object.freeze({
+  meleeRange: CB.softLock.meleeRange, oraRange: CB.softLock.oraRange, coneDeg: CB.softLock.coneDeg,
+  closeRange: 6, meleeDown: 4, airBand: 10, oraBand: 60, keepRatio: 0.9, relockRange: 40,
+});
 
 /** @param {string} s */
 const isBusy = (s) => s === 'windup' || s === 'active' || s === 'recover';
@@ -428,7 +436,11 @@ export function createCombatEngine(ctx) {
     r.def = def;
     r.step = 0;
     armStep(r);
-    aim(ent, r, targetId, o.dirX, o.dirZ);
+    if (!targetId && isPlayer(ent) && def.rating === 'ora' && !(typeof o.dirX === 'number' && (o.dirX !== 0 || o.dirZ !== 0))) {
+      // Nothing to aim at: Ora flies where the camera looks, not where the body happens to face.
+      camDir(ent);
+      aim(ent, r, 0, CAMD.x, CAMD.z);
+    } else aim(ent, r, targetId, o.dirX, o.dirZ);
     if (def.move && def.move.turn && ctx.move && def.id !== 'flicker_step') ctx.move.face(ent, Math.atan2(r.dirX, r.dirZ), true);
     r.charging = !!(o.hold && def.charge);
     r.chargeT = 0;
@@ -516,9 +528,9 @@ export function createCombatEngine(ctx) {
         x = ent.pos.x + dx * k;
         z = ent.pos.z + dz * k;
         if (airborne(t) && (airborne(ent) || r.def.id === 'pursuit')) y = t.pos.y + (t.height - ent.height) * 0.5;
-        else if (isPlayer(ent) && r.def.id === 'strike_string' && r.step === 0 && airborne(t) && (t.tags & TAG.FLYER) !== 0) {
-          // The rising lunge: the opening hit of the string carries a grounded hero up to a target hovering within
-          // RISE_MAX metres (wisps), and the air string continues from there with the usual hang.
+        else if (isPlayer(ent) && r.def.id === 'strike_string' && airborne(t) && (t.tags & TAG.FLYER) !== 0) {
+          // The rising lunge: a string hit from the ground carries the hero up to a target hovering within RISE_MAX
+          // metres (wisps), and the air string continues from there with the usual hang.
           const up = t.pos.y + (t.height - ent.height) * 0.5 - ent.pos.y;
           if (up > 1.0 && up <= RISE_MAX) {
             y = ent.pos.y + up;
@@ -1301,7 +1313,8 @@ export function createCombatEngine(ctx) {
     if (st.hardTarget) {
       const t = ctx.ents.get(st.hardTarget);
       const far = t ? (t.pos.x - p.pos.x) * (t.pos.x - p.pos.x) + (t.pos.z - p.pos.z) * (t.pos.z - p.pos.z) > CB.hardLock.breakRange * CB.hardLock.breakRange : true;
-      if (!t || !t.alive || far || (t.combat && t.combat.state === 'dead')) combat.setTarget(0);
+      if (!t || far) combat.setTarget(0);
+      else if (!t.alive || (t.combat && t.combat.state === 'dead')) relock(t);
       else if (st.tick % LOS_EVERY === 0) {
         const w = ctx.world;
         const los = !w || !w.lineOfSight || w.lineOfSight(p.pos.x, p.pos.y + p.height * 0.8, p.pos.z, t.pos.x, t.pos.y + t.height * 0.6, t.pos.z);
@@ -1312,33 +1325,82 @@ export function createCombatEngine(ctx) {
         }
       }
     }
-    // Aim: the stick direction while moving, else the facing.
-    let ax = Math.sin(p.yaw);
-    let az = Math.cos(p.yaw);
+    // Intent: the stick (weighted by its deflection), the camera direction and the distance (rules.intentScore).
     const it = p.intent;
-    if (it && it.mx * it.mx + it.mz * it.mz > 0.04) {
+    let sx = 0;
+    let sz = 0;
+    let sw = 0;
+    if (it && it.mx * it.mx + it.mz * it.mz > 0.0144) {
       const l = Math.sqrt(it.mx * it.mx + it.mz * it.mz);
-      ax = it.mx / l; az = it.mz / l;
+      sx = it.mx / l; sz = it.mz / l; sw = l > 1 ? 1 : l;
     }
-    const n = ctx.spatial.query(p.pos.x, p.pos.z, CB.softLock.oraRange, OUT, KIND_MASK.enemy | KIND_MASK.boss);
+    camDir(p);
+    const air = airborne(p);
+    const SL = AIM;
+    const mUp = air ? SL.airBand : RISE_MAX + 1;
+    const mDown = air ? SL.airBand : SL.meleeDown;
+    const n = ctx.spatial.query(p.pos.x, p.pos.z, SL.oraRange, OUT, KIND_MASK.enemy | KIND_MASK.boss);
     let bestM = null;
     let bestMS = Infinity;
     let bestO = null;
     let bestOS = Infinity;
+    let curMS = -1;
+    let curOS = -1;
     for (let i = 0; i < n; i++) {
       const e = OUT[i];
       if (!hostileOk(e)) continue;
       const dx = e.pos.x - p.pos.x;
       const dz = e.pos.z - p.pos.z;
-      const dy = Math.abs(e.pos.y - p.pos.y);
-      const sm = dy < CB.softLock.meleeRange ? softScore(dx, dz, ax, az, CB.softLock.meleeRange, CB.softLock.coneDeg) : -1;
+      const dy = e.pos.y - p.pos.y;
+      const sm = intentScore(dx, dy, dz, sx, sz, sw, CAMD.x, CAMD.z, SL.meleeRange, SL.coneDeg, mUp, mDown, SL.closeRange);
       if (sm >= 0 && sm < bestMS) { bestMS = sm; bestM = e; }
-      const so = softScore(dx, dz, ax, az, CB.softLock.oraRange, CB.softLock.coneDeg);
+      if (e.id === st.softMelee) curMS = sm;
+      const so = intentScore(dx, dy, dz, sx, sz, sw, CAMD.x, CAMD.z, SL.oraRange, SL.coneDeg, SL.oraBand, SL.oraBand, SL.closeRange);
       if (so >= 0 && so < bestOS) { bestOS = so; bestO = e; }
+      if (e.id === st.softOra) curOS = so;
     }
     for (let i = 0; i < n; i++) OUT[i] = null;
-    st.softMelee = bestM ? bestM.id : 0;
-    st.softOra = bestO ? bestO.id : 0;
+    // Hysteresis: the current soft target stays until another one is clearly better, so a string or a bolt
+    // stream does not hop between two enemies standing side by side.
+    if (curMS >= 0 && bestM && bestM.id !== st.softMelee && bestMS > curMS * SL.keepRatio) bestM = null;
+    else st.softMelee = bestM ? bestM.id : 0;
+    if (curOS >= 0 && bestO && bestO.id !== st.softOra && bestOS > curOS * SL.keepRatio) bestO = null;
+    else st.softOra = bestO ? bestO.id : 0;
+  }
+
+  /** Horizontal camera forward (the player's own facing without a camera) into CAMD. @param {any} p */
+  function camDir(p) {
+    const cam = ctx.cam;
+    const yaw = cam && typeof cam.yaw === 'number' && cam.yaw === cam.yaw ? cam.yaw : p.yaw;
+    CAMD.x = Math.sin(yaw);
+    CAMD.z = Math.cos(yaw);
+  }
+  const CAMD = { x: 0, z: 1 };
+
+  /**
+   * The hard target died: lock the next sensible hostile (the best intent score near the camera direction within
+   * the re-lock range), or release when there is none.
+   * @param {any} dead
+   */
+  function relock(dead) {
+    const p = ctx.player;
+    let best = null;
+    if (p && p.alive) {
+      camDir(p);
+      const SL = AIM;
+      const n = ctx.spatial.query(p.pos.x, p.pos.z, SL.relockRange, OUT, KIND_MASK.enemy | KIND_MASK.boss);
+      let bestS = Infinity;
+      for (let i = 0; i < n; i++) {
+        const e = OUT[i];
+        if (e === dead || !hostileOk(e)) continue;
+        const s = intentScore(e.pos.x - p.pos.x, e.pos.y - p.pos.y, e.pos.z - p.pos.z, 0, 0, 0, CAMD.x, CAMD.z,
+          SL.relockRange, 360, SL.oraBand, SL.oraBand, SL.closeRange);
+        if (s >= 0 && s < bestS) { bestS = s; best = e; }
+      }
+      for (let i = 0; i < n; i++) OUT[i] = null;
+    }
+    st.hardTarget = dead ? dead.id : 0;
+    combat.setTarget(best ? best.id : 0);
   }
 
   /** @param {any} ent @param {number} seconds @param {boolean} broken */
@@ -1793,7 +1855,7 @@ export function createCombatEngine(ctx) {
       ent.alive = false;
       if (ent.intent) { ent.intent.mx = 0; ent.intent.mz = 0; ent.intent.up = 0; }
       anim(ent, 'death', true);
-      if (st.hardTarget === ent.id) combat.setTarget(0);
+      if (st.hardTarget === ent.id) relock(ent);
       if (st.softMelee === ent.id) st.softMelee = 0;
       if (st.softOra === ent.id) st.softOra = 0;
       pDied.entId = ent.id; pDied.sourceId = sourceId; pDied.kind = ent.kind; pDied.defId = ent.defId; pDied.level = ent.level;
@@ -1936,7 +1998,9 @@ export function createCombatEngine(ctx) {
       const range = CB.hardLock.breakRange;
       const cur = st.hardTarget || st.softMelee || st.softOra;
       const ce = cur ? ctx.ents.get(cur) : null;
-      const yaw = p.yaw;
+      // Left and right as the player sees them: around the camera's view direction.
+      const cam = ctx.cam;
+      const yaw = cam && typeof cam.yaw === 'number' && cam.yaw === cam.yaw ? cam.yaw : p.yaw;
       const a0 = ce && ce.alive ? relAngle(ce.pos.x - p.pos.x, ce.pos.z - p.pos.z, yaw) : 0;
       const n = ctx.spatial.query(p.pos.x, p.pos.z, range, OUT, KIND_MASK.enemy | KIND_MASK.boss);
       let best = null;

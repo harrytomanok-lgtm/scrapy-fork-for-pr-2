@@ -176,6 +176,47 @@ export function softScore(dx, dz, aimX, aimZ, range, coneDeg, closeRange = 6) {
 }
 
 /**
+ * Intent-weighted soft-target score (lower is better), or -1 when the candidate is not eligible. A touch player
+ * cannot aim precisely, so the pick reads intent from three signals:
+ * - the stick direction, weighted by its deflection (where the thumb pushes is where the player wants to go);
+ * - the camera direction (what the player is looking at; enemies behind the camera cost a lot unless very close
+ *   or pushed toward with the stick);
+ * - the distance in 3D, where height above counts a little more than ground distance (flyers stay reachable but a
+ *   grunt at the same distance on the ground wins).
+ * A candidate is eligible inside `range`, inside the vertical band [-maxDown, maxUp], and inside the cone around
+ * the stick or the camera (or within `closeRange` from any side).
+ * @param {number} dx @param {number} dy @param {number} dz offset player -> candidate (dy: feet to feet, + up)
+ * @param {number} stickX @param {number} stickZ unit stick direction in the world (any value when stickW is 0)
+ * @param {number} stickW stick deflection 0..1
+ * @param {number} camX @param {number} camZ unit horizontal camera forward
+ * @param {number} range @param {number} coneDeg @param {number} maxUp @param {number} maxDown
+ * @param {number} [closeRange]
+ * @returns {number}
+ */
+export function intentScore(dx, dy, dz, stickX, stickZ, stickW, camX, camZ, range, coneDeg, maxUp, maxDown, closeRange = 6) {
+  const dh = Math.sqrt(dx * dx + dz * dz);
+  if (dh > range || dy > maxUp || dy < -maxDown) return -1;
+  const ey = dy > 0 ? dy * 1.4 : -dy * 0.8;
+  const de = Math.sqrt(dh * dh + ey * ey);
+  if (dh < 1e-3) return de * 0.5;
+  const cosC = (dx * camX + dz * camZ) / dh;
+  const sw = stickW > 1 ? 1 : stickW < 0 ? 0 : stickW;
+  const cosS = sw > 0 ? (dx * stickX + dz * stickZ) / dh : cosC;
+  const half = Math.cos((coneDeg * Math.PI) / 360);
+  const inStick = sw > 0.2 && cosS >= half;
+  const inCam = cosC >= half;
+  const close = dh <= closeRange;
+  if (!inStick && !inCam && !close) return -1;
+  // Angles, not cosines: a small turn of the thumb toward one enemy of a tight group must count.
+  const aS = Math.acos(cosS > 1 ? 1 : cosS < -1 ? -1 : cosS);
+  const aC = Math.acos(cosC > 1 ? 1 : cosC < -1 ? -1 : cosC);
+  let pen = sw * aS * 2 + aC * (sw > 0.2 ? 0.3 : 0.9);
+  // Behind the camera: off screen. Costly unless the stick points at it or it stands at arm's length.
+  if (cosC < -0.2 && dh > 2.5) pen += 1.5 * (1 - (cosS > 0 ? cosS * sw : 0));
+  return de * (1 + pen) + (inStick || inCam ? 0 : 12);
+}
+
+/**
  * Horizontal angle (radians, -PI..PI) of a candidate around the player relative to `yaw`; positive = to the right.
  * @param {number} dx @param {number} dz @param {number} yaw
  * @returns {number}
