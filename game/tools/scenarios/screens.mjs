@@ -309,13 +309,17 @@ function contentScenario(tag, width, height) {
         const e = g.ctx.ai.spawn('tusk_boar', p.x + Math.sin(p.yaw) * 8, g.ctx.world.heightAt(p.x + Math.sin(p.yaw) * 8, p.z + Math.cos(p.yaw) * 8), p.z + Math.cos(p.yaw) * 8, { passive: true, elite: true });
         g.lock(e.id);
         g.damage(e.id, 0.2);
+        // The lock camera settles over a few test frames (at most 0.5 s each); the HUD places around it.
+        for (let i = 0; i < 4; i++) {
+          g.step(30);
+          g.render();
+        }
         const f = g.ctx.store.state.quests.flags;
         f['ora.shards'] = f['ora.shards'].slice(0, 4);
         const next = g.ctx.quests.shards().list.find((s) => !s.found);
         g.ctx.bus.emit('pickup:collected', { kind: 'xp', itemId: next.id, amount: 25 });
-        // The lock camera settles over a few test frames (at most 0.5 s each); the HUD places around it.
-        for (let i = 0; i < 4; i++) {
-          g.step(4);
+        for (let i = 0; i < 2; i++) {
+          g.step(6);
           g.render();
         }
       });
