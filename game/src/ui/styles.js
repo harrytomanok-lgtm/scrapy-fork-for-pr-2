@@ -448,7 +448,7 @@ export const UI_CSS = `
   transform:translateX(-120%);animation:ui-sweep 5s ease-in-out 1s infinite;mix-blend-mode:overlay}
 .ui-logo{position:relative;isolation:isolate}
 .ui-logo-main{animation:ui-float 7s ease-in-out infinite}
-.ui-logo-ring{position:absolute;z-index:-1;left:50%;top:50%;inline-size:min(78vw,340px);block-size:min(78vw,340px);margin:calc(min(78vw,340px) / -2) 0 0 calc(min(78vw,340px) / -2);
+.ui-logo-ring{position:absolute;z-index:-1;left:50%;top:50%;inline-size:min(64vw,270px);block-size:min(64vw,270px);margin:calc(min(64vw,270px) / -2) 0 0 calc(min(64vw,270px) / -2);
   fill:none;stroke-linecap:round;opacity:.9;filter:drop-shadow(0 0 6px rgba(127,242,224,.55))}
 .ui-logo-ring g{transform-origin:100px 100px;animation:ui-spinslow 60s linear infinite}
 .ui-logo-ring .a{stroke:var(--accent);stroke-dasharray:120 14 40 14}

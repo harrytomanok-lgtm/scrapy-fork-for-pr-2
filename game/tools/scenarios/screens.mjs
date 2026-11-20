@@ -49,7 +49,14 @@ function opening(g) {
 function screenProblems() {
   const app = document.getElementById('app');
   const out = [];
-  if (app.scrollWidth > app.clientWidth + 1) out.push('root overflows: ' + app.scrollWidth + ' > ' + app.clientWidth);
+  if (app.scrollWidth > app.clientWidth + 1) {
+    const wide = [];
+    for (const el of app.querySelectorAll('*')) {
+      const b = el.getBoundingClientRect();
+      if (b.width > 0 && (b.right > innerWidth + 1 || b.left < -1)) wide.push(String(el.getAttribute('class')) + ' ' + Math.round(b.left) + '..' + Math.round(b.right));
+    }
+    out.push('root overflows: ' + app.scrollWidth + ' > ' + app.clientWidth + ' ' + wide.slice(0, 6).join(' | '));
+  }
   const m = (app.innerText || '').match(/\[[a-z]+\.[a-zA-Z0-9_.]+\]/g);
   if (m) out.push('placeholders: ' + m.slice(0, 5).join(' '));
   for (const s of document.querySelectorAll('.ui-scr:not([hidden])')) {
@@ -94,7 +101,7 @@ function menuScenario(tag, width, height) {
         const r = await game((g, a) => {
           g.closeAll();
           g.open(a.id, a.params);
-          g.step(2);
+          g.render();
           g.render();
           return g.top();
         }, { id, params });
