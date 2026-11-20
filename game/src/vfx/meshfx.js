@@ -83,7 +83,7 @@ export function createMeshFx(ctx) {
         beams.push({
           mesh, mat, active: false, t: 0, fade: 0, fadeT: 0, ax: 0, ay: 0, az: 0, bx: 0, by: 1, bz: 0, radius: 0.3, intensity: 1,
           baseRadius: 0.3, light: null, timed: -1, followA: 0, followB: 0, socketA: 'chest', ending: false, kind: 0, gen: 0, handle: null,
-          ringT: 0, hasSet: false,
+          ringT: 0, hasSet: false, power: 0, splashAcc: 0,
         });
       }
       // shells

@@ -15,6 +15,8 @@ export const pkg = {
     ctx.systems.add(updateSystem);
     const bus = ctx.bus;
     bus.on('combat:hit', auto.hit);
+    bus.on('combat:techStart', auto.techStart);
+    bus.on('combat:techPhase', auto.techPhase);
     bus.on('projectile:spawned', auto.projectileSpawned);
     bus.on('projectile:removed', auto.projectileRemoved);
     bus.on('combat:telegraph', auto.telegraph);
@@ -27,7 +29,14 @@ export const pkg = {
     bus.on('rpg:levelUp', auto.levelUp);
     bus.on('move:boost', auto.boost);
     bus.on('actor:landed', auto.landed);
+    bus.on('actor:step', auto.step);
+    bus.on('move:jump', auto.jump);
+    bus.on('move:mode', auto.mode);
     bus.on('pickup:spawned', auto.pickup);
+    bus.on('pickup:collected', auto.collected);
+    bus.on('ringstone:activated', auto.ringstone);
+    bus.on('siphon:state', auto.siphon);
+    bus.on('boss:phase', auto.bossPhase);
     bus.on('fx:impact', auto.impact);
     bus.on('quality:changed', auto.quality);
     registerVfxTestbed(ctx);
