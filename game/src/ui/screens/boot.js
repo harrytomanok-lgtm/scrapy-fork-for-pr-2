@@ -388,6 +388,9 @@ export function registerBootScreens(ctx, kit, ui, reg) {
   // ------------------------------------------------------------------ credits and licences
   reg('credits', () => {
     const { root, body } = shell(kit, { ribbon: 'ui.credits.title', ribbonIcon: 'scroll', size: '', cls: 'ui-menuscr' });
+    // Back sits at the top, so the page opens at its start with the focus on it (a long licence text follows).
+    const back = kit.button(body, 'ui.common.back', () => ui.close('credits'), 'ui-ghostbtn ui-sm', 'back');
+    back.style.alignSelf = 'flex-start';
     const head = kit.el('div', 'ui-credhead', body);
     kit.el('div', 'ui-credname', head, 'core.game.title');
     kit.el('div', 'ui-logo-sub', head, 'core.game.subtitle');
@@ -404,7 +407,6 @@ export function registerBootScreens(ctx, kit, ui, reg) {
     kit.el('div', 'ui-p', fonts, 'ui.credits.rubik');
     kit.el('p', 'ui-small', fonts, 'ui.credits.fontsNote');
     kit.el('p', 'ui-small', body, 'ui.credits.legalNote');
-    const back = kit.button(body, 'ui.common.back', () => ui.close('credits'), 'ui-ghostbtn', 'back');
     return { el: root, onOpen() {
       const b = root.querySelector('.ui-pbody');
       if (b) b.scrollTop = 0;
