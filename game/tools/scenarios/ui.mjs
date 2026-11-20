@@ -67,6 +67,11 @@ function hudState(g) {
   g.setDevice('touch');
   const id = g.spawn('tusk_boar', { dist: 10, passive: true });
   g.lock(id);
+  // The lock camera settles over a few test frames (the rig advances at most 0.5 s per frame).
+  for (let i = 0; i < 4; i++) {
+    g.step(20);
+    g.render();
+  }
   g.damage(id, 0.4);
   const p = g.player();
   g.damage(p.id, 0.3, { kind: 'true', sourceId: id });
@@ -418,6 +423,7 @@ const flows = [
       });
       assert.equal(r1.line, r1.full, 'confirm completes the typing');
       assert.ok(r1.choices >= 2, 'choices shown');
+      assert.equal(await game(() => document.querySelector('[data-screen=dialogue] .ui-dlgskip').hidden), true, 'no Skip at a choice');
       await shot('ui-dialogue');
       await game((g) => {
         const bs = document.querySelectorAll('[data-screen=dialogue] .ui-choices button');
@@ -431,6 +437,40 @@ const flows = [
     },
   },
   {
+    name: 'ui-dialogue-skip',
+    async run({ page, game, assert, shot }) {
+      const r0 = await game((g) => {
+        g.ctx.quests.talk('mq1_wake', {});
+        g.render();
+        const b = document.querySelector('[data-screen=dialogue] .ui-dlgskip');
+        const r = b.getBoundingClientRect();
+        const p = document.querySelector('.ui-dlgpanel').getBoundingClientRect();
+        return { top: g.top(), node: g.ctx.quests.dialogueState().nodeId, hidden: b.hidden, w: r.width, h: r.height, y: r.top, panelTop: p.top };
+      });
+      assert.equal(r0.top, 'dialogue');
+      assert.equal(r0.hidden, false, 'Skip shown on a line without a choice');
+      assert.ok(r0.w >= 48 && r0.h >= 48, 'Skip is a 48 px target ' + r0.w + 'x' + r0.h);
+      assert.ok(r0.y + r0.h < r0.panelTop, 'Skip sits above the text panel');
+      await shot('ui-dialogue-skip');
+      await tap(page, '[data-screen=dialogue] .ui-dlgskip');
+      const r1 = await game((g) => {
+        g.render();
+        return { top: g.top(), open: g.ctx.quests.dialogueOpen };
+      });
+      assert.equal(r1.open, false, 'Skip ran the rest of the conversation');
+      assert.equal(r1.top, 'hud');
+      // The keyboard's Back (Esc) skips too.
+      const r2 = await game((g) => {
+        g.ctx.quests.talk('mq1_wake', {});
+        g.render();
+        g.press('uiBack');
+        g.render();
+        return g.ctx.quests.dialogueOpen;
+      });
+      assert.equal(r2, false, 'uiBack skips');
+    },
+  },
+  {
     name: 'ui-death',
     async run({ page, game, assert, shot }) {
       await game((g) => {
@@ -439,6 +479,7 @@ const flows = [
       });
       assert.equal(await game((g) => g.top()), 'death');
       await shot('ui-death');
+      assert.equal(await game(() => document.querySelectorAll('[data-screen=death] .ui-btn:not([hidden])').length), 1, 'no Retry after an open-world death');
       await tap(page, '[data-screen=death] .ui-btn');
       const r = await game((g) => {
         g.step(5);
@@ -446,6 +487,22 @@ const flows = [
       });
       assert.equal(r.top, 'hud');
       assert.ok(r.hp > 0, 'risen with HP');
+      // A lost trial fight offers Retry too (ctx.rpg.canRetry), not only a boss.
+      const t = await game((g) => {
+        g.ctx.quests.runActions([{ op: 'script', script: 'trial_gauntlet' }]);
+        g.step(10);
+        g.kill(g.player().id);
+        g.step(400);
+        return { top: g.top(), can: g.ctx.rpg.canRetry, retry: document.querySelectorAll('[data-screen=death] .ui-btn:not([hidden])').length };
+      });
+      assert.equal(t.top, 'death');
+      assert.equal(t.can, true, 'the trial can be retried');
+      assert.equal(t.retry, 2, 'Retry shown for a lost trial');
+      await game((g) => {
+        g.ctx.ui.close('death');
+        g.ctx.rpg.respawn({ retry: false });
+        g.step(5);
+      });
     },
   },
   {

@@ -16,6 +16,9 @@ const STATS = Object.freeze(['mgt', 'spr', 'vit', 'swf']);
 const STYLES = Object.freeze(['balanced', 'brawler', 'blaster', 'manual']);
 const EQUIP = Object.freeze(['wraps', 'garb', 'charm1', 'charm2']);
 const BRANCHES = Object.freeze(['fist', 'flare', 'spirit']);
+/** Map places: world POI type, icon, class. */
+const POI_ICONS = Object.freeze([['camp', 'skull', 'ui-c'], ['chest', 'bag', 'ui-k'], ['crownChest', 'bag', 'ui-k'], ['race', 'flare', ''],
+  ['shrine', 'spirit', ''], ['siphon', 'core', 'ui-s'], ['ringstone', 'ring', 'ui-r']]);
 
 /**
  * @param {any} ctx
@@ -190,7 +193,9 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       const W = window.innerWidth || 1;
       const H = window.innerHeight || 1;
       const b = hero.getBoundingClientRect();
-      if (b.width < 40 || b.height < 60) return;
+      // A short screen (a landscape phone, 412 px tall) leaves a window too short to show the hero under its name
+      // and numbers without cropping the head: the card keeps its silhouette there instead.
+      if (b.width < 40 || b.height < 60 || H < 480) return;
       const nx = ((b.left + b.width / 2) / W) * 2 - 1;
       const ny = -(((b.top + b.height / 2) / H) * 2 - 1);
       const fov = 38;
@@ -564,15 +569,61 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
   // ------------------------------------------------------------------ quests
   reg('quests', () => {
     const { root, body } = tabbed('quests', 'ui.tab.quests');
-    const kind = tabRow(kit, body, [{ id: 'main', key: 'ui.quest.main' }, { id: 'side', key: 'ui.quest.side' }], () => {
+    const kind = tabRow(kit, body, [{ id: 'main', key: 'ui.quest.main' }, { id: 'side', key: 'ui.quest.side' }, { id: 'records', key: 'ui.rec.tab' }], (id) => {
+      // Records is a tab only once a record exists (after the ending's rematches and trials).
+      if (id === 'records' && !records().length) kind.set('main');
       sel = '';
       render();
     });
+    const recTab = /** @type {HTMLElement} */ (kind.bar.querySelector('[data-tab=records]'));
     const two = kit.el('div', 'ui-two', body);
     const list = kit.el('div', 'ui-list', two);
     const sheet = kit.el('div', 'ui-sheet ui-card', two);
     let sel = '';
+    /** Best times and medals of the rematches and trials (quest flags rematch.<boss> and trial.<trial>). */
+    function records() {
+      const f = ctx.store.state.quests.flags || {};
+      const out = [];
+      for (const k of Object.keys(f)) {
+        const v = f[k];
+        if (!v || typeof v !== 'object' || !(v.best > 0)) continue;
+        const dot = k.indexOf('.');
+        const group = k.slice(0, dot);
+        const id = k.slice(dot + 1);
+        if (group === 'rematch') out.push({ key: k, titleKey: 'boss.' + id + '.name', kindKey: 'ui.rec.rematch', best: v.best, medals: v.medals || [] });
+        else if (group === 'trial') out.push({ key: k, titleKey: 'rpg.' + id, kindKey: 'ui.rec.trial', best: v.best, medals: v.medals || [] });
+      }
+      return out;
+    }
+    function renderRecords() {
+      kit.forget(list);
+      dom.clear(list);
+      kit.forget(sheet);
+      dom.clear(sheet);
+      sheet.hidden = true;
+      for (const r of records()) {
+        const top = r.medals.indexOf('gold') >= 0 ? 'gold' : r.medals.indexOf('silver') >= 0 ? 'silver' : r.medals.indexOf('bronze') >= 0 ? 'bronze' : '';
+        const li = kit.el('div', 'ui-li ui-rec', list);
+        li.dataset.record = r.key;
+        const ring = kit.el('span', 'ui-ringico ui-medal' + (top ? ' ui-medal-' + top : ''), li);
+        ring.appendChild(icon(doc, top ? 'check' : 'diamond'));
+        const m = kit.el('span', 'ui-li-main', li);
+        kit.el('span', 'ui-li-title', m, ctx.i18n.has(r.titleKey) ? r.titleKey : r.kindKey);
+        const sub = kit.el('span', 'ui-row', m);
+        kit.el('span', 'ui-tag', sub, r.kindKey);
+        kit.el('span', 'ui-tag ui-ok', sub, 'ui.rec.best', { seconds: (Math.round(r.best * 10) / 10).toFixed(1) });
+        if (top) kit.el('span', 'ui-tag ui-medaltag ui-medal-' + top, sub, 'ui.rec.' + top);
+      }
+    }
     function render() {
+      recTab.hidden = !records().length;
+      if (kind.current === 'records') {
+        if (recTab.hidden) kind.set('main');
+        else {
+          renderRecords();
+          return;
+        }
+      }
       const q = ctx.quests;
       const st = ctx.store.state.quests;
       const active = q.active();
@@ -659,11 +710,18 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
     const icons = kit.el('div', '', inner);
     const arrow = kit.el('div', 'ui-maparrow', inner);
     arrow.appendChild(icon(doc, 'arrow'));
+    // A refused or explained Ringstone travel (in a fight, a race, a conversation).
+    const note = kit.el('div', 'ui-tag ui-bad ui-mapnote', body);
+    note.hidden = true;
     const legend = kit.el('div', 'ui-row ui-small ui-legend', body);
     const count = kit.el('span', 'ui-tag ui-ok', legend);
+    const shardTag = kit.el('span', 'ui-tag ui-shardtag', legend);
+    shardTag.appendChild(kit.el('i', 'ui-sharddot', null));
+    const shardText = kit.el('span', '', shardTag);
     const trackedLine = kit.el('span', 'ui-tag ui-trk', legend);
-    for (const [ic, key] of [['ring', 'ui.poi.ringstone'], ['spirit', 'ui.poi.shrine'], ['core', 'ui.poi.siphon'], ['diamond', 'ui.map.quest']]) {
-      const t = kit.el('span', 'ui-tag', legend);
+    for (const [ic, key, cls] of [['ring', 'ui.map.ringAwake', 'ui-r'], ['ring', 'ui.map.ringAsleep', 'ui-r ui-asleep'], ['spirit', 'ui.poi.shrine', ''],
+      ['core', 'ui.poi.siphon', 'ui-s'], ['diamond', 'ui.map.quest', 'ui-q'], ['eye', 'ui.map.viewpoint', 'ui-v'], ['ring', 'ui.map.unvisited', 'ui-unseen']]) {
+      const t = kit.el('span', 'ui-tag ui-legico ' + cls, legend);
       t.appendChild(icon(doc, ic));
       kit.el('span', '', t, key);
     }
@@ -684,7 +742,14 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       arrow.style.scale = String(1 / zoom);
       for (const c of /** @type {any} */ (icons.children)) c.style.scale = String(1 / zoom);
     };
+    /** A press that may be a tap on an awake Ringstone (the wrap captures the pointer, so clicks never reach icons). */
+    const press = { id: '', x: 0, y: 0, moved: false };
     wrap.addEventListener('pointerdown', (e) => {
+      const hit = e.target && /** @type {any} */ (e.target).closest ? /** @type {any} */ (e.target).closest('[data-travel]') : null;
+      press.id = pts.size === 0 && hit ? hit.dataset.travel : '';
+      press.x = e.clientX;
+      press.y = e.clientY;
+      press.moved = false;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       try {
         wrap.setPointerCapture(e.pointerId);
@@ -706,6 +771,7 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       }
       p.x = e.clientX;
       p.y = e.clientY;
+      if (Math.abs(e.clientX - press.x) + Math.abs(e.clientY - press.y) > 10 || pts.size > 1) press.moved = true;
       if (pts.size === 2 && pinch0 > 0) {
         const [a, b] = [...pts.values()];
         zoom = Math.min(4, Math.max(1, zoom0 * (Math.hypot(a.x - b.x, a.y - b.y) / pinch0)));
@@ -715,6 +781,8 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
     const up = (e) => {
       pts.delete(e.pointerId);
       if (pts.size < 2) pinch0 = 0;
+      if (e.type === 'pointerup' && press.id && !press.moved && pts.size === 0) askTravel(press.id);
+      press.id = '';
     };
     wrap.addEventListener('pointerup', up);
     wrap.addEventListener('pointercancel', up);
@@ -724,6 +792,40 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       apply();
     }, { passive: false });
 
+    /** Why a travel cannot happen now (the service only answers false), or null. */
+    function travelBlock() {
+      if (ctx.quests && ctx.quests.dialogueOpen) return 'ui.map.noTravelTalk';
+      if (ui.racing) return 'ui.map.noTravelRace';
+      if ((ctx.ai && ctx.ai.boss) || (ctx.combat && ctx.combat.inCombat)) return 'ui.map.noTravelFight';
+      return null;
+    }
+    /** @param {string} key */
+    function showNote(key) {
+      note.hidden = !key;
+      note.textContent = key ? kit.t(key) : '';
+    }
+    /** Tap on an awake Ringstone: explain a block, or ask, then travel and close the map. @param {string} id */
+    function askTravel(id) {
+      if (!ctx.quests || typeof ctx.quests.travel !== 'function') return;
+      const block = travelBlock();
+      if (block) {
+        kit.sound('ui_error');
+        showNote(block);
+        return;
+      }
+      let place = null;
+      for (const r of ctx.world.pois('ringstone')) if (r.id === id) place = r;
+      const lk = place && place.data ? 'landmark.' + place.data.landmarkId + '.name' : '';
+      const name = lk && ctx.i18n.has(lk) ? kit.t(lk) : kit.t('ui.poi.ringstone');
+      ui.confirm('ui.map.travelAsk', { place: name }).then((ok) => {
+        if (!ok || !ui.isOpen('map')) return;
+        if (ctx.quests.travel(id)) {
+          ui.closeAll();
+          return;
+        }
+        showNote(travelBlock() || 'ui.map.noTravel');
+      });
+    }
     /** @param {number} x @param {number} z @param {string} ic @param {string} cls @param {string|null} labelKey @param {string} id */
     function place(x, z, ic, cls, labelKey, id) {
       ctx.world.toMap(x, z, uv);
@@ -737,6 +839,7 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
         l.style.left = '50%';
         l.style.top = '100%';
       }
+      return n;
     }
     function draw() {
       const g = cv.getContext('2d');
@@ -784,12 +887,37 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
         const w = world.landmark(lm.id) || lm;
         place(w.x, w.z, lm.type === 'spire' ? 'spirit' : 'home', '', 'landmark.' + lm.id + '.name', lm.id);
       }
-      for (const [type, ic, cls] of [['ringstone', 'ring', 'ui-r'], ['shrine', 'spirit', ''], ['siphon', 'core', 'ui-s']]) {
+      // Places: visited ones, and every place of a region a viewpoint revealed (those not visited yet look faded and
+      // dashed). Siphon Spires always show (their beacons are seen from afar). Awake Ringstones are travel targets.
+      const sh = ctx.quests && typeof ctx.quests.shards === 'function' ? ctx.quests.shards() : null;
+      const revealed = sh ? sh.revealed : [];
+      const awake = ctx.store.state.world.ringstones || [];
+      for (const [type, ic, cls] of POI_ICONS) {
         for (const p of world.pois(type)) {
-          if (type !== 'siphon' && disc.indexOf(p.id) < 0) continue;
-          place(p.x, p.z, ic, cls, null, p.id);
+          const known = disc.indexOf(p.id) >= 0;
+          if (type !== 'siphon' && !known && revealed.indexOf(p.regionId) < 0) continue;
+          let c = cls + (known || type === 'siphon' ? '' : ' ui-unseen');
+          const on = type === 'ringstone' && awake.indexOf(p.id) >= 0;
+          if (type === 'ringstone') c += on ? ' ui-awake' : ' ui-asleep';
+          const n = place(p.x, p.z, ic, c, null, p.id);
+          if (on) {
+            n.dataset.travel = p.id;
+            kit.attr(n, 'aria-label', 'ui.map.travelTo', { place: kit.t('landmark.' + (p.data && p.data.landmarkId) + '.name') });
+          }
         }
       }
+      // Ora shards: the ones found, and the viewpoints (the highest peak of a region) of regions already seen.
+      const seenR = ctx.store.state.world.regionsSeen || [];
+      if (sh) {
+        for (const s of sh.list) {
+          if (s.found) place(s.x, s.z, 'diamond', 'ui-shard', null, s.id);
+          else if (s.view && seenR.indexOf(s.regionId) >= 0 && revealed.indexOf(s.regionId) < 0) place(s.x, s.z, 'eye', 'ui-v', null, s.id);
+        }
+        const next = sh.next;
+        shardText.textContent = kit.t('ui.map.shards', { n: formatInt(sh.found), all: formatInt(sh.total) }) + ' · ' +
+          (next ? kit.t('ui.map.shardsNext', { at: formatInt(next.at) }) : kit.t('ui.map.shardsAll'));
+      }
+      shardTag.hidden = !sh || !sh.total;
       const ms = ctx.quests ? ctx.quests.markers() : [];
       const tr = ctx.quests ? ctx.quests.tracked : null;
       for (const m of ms) if (m.kind !== 'giver') place(m.x, m.z, 'diamond', 'ui-q' + (m.questId === tr ? ' ui-tracked' : ''), null, 'quest:' + m.questId);
@@ -823,6 +951,7 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
         zoom = 1;
         panX = 0;
         panY = 0;
+        showNote('');
         draw();
         render();
       },

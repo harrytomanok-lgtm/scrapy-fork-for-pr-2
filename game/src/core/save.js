@@ -39,7 +39,7 @@ export const CODE_REASONS = Object.freeze({
 export const DEFAULT_SETTINGS = Object.freeze({
   lang: 'he', quality: 'auto', volMaster: 0.8, volMusic: 0.7, volSfx: 0.9, camSens: 1, invertY: false, leftHanded: false,
   pitchFlight: false, vibration: true, shake: 1, reducedMotion: false, photosensitive: false, textScale: 1, damageNumbers: true,
-  shortTransform: false,
+  shortTransform: false, shadows: true,
 });
 
 /** Allowed values of the enumerated settings. */

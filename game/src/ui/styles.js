@@ -15,7 +15,8 @@ const OUTLINE = '-1px -1px 0 var(--ink),1px -1px 0 var(--ink),-1px 1px 0 var(--i
 
 export const UI_CSS = `
 #app{--ui-track:#2A2233;--ui-chip:#FFD0A0;--ui-crit:#FFD45A;--ui-hurt:#FF6A6A;--ui-hostile:#B06CFF;--ui-red:#FF3B3B;
-  --ui-slab:rgba(8,6,14,.55);--ui-solid:#241D33;--ui-dim:rgba(27,22,38,.6);--ui-ease:cubic-bezier(.2,.8,.2,1);--ui-cx:50%}
+  --ui-slab:rgba(8,6,14,.55);--ui-solid:#241D33;--ui-dim:rgba(27,22,38,.6);--ui-ease:cubic-bezier(.2,.8,.2,1);--ui-cx:50%;
+  --map-ring:#127C70;--map-siphon:#6A2FB0;--map-quest:#B5651D;--map-camp:#7A2E3A;--map-chest:#6B4A1E;--map-sleep:#6E6878;--map-view:#3E6FA8;--map-shard:#2C9C8C}
 .ui-hud,.ui-scr{font-family:var(--font-body);color:var(--paper);line-height:1.35}
 .ui-num,.ui-hud bdi{font-family:var(--font-display);font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
 .ui-ico{inline-size:24px;block-size:24px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -121,6 +122,16 @@ export const UI_CSS = `
 .ui-target .ui-chipfill{background:var(--paper)}
 .ui-tpoise{block-size:4px!important;clip-path:none!important}
 .ui-tpoise .ui-fill{background:var(--paper-dim)!important}
+/* A camp leader: its name and rank crest in the rare colour, a rare rim on its bar. */
+.ui-trank{display:inline-flex;align-self:center;inline-size:12px;block-size:12px;color:var(--rarity-r);filter:drop-shadow(0 0 2px var(--ink))}
+.ui-trank[hidden]{display:none}
+.ui-trank .ui-ico{inline-size:12px;block-size:12px;fill:currentColor}
+.ui-target.ui-elite .ui-tname{align-items:center;overflow:visible}
+.ui-target.ui-elite .ui-tname span{padding:1px 8px;background:var(--rarity-r);color:var(--ink);text-shadow:none;font-family:var(--font-display);
+  clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%)}
+.ui-target.ui-elite .ui-trank{inline-size:14px;block-size:14px}
+.ui-target.ui-elite .ui-trank .ui-ico{inline-size:14px;block-size:14px}
+.ui-target.ui-elite .ui-bar:not(.ui-tpoise){border-block-start:2px solid var(--rarity-r)}
 .ui-target.ui-boss{inline-size:min(60%,var(--tw-boss,100%))}
 .ui-m-landscape .ui-target.ui-boss,.ui-m-short .ui-target.ui-boss{inline-size:min(60%,calc(100% - 465px))}
 .ui-m-portrait .ui-target.ui-boss{inline-size:90%}
@@ -180,6 +191,8 @@ export const UI_CSS = `
 .ui-banner.ui-on .ui-banner-sub{opacity:1;transform:none;transition-delay:220ms}
 .ui-m-short .ui-banner-main,.ui-m-portrait .ui-banner-main{font-size:var(--fs-title)}
 .ui-m-portrait .ui-banner-main,.ui-m-portrait .ui-banner.ui-k-region .ui-banner-main{font-size:min(var(--fs-title),8vw)}
+/* Portrait: a long banner (a quest step with a reward, a technique's name) wraps to two balanced lines, never cut. */
+.ui-m-portrait .ui-banner-main{white-space:normal;text-align:center;text-wrap:balance;overflow-wrap:anywhere}
 .ui-banner.ui-k-level .ui-banner-main{background:linear-gradient(to bottom,#FFF6D8,var(--ui-crit))}
 .ui-banner.ui-k-level .ui-banner-sub{color:var(--ui-crit)}
 .ui-banner.ui-k-quest .ui-banner-main{background:linear-gradient(to bottom,var(--paper),var(--paper-dim))}
@@ -250,6 +263,7 @@ export const UI_CSS = `
   display:flex;flex-direction:column-reverse;align-items:center;gap:8px;pointer-events:none;transition:transform 240ms var(--ui-ease)}
 .ui-m-portrait .ui-lane{inset-block-end:calc(32% + 10px);max-inline-size:min(320px,calc(100% - 32px))}
 .ui-lane.ui-holdt .ui-toasts{display:none}
+.ui-toasts.ui-toasthold{display:none}
 .ui-banner.ui-held{visibility:hidden}
 .ui-m-short .ui-lane{inset-block-end:calc(var(--safe-bottom) + 114px)}
 .ui-m-desktop .ui-lane{inset-block-end:16%;max-inline-size:420px}
@@ -523,13 +537,34 @@ export const UI_CSS = `
 .ui-mapinner canvas{inline-size:100%;block-size:100%;display:block}
 .ui-mapico{position:absolute;inline-size:18px;block-size:18px;margin:-9px 0 0 -9px;color:var(--ink);display:flex}
 .ui-mapico .ui-ico{inline-size:18px;block-size:18px;stroke-width:2.4}
-.ui-mapico.ui-q{color:#B5651D}
+.ui-mapico.ui-q{color:var(--map-quest)}
 .ui-mapico.ui-q.ui-tracked{color:var(--danger);filter:drop-shadow(0 0 2px #F3EBDD)}
 .ui-mapico.ui-q.ui-tracked .ui-ico{animation:ui-mapq 1.4s ease-in-out infinite}
 .ui-legend .ui-tag{white-space:normal}
 .ui-trk{color:var(--ui-crit)}
-.ui-mapico.ui-s{color:#6A2FB0}
-.ui-mapico.ui-r{color:#127C70}
+.ui-mapico.ui-s,.ui-legico.ui-s .ui-ico{color:var(--map-siphon)}
+.ui-mapico.ui-r,.ui-legico.ui-r .ui-ico{color:var(--map-ring)}
+.ui-legico.ui-q .ui-ico{color:var(--map-quest)}
+.ui-mapico.ui-c{color:var(--map-camp)}
+.ui-mapico.ui-k{color:var(--map-chest)}
+/* Places of a revealed region not visited yet: faded, on a dashed ring. Sleeping Ringstones: grey. */
+.ui-mapico.ui-unseen{opacity:.62;border-radius:50%;outline:1.5px dashed currentColor;outline-offset:1px;transform:scale(.8)}
+.ui-legico.ui-unseen .ui-ico{opacity:.7;border-radius:50%;outline:1.5px dashed currentColor;outline-offset:-1px}
+.ui-mapico.ui-asleep,.ui-legico.ui-asleep .ui-ico{color:var(--map-sleep)}
+/* Awake Ringstones: a filled disc, a pulse ring, and a 44 px tap area around the 18 px icon. */
+.ui-mapico.ui-awake{background:var(--paper);border-radius:50%;box-shadow:0 0 0 2px var(--map-ring);cursor:pointer}
+.ui-mapico.ui-awake::before{content:'';position:absolute;inset:-13px;border-radius:50%}
+.ui-mapico.ui-v,.ui-legico.ui-v .ui-ico{color:var(--map-view)}
+.ui-mapico.ui-shard{inline-size:12px;block-size:12px;margin:-6px 0 0 -6px;color:var(--map-shard)}
+.ui-mapico.ui-shard .ui-ico{inline-size:12px;block-size:12px;stroke-width:3}
+.ui-sharddot{display:inline-block;inline-size:8px;block-size:8px;background:var(--accent);transform:rotate(45deg);flex:none}
+.ui-tab[hidden]{display:none}
+.ui-medal{--rc:var(--line)}
+.ui-medal.ui-medal-gold,.ui-medaltag.ui-medal-gold{--rc:var(--ui-crit);color:var(--ui-crit)}
+.ui-medal.ui-medal-silver,.ui-medaltag.ui-medal-silver{--rc:var(--paper-dim);color:var(--paper)}
+.ui-medal.ui-medal-bronze,.ui-medaltag.ui-medal-bronze{--rc:var(--ui-chip);color:var(--ui-chip)}
+.ui-mapnote{align-self:center;white-space:normal}
+.ui-mapnote[hidden]{display:none}
 .ui-maplabel{position:absolute;transform:translate(-50%,8px);font:11px/1 var(--font-display);color:var(--ink);white-space:nowrap;text-shadow:0 0 3px #F3EBDD,0 0 3px #F3EBDD}
 .ui-maparrow{position:absolute;inline-size:22px;block-size:22px;margin:-11px 0 0 -11px;color:var(--danger);filter:drop-shadow(0 0 2px var(--paper))}
 .ui-maparrow .ui-ico{inline-size:22px;block-size:22px}
@@ -552,6 +587,12 @@ export const UI_CSS = `
 .ui-dlgline{margin:0;min-block-size:4.4em;font-size:var(--fs-body);line-height:1.47}
 .ui-dlgmore{position:absolute;inset-block-end:10px;inset-inline-end:14px;inline-size:12px;block-size:12px;color:var(--accent);animation:ui-bob 900ms ease-in-out infinite}
 .ui-dlgmore[hidden]{display:none}
+/* Skip takes the corner of the HUD's map and pause buttons, which hide while a conversation is open. */
+.ui-talking .ui-hud .ui-endbar{visibility:hidden}
+.ui-btn.ui-dlgskip{position:absolute;inset-block-start:var(--safe-top);inset-inline-end:var(--safe-right);
+  min-block-size:48px;min-inline-size:48px;gap:6px;padding-inline:12px 14px;background:rgba(27,22,38,.55);opacity:.88}
+.ui-dlgskip .ui-glyph{min-inline-size:28px;block-size:24px;font-size:11px}
+.ui-dlgskip[hidden],.ui-dlgskip .ui-glyph[hidden]{display:none}
 .ui-choices{display:flex;flex-direction:column;gap:6px}
 .ui-choices .ui-btn{justify-content:flex-start;min-block-size:48px}
 
