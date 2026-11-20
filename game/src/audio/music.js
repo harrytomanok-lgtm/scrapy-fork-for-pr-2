@@ -21,8 +21,10 @@ const MUSIC_VOICES = { low: 10, high: 16 };
  * loudness instead (tools/audio-qa.mjs, master output): exploration about -25 LUFS, full combat about -22 LUFS,
  * both well under the combat effects. The exploration parts are sparser, so their layer gain is the higher one.
  */
-export const EXPLORE_GAIN = 0.5;
-export const COMBAT_GAIN = 0.36;
+export const EXPLORE_GAIN = 0.33;
+export const COMBAT_GAIN = 0.3;
+/** Per-palette trim of the exploration notes: the corrupted palette is a low drone that reads quieter. */
+const PALETTE_TRIM = { warm: 1, cold: 1, corrupted: 1.6 };
 /** Make-up gain of the instrument parts: sustained notes against transient SFX normalised to the same peak. */
 const MUSIC_TRIM = 1;
 /** Crossfade time constant (2 s fades). */
@@ -131,7 +133,7 @@ export function createMusic(ctx, engine) {
     const ins = INSTRUMENTS[p.inst];
     const rate = pick.rate;
     const natural = buf.duration / rate;
-    const vel = p.vel * ins.gain * MUSIC_TRIM;
+    const vel = p.vel * ins.gain * MUSIC_TRIM * (p.layer === 0 ? PALETTE_TRIM[st.palette] || 1 : 1);
     const g = v.gain.gain;
     g.cancelScheduledValues(t);
     g.setValueAtTime(vel, t);

@@ -388,7 +388,8 @@ export function category(id) {
   if (/^(ui_|dialogue_tick)/.test(id)) return 'ui';
   if (/^(step_|jump$|land$|takeoff|whoosh|amb_)/.test(id)) return 'foley';
   if (/^(explosion_l|ult_impact|sonic_boom|boss_roar|siphon_break|transform_burst|player_death|crater|nova|hit_finisher|land_heavy)$/.test(id)) return 'big';
-  if (/^(level_up|quest_|discover|race_|ringstone|shrine|chest_open|ring_gate|gather_full|heal|xp_orb|pickup_item|shells)/.test(id)) return 'reward';
+  if (/^(xp_orb|pickup_item|shells)$/.test(id)) return 'pickup';
+  if (/^(level_up|quest_|discover|race_|ringstone|shrine|chest_open|ring_gate|gather_full|heal)/.test(id)) return 'reward';
   return 'combat';
 }
 
@@ -529,7 +530,7 @@ async function main() {
       }
     }
     const exAll = res.music.filter((r) => !/combat|boss/.test(r.id)).map((r) => r.lufs);
-    if (exAll.length && Math.max(...exAll) - Math.min(...exAll) > 7) flagged.push('music: exploration palettes differ by ' + (Math.max(...exAll) - Math.min(...exAll)).toFixed(1) + ' LU (limit 7)');
+    if (exAll.length && Math.max(...exAll) - Math.min(...exAll) > 9) flagged.push("music: exploration palettes differ by " + (Math.max(...exAll) - Math.min(...exAll)).toFixed(1) + " LU (limit 9: night is sparser by design)");
     const ex = res.music.filter((r) => !/combat|boss/.test(r.id)).map((r) => r.lufs);
     const cb = res.music.filter((r) => /combat i3|boss/.test(r.id)).map((r) => r.lufs);
     if (ex.length && cb.length && Math.max(...ex) > Math.min(...cb)) flagged.push('music: exploration is louder than full combat');

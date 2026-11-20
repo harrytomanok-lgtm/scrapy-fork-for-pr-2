@@ -220,7 +220,8 @@ export function createMusicGen(seed) {
       const sparse = st.night || pal === 'cold' || pal === 'corrupted';
       const last = gen.phraseLeft === 1;
       const tpl = last ? END_RHYTHM : sparse ? SLOW_RHYTHMS[gen.motif % SLOW_RHYTHMS.length] : RHYTHMS[gen.motif];
-      const leadRoot = lead === 'bell' ? root + 12 : root;
+      // the lead sits above 440 Hz, where a phone speaker still plays it (cold's tonic B3 would sit below)
+      const leadRoot = lead === 'bell' || root < 61 ? root + 12 : root;
       // first note of each bar: chord tone near the current step; then the motif contour
       let k = nearestChordStep(P.scale, leadRoot, chord, gen.step);
       if (parts < st.parts) {

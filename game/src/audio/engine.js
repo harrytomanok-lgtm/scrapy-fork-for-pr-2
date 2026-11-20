@@ -639,6 +639,7 @@ export function createEngine(ctx, opts = {}) {
       const vid = startVoice(id, buf, g, rate, route, pan, false, r.cap);
       if (vid && r.duck) {
         if (id === 'ult_impact') duck(-12, 1.5);
+        else if (r.duckDb !== undefined) duck(r.duckDb, 0.25);
         else if (g > 0.25) duck(-6, 0.15);
       }
       return vid;

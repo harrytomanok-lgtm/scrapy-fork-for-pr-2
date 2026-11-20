@@ -102,25 +102,27 @@ export function buildLoop(ac, L, kind, shared) {
     lfo.connect(lfoG); lfoG.connect(body.gain);
     L.a = bp1; L.b = bp2; L.c = body;
   } else if (kind === 'gather_loop') {
-    // pink noise bp 300 Q 0.5 with 18 Hz tremolo and a 55 Hz saw through lp 300 -> 1400 rising with the hold
+    // pink noise bp 300 Q 0.5 with 18 Hz tremolo and a 55 Hz saw through lp 300 -> 1400 rising with the hold.
+    // Raised for phone speakers: the noise band sits at 700 Hz and the saw at 110 Hz through a band rising 700 -> 2000 Hz.
     const src = noiseSrc(ac, L, shared.pink, 1);
-    const bp = biquad(ac, L, 'bandpass', 300, 0.5);
+    const bp = biquad(ac, L, 'bandpass', 700, 0.6);
     const trem = gain(ac, L, 0.55);
     const tOsc = osc(ac, L, 'sine', 18);
     const tDepth = gain(ac, L, 0.4);
     src.connect(bp); bp.connect(trem); trem.connect(out);
     tOsc.connect(tDepth); tDepth.connect(trem.gain);
-    const saw = osc(ac, L, 'sawtooth', 55);
-    const lp = biquad(ac, L, 'lowpass', 300, 2);
+    const saw = osc(ac, L, 'sawtooth', 110);
+    const lp = biquad(ac, L, 'bandpass', 700, 1.2);
     saw.connect(lp); lp.connect(out);
     L.a = lp; L.b = saw; L.c = tOsc;
   } else if (kind === 'beam_loop') {
-    // saw 82 + square 164 -> soft clip -> lp 2.2k with a 6 Hz LFO, and noise bp 1200
+    // saw 82 + square 164 -> soft clip -> a resonant band (1.1 kHz, 6 Hz LFO) instead of a lowpass, so the beam
+    // is carried by its buzzing harmonics on a phone speaker; and noise bp 1200
     const saw = osc(ac, L, 'sawtooth', 82);
     const sq = osc(ac, L, 'square', 164);
     const ws = add(ac, L, ac.createWaveShaper());
     ws.curve = shared.clipCurve;
-    const lp = biquad(ac, L, 'lowpass', 2200, 3);
+    const lp = biquad(ac, L, 'bandpass', 1100, 0.8);
     const lfo = osc(ac, L, 'sine', 6);
     const lfoG = gain(ac, L, 700);
     saw.connect(ws); sq.connect(ws); ws.connect(lp); lp.connect(out);
@@ -130,12 +132,13 @@ export function buildLoop(ac, L, kind, shared) {
     src.connect(bp); bp.connect(out);
     L.a = lp; L.b = saw; L.c = sq;
   } else if (kind === 'siphon_loop') {
-    // low detuned saw drone 40 Hz with slow downward sweeps
+    // low detuned saw drone 40 Hz with slow downward sweeps, heard through a resonant band that sweeps down
+    // across its harmonics (a phone speaker cannot play the 40 Hz fundamental)
     const s1 = osc(ac, L, 'sawtooth', 40);
     const s2 = osc(ac, L, 'sawtooth', 40.35);
-    const lp = biquad(ac, L, 'lowpass', 260, 4);
+    const lp = biquad(ac, L, 'bandpass', 640, 3);
     const lfo = osc(ac, L, 'sawtooth', 0.09);
-    const lfoG = gain(ac, L, -140);
+    const lfoG = gain(ac, L, -220);
     s1.connect(lp); s2.connect(lp); lp.connect(out);
     lfo.connect(lfoG); lfoG.connect(lp.frequency);
     L.a = lp; L.b = null; L.c = null;
@@ -165,13 +168,13 @@ export function applyLevel(L, level, t) {
     return 0.05 + 0.95 * l * l;
   }
   if (L.kind === 'gather_loop') {
-    L.a.frequency.setTargetAtTime(300 + 1100 * l, t, 0.1);
-    L.b.frequency.setTargetAtTime(55 * (1 + 0.06 * l), t, 0.1);
+    L.a.frequency.setTargetAtTime(700 + 1300 * l, t, 0.1);
+    L.b.frequency.setTargetAtTime(110 * (1 + 0.06 * l), t, 0.1);
     L.c.frequency.setTargetAtTime(18 + 6 * l, t, 0.1);
     return 0.55 + 0.45 * l;
   }
   if (L.kind === 'beam_loop') {
-    L.a.frequency.setTargetAtTime(1600 + 1400 * l, t, 0.05);
+    L.a.frequency.setTargetAtTime(900 + 900 * l, t, 0.05);
     return 0.8 + 0.2 * l;
   }
   if (L.kind === 'ambience') {
