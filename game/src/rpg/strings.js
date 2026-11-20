@@ -56,7 +56,7 @@ const ROWS = [
   ['rpg.toast.tether', 'Thread delivered: {n} / {total}', 'חוט נמסר: {n} / {total}'],
   ['rpg.banner.shrine', 'Ora Shrine {n} / {total}: +1 TP', 'מקדש אורה {n} / {total}: עוד נקודת טכניקה'],
   ['rpg.banner.siphon', 'Siphon silenced', 'מגדל היניקה הושתק'],
-  ['rpg.toast.shard', 'Ora shard {n} / {total}', 'רסיס אורה {n} / {total}'],
+  ['rpg.toast.shard', 'Ora shard {n} of {total}', 'רסיס אורה {n} מתוך {total}'],
   ['rpg.banner.shardsTp', '{n} Ora shards: +1 TP', '{n} רסיסי אורה: עוד נקודת טכניקה'],
   ['rpg.banner.shardsShells', '{n} Ora shards: +{shells} Shells', '{n} רסיסי אורה: עוד {shells} צדפים'],
   ['rpg.banner.title', 'Title earned: {title}', 'תואר חדש: {title}'],
