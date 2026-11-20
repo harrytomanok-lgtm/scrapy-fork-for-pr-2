@@ -200,33 +200,33 @@ export function createActors(ctx) {
 
   /** @param {any} r @param {string} clipId @param {any} [o] */
   function playInternal(r, clipId, o) {
-    let res = resolveClip(r.rig.rig, clipId, r.rig.spec.clips || null);
-    if (!res.clip) return;
+    const res = resolveClip(r.rig.rig, clipId, r.rig.spec.clips || null);
+    let clip = res.clip;
+    if (!clip) return;
     // a generic wind-up becomes the coiled pose of the attack that follows; that attack then starts from its
     // anticipation key (the wind-up already held it), so the strike pose lands with the hit; a string of three or
     // more hits plays as a flurry
     let lead = 0;
     if (clipId === 'charge_windup' && r.nextActive) {
-      const v = clipById(r.rig.fam + '.windup_' + r.nextActive);
-      if (v) res = { clip: v, fallback: false };
+      clip = clipById(r.rig.fam + '.windup_' + r.nextActive) || clip;
       r.fromWindup = r.nextActive;
     } else if (r.fromWindup && clipId === r.fromWindup) {
-      if (r.nextHits >= 3 && r.rig.fam === 'humanoid') res = { clip: clipById('humanoid.flurry') || res.clip, fallback: false };
-      else lead = res.clip.lead;
+      if (r.nextHits >= 3 && r.rig.fam === 'humanoid') clip = clipById('humanoid.flurry') || clip;
+      else lead = clip.lead;
       r.fromWindup = '';
     } else if (clipId !== 'charge_windup') {
       r.fromWindup = '';
     }
-    if (res.fallback) warnOnce('clip ' + clipId + ' missing for ' + r.rig.id + ', using ' + res.clip.id);
-    const upper = o && o.layer ? o.layer === 'upper' : res.clip.upper;
+    if (res.fallback) warnOnce('clip ' + clipId + ' missing for ' + r.rig.id + ', using ' + clip.id);
+    const upper = o && o.layer ? o.layer === 'upper' : clip.upper;
     const s = upper ? r.upper : r.full;
     // the same one-shot asked again early (a technique's windup and active phases share a strike clip): keep its
     // timing instead of restarting the anticipation
-    if (s.clip === res.clip && s.id === clipId && !s.stopping && !s.loop && s.t < res.clip.seconds * 0.6) {
+    if (s.clip === clip && s.id === clipId && !s.stopping && !s.loop && s.t < clip.seconds * 0.6) {
       if (o && o.hold) s.hold = true;
       return;
     }
-    startSlot(r, s, res.clip, clipId, o);
+    startSlot(r, s, clip, clipId, o);
     if (lead > 0) { s.t = lead; s.fadeIn = Math.min(s.fadeIn, 0.05); }
   }
 
