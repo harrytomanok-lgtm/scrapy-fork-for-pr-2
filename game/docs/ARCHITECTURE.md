@@ -1953,3 +1953,36 @@ Each package reported where its code differs from, or adds to, the contract abov
 - core/systems: `ctx.systems.profile(on)` times every system's step and frame callbacks (diagnostics).
 - ui: `ui.perfLog` records presented frame intervals during play; Settings > Graphics shows a device report (GPU, resolution and scale, frame rate over the last minute, shaders linked, audio, storage, input) for players to send back from a real phone.
 
+
+### quality round 1: picture (render, env, world terrain and water)
+
+- 7.1 tier table, low tier: `maxDpr` 2 (was 1), `shadows` 'map1024' with `shadowSize` 1024 over a box of `shadowHalf` 20 m around the player, `calibrate` true, `programs` 30, triangles 250000. High tier: `shadowSize` 2048, `shadowHalf` 45, `calibrate` false. The statements in 7.1 that the low tier has blob shadows only and renders at device pixel ratio 1 no longer hold.
+- Start-up calibration (`render/logic/calib.js`): on the low tier the pixel ratio starts at 1.0 and climbs towards the device's ratio (at most 2) while the measured frame cost allows; dynamic resolution then keeps the picture between 0.6 and that ceiling. `DynRes` gained `limit()`, `max()`, `canShed` and `shedRequested`: a slow window first asks the caller to shed the shadow map, and only then lowers the scale.
+- `ctx.render.quality()` returns the calibration, ceiling, scale, shadow and canvas state (diagnostics); `ctx.render.setShadows(on)` allows or forbids the shadow map for the session. URL flags: `?shadows=0|1`, and `?res` now accepts up to 2 (render reads `flags.raw.res`).
+- Shadow map (`render/shadow.js`): one directional map, sampled in the shared shader chunks. New global uniforms: `uShadowMap`, `uShadowMat`, `uShadowP`, `uShadowC`, `uCloudMap`, `uCloudP`, `uCloudQ`, `uGrade`, `uScreen`. `render.glsl` gained `shadowVert` and `grade`. Cloud shadows, distance haze and the final colour grade are applied inside the material shaders (uniforms, no extra pass and no new program variants).
+- `tools/scenarios/picture.mjs`: the picture gallery (suite `picture`).
+
+### quality round 1: cast (actors)
+
+- `MAX_BONES` is 34. The hero has a face (eyes, lids, brows, mouth) with blinking and expressions, spring-driven hair, sash and hem, and new clips; the hero triangle budget is 3500. Enemies have wind-up poses that match their telegraphs. `villagerLook(seed)` in `actors/data/specs.js` varies villagers deterministically by entity id.
+- Debug command `__GAME__.cmd.actorsPose` and `tools/scenarios/cast.mjs` (suite `cast`).
+
+### quality round 1: effects (vfx)
+
+- Impacts differ by attack class; new recipes for bolts, the beam, Nova, Ringfall, movement (dash, take-off, landing, flight trails), death motes, pickups, Ringstones, the Siphon and boss phases. vfx subscribes to the bus events it needs and no longer waits for combat to request technique effects by id.
+- `ctx.vfx.debugReset()` clears every live effect (galleries, tests). `tools/scenarios/fx.mjs` (suite `fx`).
+
+### quality round 1: feel (combat, control, balance)
+
+- Aim assist: `rules.intentScore` picks the target the stick and camera point at. Combo and style: `combat/logic/style.js` with the ranks glint, gleam, blaze, radiant and dawn; `combat:combo` now carries `count`, `rank`, `rankId`, `expired`, `best` (3.6 updated). A finisher on a staggered enemy; hit weight per technique in `combat/data/weight.js`; haptic patterns come from combat (the vibrate values in `core/feel.js` are fallbacks).
+- `ctx.cam.push(amount, seconds, entId?)`: a short framing push towards an entity (finisher, boss phase). `control/logic/gesture.js` exports `isFlick`, `stickResponse` and `STICK` (dead zone and response curve of the touch stick). The Ringfall shot can be skipped.
+- Balance: fights against ordinary enemies last 8 to 16 seconds at level; `tusk_boar` multipliers hp 2.8, atk 0.75. The bundle size gate in `tools/build.mjs` is 2.2 MB.
+
+### quality round 2: pacing and content (rpg, ai)
+
+- Script api `bark(dialogueId)`: the lines show as toasts ("Speaker: line") while play goes on. `ctx.quests.skipDialogue()` skips the rest of a dialogue: its actions still run and it stops at a choice. A returning player (any saved slot past MQ1) is offered to skip the training.
+- `ctx.quests.travel(ringstoneId)`: travel between attuned Ringstones; refused during a fight, a boss fight, a race or a dialogue. `ctx.quests.shards()` returns found, total, per-region counts, revealed regions, title, list and the next reward. 43 Ora shards (`rpg/data/shards.js`) stream in as ordinary pickups; each region's highest peak is a viewpoint that reveals the region's places on the map.
+- Camp elites (ai): the member of a camp with the most HP is its leader: 2.4x HP, 1.6x poise, 1.2x damage, a name, a rim glow, one extra telegraphed move (`elite_quake` or `elite_fan`), 3x XP and the elite loot table. `EnemyDef.params.backline` (Choir Caster) keeps casters behind their allies.
+- After the ending (`rpg/challenges.js`, `rpg/data/challenges.js`): boss rematches through `ctx.ai.startBoss(id, { level })`, two trials on Sela's Ledge and the Spire Circuit flight course (`spire_circuit`), with medals. Records live in the quest flags `rematch.<boss>` and `trial.<trial>`. `ctx.rpg.canRetry` tells the death screen that a retry exists; `respawn({ retry: true })` also restarts a lost trial.
+- Other quest flags: `tut.skipOffer`, `ora.shards`, `revealed.<region>`, `title`, and `attuned.<ringstone>` for every attuned stone. Meteor Heel unlocks at level 4. MQ4 s3 gives `saltglass_wraps`; MQ6 s2 gives `stillwind_charm`. A boss retry puts the player at most 26 m from the arena centre.
+- `tools/reward-cadence.mjs` prints the reward timeline of the main path; `tests/rpg/cadence.test.mjs` asserts no gap over 180 s in the first hour.
