@@ -199,8 +199,23 @@ export function createActors(ctx) {
 
   /** @param {any} r @param {string} clipId @param {any} [o] */
   function playInternal(r, clipId, o) {
-    const res = resolveClip(r.rig.rig, clipId, r.rig.spec.clips || null);
+    let res = resolveClip(r.rig.rig, clipId, r.rig.spec.clips || null);
     if (!res.clip) return;
+    // a generic wind-up becomes the coiled pose of the attack that follows; that attack then starts from its
+    // anticipation key (the wind-up already held it), so the strike pose lands with the hit; a string of three or
+    // more hits plays as a flurry
+    let lead = 0;
+    if (clipId === 'charge_windup' && r.nextActive) {
+      const v = clipById(r.rig.fam + '.windup_' + r.nextActive);
+      if (v) res = { clip: v, fallback: false };
+      r.fromWindup = r.nextActive;
+    } else if (r.fromWindup && clipId === r.fromWindup) {
+      if (r.nextHits >= 3 && r.rig.fam === 'humanoid') res = { clip: clipById('humanoid.flurry') || res.clip, fallback: false };
+      else lead = res.clip.lead;
+      r.fromWindup = '';
+    } else if (clipId !== 'charge_windup') {
+      r.fromWindup = '';
+    }
     if (res.fallback) warnOnce('clip ' + clipId + ' missing for ' + r.rig.id + ', using ' + res.clip.id);
     const upper = o && o.layer ? o.layer === 'upper' : res.clip.upper;
     const s = upper ? r.upper : r.full;
@@ -211,6 +226,7 @@ export function createActors(ctx) {
       return;
     }
     startSlot(r, s, res.clip, clipId, o);
+    if (lead > 0) { s.t = lead; s.fadeIn = Math.min(s.fadeIn, 0.05); }
   }
 
   const actors = {
@@ -264,7 +280,8 @@ export function createActors(ctx) {
         expr: 'neutral', exprUntil: 0, exprCur: new Float32Array(9), dead: false, talkUntil: 0,
         eyeOpen: 1, blinkAt: 1 + (ent.id % 7) * 0.37, blinkStart: -1, blinkSeed: (ent.id * 2654435761) & 0x7fffffff,
         accum: 0, visible: true, sashScale: 1, lift: 0,
-        prevFwd: 0, prevSide: 0, lean: 0, leanV: 0, leanS: 0, squash: 0, squashT: 0, stretch: 0,
+        nextActive: '', nextHits: 0, fromWindup: '',
+        prevFwd: 0, prevSide: 0, leanV: 0, leanS: 0, squash: 0, squashT: 0, stretch: 0,
       };
       ent.visual = r;
       records.push(r);
@@ -1114,6 +1131,14 @@ export function createActors(ctx) {
         const v = clipById(r.rig.fam + '.transform_' + e.formId);
         if (v) r.full.clip = v;
       }
+    },
+    /** Remember which attack a technique ends in (its wind-up pose and string length depend on it). @param {any} e */
+    techStart(e) {
+      const r = rec(ctx.ents.get(e.entId));
+      if (!r) return;
+      const d = ctx.defs ? ctx.defs.find('technique', e.techId) : null;
+      r.nextActive = d && d.anim && typeof d.anim.active === 'string' ? d.anim.active : '';
+      r.nextHits = d && d.hits ? d.hits.length : 0;
     },
     /** A short flourish on level-up when the player is standing free. */
     levelUp() {

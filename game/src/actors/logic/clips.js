@@ -87,11 +87,34 @@ const HUMANOID_DEFS = [
   C(H, 'slam', 0.6, false, [[0, 'ready'], [0.2, 'axe_wind', 'out'], [0.27, 'axe_hit', 'back'], [0.45, 'axe_hit'], [0.6, 'ready', 'inOut']]),
   strike(H, 'ranged', 0.35, 'cast_wind', 'cast_hit'),
   C(H, 'roar', 0.9, false, [[0, 'ready'], [0.2, 'roar', 'back'], [0.75, 'roar'], [0.9, 'ready', 'inOut']]),
+  // wind-up variants picked by the attack that follows (actors service, combat:techStart)
+  C(H, 'windup_slam', 0.5, true, [[0, 'axe_wind'], [0.25, 'axe_wind2', 'inOut'], [0.5, 'axe_wind', 'inOut']]),
+  C(H, 'windup_charge', 0.4, true, [[0, 'shoulder_wind'], [0.2, 'shoulder_wind2', 'inOut'], [0.4, 'shoulder_wind', 'inOut']]),
+  C(H, 'windup_bite', 0.4, true, [[0, 'lunge_wind'], [0.2, 'shoulder_wind', 'inOut'], [0.4, 'lunge_wind', 'inOut']]),
+  C(H, 'windup_ranged', 0.4, true, [[0, 'cast_wind'], [0.2, 'cast_wind2', 'inOut'], [0.4, 'cast_wind', 'inOut']]),
+  // a three-hit string timed to hits 0.3 s apart
+  C(H, 'flurry', 0.9, false, [[0, 'jab_wind'], [0.06, 'jab_hit', 'back'], [0.24, 'cross_wind', 'inOut'], [0.3, 'cross_hit', 'back'], [0.54, 'hook_wind', 'inOut'],
+    [0.6, 'hook_hit', 'back'], [0.9, 'ready', 'inOut']]),
+  // personalities at rest (spec.clips overrides of 'idle')
+  C(H, 'idle_choir', 3, true, [[0, 'idle_choir'], [1.5, 'idle_choir_b', 'inOut'], [3, 'idle_choir', 'inOut']]),
+  C(H, 'idle_golem', 2.6, true, [[0, 'idle_golem'], [1.3, 'idle_golem_b', 'inOut'], [2.6, 'idle_golem', 'inOut']]),
+  C(H, 'idle_duel', 2, true, [[0, 'idle_duel'], [1, 'idle_duel_b', 'inOut'], [2, 'idle_duel', 'inOut']]),
+  C(H, 'idle_float', 3.2, true, [[0, 'idle_float'], [1.6, 'idle_float_b', 'inOut'], [3.2, 'idle_float', 'inOut']]),
+  C(H, 'idle_boss', 3, true, [[0, 'idle_boss'], [1.5, 'idle_boss_b', 'inOut'], [3, 'idle_boss', 'inOut']]),
+  // boss intro poses (spec.clips overrides of 'roar')
+  C(H, 'roar_durn', 1.2, false, [[0, 'ready'], [0.25, 'axe_wind', 'out'], [0.4, 'roar_durn', 'back'], [1.0, 'roar_durn'], [1.2, 'ready', 'inOut']]),
+  C(H, 'roar_iskra', 1.2, false, [[0, 'ready'], [0.25, 'cross_iskra', 'out'], [0.45, 'cross_iskra'], [0.55, 'roar_iskra', 'back'], [1.05, 'roar_iskra'], [1.2, 'ready', 'inOut']]),
+  C(H, 'roar_vorrhal', 1.4, false, [[0, 'ready'], [0.35, 'curl', 'inOut'], [0.6, 'roar_vorrhal', 'back'], [1.2, 'roar_vorrhal'], [1.4, 'ready', 'inOut']]),
 ];
 
 const Q = 'quadruped';
 const QUAD_DEFS = [
-  C(Q, 'idle', 2, true, [[0, 'idle'], [1, 'idle_b', 'inOut'], [2, 'idle', 'inOut']]),
+  C(Q, 'idle', 3.6, true, [[0, 'idle'], [1, 'idle_b', 'inOut'], [2, 'idle', 'inOut'], [2.5, 'idle_c', 'out'], [2.9, 'idle_c'], [3.6, 'idle', 'inOut']]),
+  C(Q, 'idle_crab', 1.4, true, [[0, 'idle_crab'], [0.35, 'idle_crab_b', 'out'], [0.7, 'idle_crab', 'out'], [1.05, 'idle_crab_b', 'out'], [1.4, 'idle_crab', 'out']]),
+  C(Q, 'windup_bite', 0.36, true, [[0, 'bite_wind'], [0.18, 'bite_wind2', 'inOut'], [0.36, 'bite_wind', 'inOut']]),
+  C(Q, 'windup_slam', 0.5, true, [[0, 'rear'], [0.25, 'rear2', 'inOut'], [0.5, 'rear', 'inOut']]),
+  C(Q, 'windup_ranged', 0.4, true, [[0, 'spit_wind'], [0.2, 'bite_wind', 'inOut'], [0.4, 'spit_wind', 'inOut']]),
+  C(Q, 'roar_rear', 1.3, false, [[0, 'idle'], [0.3, 'rear', 'out'], [0.45, 'rear2'], [0.6, 'roar', 'in'], [1.1, 'roar'], [1.3, 'idle', 'inOut']]),
   C(Q, 'walk', 0.9, true, [[0, 'walk_c'], [0.225, 'walk_p'], [0.45, 'walk_c2'], [0.675, 'walk_p'], [0.9, 'walk_c']]),
   C(Q, 'run', 0.5, true, [[0, 'run_c'], [0.25, 'run_p', 'inOut'], [0.5, 'run_c', 'inOut']]),
   C(Q, 'fall', 0.6, true, [[0, 'fall'], [0.6, 'fall']]),
@@ -132,6 +155,9 @@ const FLYER_DEFS = [
   C(F, 'charge', 0.4, true, [[0, 'dive'], [0.4, 'dive']]),
   C(F, 'slam', 0.7, false, [[0, 'idle'], [0.25, 'beat_wind', 'out'], [0.33, 'beat_hit', 'back'], [0.5, 'beat_hit'], [0.7, 'idle', 'inOut']]),
   C(F, 'ranged', 0.45, false, [[0, 'idle'], [0.12, 'beat_wind', 'out'], [0.2, 'flick', 'back'], [0.32, 'flick'], [0.45, 'idle', 'inOut']]),
+  C(F, 'windup_bite', 0.4, true, [[0, 'peck_wind'], [0.2, 'peck_wind2', 'inOut'], [0.4, 'peck_wind', 'inOut']]),
+  C(F, 'windup_slam', 0.4, true, [[0, 'beat_wind'], [0.2, 'beat_wind2', 'inOut'], [0.4, 'beat_wind', 'inOut']]),
+  C(F, 'windup_ranged', 0.4, true, [[0, 'beat_wind'], [0.2, 'beat_wind2', 'inOut'], [0.4, 'beat_wind', 'inOut']]),
   C(F, 'roar', 0.9, false, [[0, 'idle'], [0.2, 'shriek', 'back'], [0.75, 'shriek'], [0.9, 'idle', 'inOut']]),
 ];
 
@@ -154,6 +180,8 @@ const BLOB_DEFS = [
   C(B, 'charge', 0.4, true, [[0, 'stretch'], [0.4, 'stretch']]),
   C(B, 'slam', 0.7, false, [[0, 'idle'], [0.25, 'swell', 'out'], [0.32, 'squash', 'back'], [0.5, 'squash'], [0.7, 'idle', 'inOut']]),
   C(B, 'ranged', 0.45, false, [[0, 'idle'], [0.15, 'squash', 'out'], [0.22, 'pulse', 'back'], [0.33, 'pulse'], [0.45, 'idle', 'inOut']]),
+  C(B, 'windup_ranged', 0.36, true, [[0, 'swell'], [0.18, 'pulse', 'inOut'], [0.36, 'swell', 'inOut']]),
+  C(B, 'windup_bite', 0.3, true, [[0, 'squash'], [0.15, 'pulse', 'inOut'], [0.3, 'squash', 'inOut']]),
   C(B, 'roar', 0.8, false, [[0, 'idle'], [0.2, 'swell', 'back'], [0.65, 'swell'], [0.8, 'idle', 'inOut']]),
 ];
 
@@ -182,7 +210,11 @@ export function compileClip(def) {
     poses.push(p);
     eases.push(k.ease);
   }
-  return { id: def.id, fam, seconds: def.seconds, loop: !!def.loop, upper: def.layer === 'upper', times, poses, eases };
+  let lead = 0;
+  for (let i = 1; i < n - 1; i++) {
+    if (eases[i] === 'out' && (eases[i + 1] === 'back' || eases[i + 1] === 'in')) { lead = times[i]; break; }
+  }
+  return { id: def.id, fam, seconds: def.seconds, loop: !!def.loop, upper: def.layer === 'upper', times, poses, eases, lead };
 }
 
 /** @param {string} id full clip def id ('humanoid.attack1') @returns {Clip|null} */

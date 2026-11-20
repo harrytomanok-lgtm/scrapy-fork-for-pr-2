@@ -182,6 +182,7 @@ export const pkg = {
     ctx.bus.on('combat:state', on.combatState);
     ctx.bus.on('actor:landed', on.landed);
     ctx.bus.on('rpg:levelUp', on.levelUp);
+    ctx.bus.on('combat:techStart', on.techStart);
     if (ctx.debug && ctx.debug.register) registerDebug(ctx);
   },
 };

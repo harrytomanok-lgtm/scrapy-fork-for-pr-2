@@ -134,8 +134,22 @@ export const scenarios = [
       await opening(game, assert);
       await sheet(game, assert, { items: FOES.map((id) => ({ id, clip: 'idle', t: 0.3 })), dist: 10, gap: 0.3, back: 6.2, up: 1.3, look: 1.0 });
       await shot('cast-enemies-idle');
-      await sheet(game, assert, { items: FOES.map((id) => ({ id, clip: 'charge_windup', t: 0.25 })), dist: 10, gap: 0.3, back: 6.2, up: 1.3, look: 1.0, turn: -0.6 });
+      const winds = ['windup_ranged', 'windup_bite', 'charge_windup', 'windup_slam', 'windup_ranged', 'windup_slam', 'windup_slam', 'charge_windup', 'windup_charge'];
+      const ids = await sheet(game, assert, { items: FOES.map((id, i) => ({ id, clip: winds[i], t: 0.1 })), dist: 10, gap: 0.3, back: 6.2, up: 1.3, look: 1.0, turn: -0.6 });
       await shot('cast-enemies-windup');
+      // the real path: a technique start picks the wind-up of its attack, and a three-hit string plays as a flurry
+      const path = await game((g, id) => {
+        const e = g.ctx.ents.get(id);
+        const r = e.visual;
+        g.ctx.bus.emit('combat:techStart', { entId: id, techId: 'acolyte_string', targetId: 0 });
+        g.cmd.actorsPlay(id, 'charge_windup');
+        g.step(6);
+        const wind = r.full.clip.id;
+        g.cmd.actorsPlay(id, 'slam');
+        g.step(2);
+        return [wind, r.full.clip.id];
+      }, ids[3]);
+      assert.deepEqual(path, ['humanoid.windup_slam', 'humanoid.flurry'], 'the acolyte winds up overhead, then strikes a flurry');
       await sheet(game, assert, { items: FOES.map((id) => ({ id, clip: 'stagger', t: 0.15 })), dist: 10, gap: 0.3, back: 6.2, up: 1.3, look: 1.0, turn: -0.6 });
       await shot('cast-enemies-hit');
     },

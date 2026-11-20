@@ -510,6 +510,7 @@ function choir(id, build, scale, palette, opts, extra) {
   return {
     id, rig: opts.rig || 'humanoid', scale, build, palette: Object.assign({ robe: CHAR.robe, under: CHAR.under, veil: PALETTE.ink, glass: GLASS, iron: CHAR.iron }, palette),
     emissive: { glass: 1.6 }, parts: parts.concat(extra), radius: opts.radius || 0.45, outline: true, face: false, hover: !!opts.hover,
+    clips: opts.clips || (opts.hover ? { idle: 'humanoid.idle_float', fly_hover: 'humanoid.idle_float' } : { idle: 'humanoid.idle_choir' }),
   };
 }
 
@@ -556,7 +557,7 @@ function vanguard() {
     extra.push(P('shin' + side(s), 'cylinder', [0.065, 0.2, 0.07], [0, -0.16, 0.01], null, 'plate', { seg: 5 }));
   }
   for (const x of [-0.08, 0, 0.08]) extra.push(P('extra1', 'capsule', [0.03, 0.14], [x, -0.04, -0.04], [0.1, 0, x * 2], 'glass', { glossy: true, seg: 5 }));
-  return choir('choir_vanguard', build, 1, { plate: CHAR.plate, cape: CHAR.under }, { skirtLen: 0.5, radius: 0.5 }, extra);
+  return choir('choir_vanguard', build, 1, { plate: CHAR.plate, cape: CHAR.under }, { skirtLen: 0.5, radius: 0.5, clips: { idle: 'humanoid.idle_duel' } }, extra);
 }
 
 function durn() {
@@ -566,7 +567,10 @@ function durn() {
     P('sash1', 'box', [0.34, 0.22, 0.02], [-0.12, -0.1, 0], null, 'cape'),
     P('sash2', 'box', [0.32, 0.2, 0.02], [-0.12, -0.1, 0], null, 'cape'),
     P('sash3', 'box', [0.28, 0.22, 0.02], [-0.12, -0.11, 0], null, 'cape'),
-    P('shoulderL', 'sphere', [0.24, 0.13, 0.24], [0.13, 0.03, 0], [0, 0, -0.3], 'cape', { seg: 8 }),
+    P('shoulderL', 'sphere', [0.3, 0.16, 0.3], [0.14, 0.04, 0], [0, 0, -0.3], 'cape', { seg: 8 }),
+    P('shoulderR', 'sphere', [0.26, 0.14, 0.26], [-0.14, 0.03, 0], [0, 0, 0.3], 'iron', { seg: 7 }),
+    P('chest', 'cylinder', [0.13, 0.12, 0.15], [0, 0.26, -0.02], null, 'cape', { seg: 8 }),
+    P('hemL', 'box', [0.18, 0.4, 0.02], [0.0, -0.12, 0.0], [0.1, 0, 0.1], 'cape'), P('hemR', 'box', [0.18, 0.4, 0.02], [0.0, -0.12, 0.0], [0.1, 0, -0.1], 'cape'),
     P('chest', 'capsule', [0.042, 0.09], [0.06, 0.04, 0.13], null, 'glass', { glossy: true, seg: 6 }),
     P('chest', 'capsule', [0.042, 0.09], [-0.06, 0.04, 0.13], null, 'glass', { glossy: true, seg: 6 }),
     P('handR', 'cylinder', [0.03, 0.75], [0, -0.04, 0.3], [PI / 2, 0, 0], 'iron', { seg: 6 }),
@@ -577,7 +581,7 @@ function durn() {
     const a = (i / 6) * PI * 2;
     extra.push(P('handR', 'box', [0.03, 0.22, 0.2], [Math.sin(a) * 0.1, -0.04 + Math.cos(a) * 0.1, 0.7], [0, 0, -a], 'iron'));
   }
-  return choir('durn', build, 1.25, { cape: CHAR.durnCape }, { radius: 0.6 }, extra);
+  return choir('durn', build, 1.25, { cape: CHAR.durnCape }, { radius: 0.6, clips: { idle: 'humanoid.idle_boss', roar: 'humanoid.roar_durn' } }, extra);
 }
 
 function iskra() {
@@ -601,6 +605,7 @@ function iskra() {
     id: 'iskra', rig: 'humanoid', scale: 1, build,
     palette: { armour: CHAR.iskraArmour, under: 0x5a6478, skin: 0xf0d8c8, hair: 0xe8eef6, ice: CHAR.ice, glass: GLASS, ink: PALETTE.ink, glint: PALETTE.oraCore },
     emissive: { glass: 1.6, ice: 0.45, glint: 0.4 }, parts, radius: 0.45, outline: true, face: true,
+    clips: { idle: 'humanoid.idle_duel', roar: 'humanoid.roar_iskra' },
   };
 }
 
@@ -628,34 +633,38 @@ function vorrhal() {
     id: 'vorrhal', rig: 'humanoid', scale: 1, build,
     palette: { robe: CHAR.charcoal, skin: 0xb8b0b4, seam: CHAR.deadGrey, glass: GLASS, motes: CHAR.deadGrey, ink: PALETTE.ink, glint: PALETTE.oraCore },
     emissive: { glass: 1.2, glint: 0.2 }, parts, radius: 0.55, outline: true, face: true, hover: true,
+    clips: { idle: 'humanoid.idle_float', fly_hover: 'humanoid.idle_float', roar: 'humanoid.roar_vorrhal' },
   };
 }
 
 function golem() {
   const build = { height: 1.8, shoulder: 0.6, bulk: 1, head: 1 };
   const parts = [
-    P('chest', 'box', [0.66, 0.42, 0.44], [0, 0.1, 0], null, 'rust'), P('chest', 'box', [0.68, 0.03, 0.46], [0, -0.12, 0], null, 'seam'),
-    P('chest', 'sphere', [0.16, 0.16, 0.1], [0, 0.1, 0.22], null, 'glass', { seg: 8, glossy: true }),
-    P('spine', 'box', [0.48, 0.24, 0.36], [0, 0.07, 0], null, 'rust'), P('hips', 'box', [0.52, 0.2, 0.36], [0, 0, 0], null, 'rust'),
-    P('hips', 'box', [0.54, 0.03, 0.38], [0, 0.11, 0], null, 'seam'),
-    P('head', 'box', [0.22, 0.2, 0.24], [0, 0.08, 0.03], null, 'rust'),
-    P('head', 'box', [0.16, 0.035, 0.02], [0, 0.1, 0.155], null, 'glass'),
+    P('chest', 'box', [0.7, 0.44, 0.46], [0, 0.1, 0], [0.06, 0.04, 0.03], 'rust'), P('chest', 'box', [0.72, 0.03, 0.48], [0, -0.12, 0], [0.06, 0.04, 0.03], 'seam'),
+    P('chest', 'box', [0.36, 0.2, 0.2], [0.05, 0.36, -0.04], [0.1, -0.12, 0.06], 'rust'),
+    P('chest', 'sphere', [0.18, 0.18, 0.1], [0, 0.1, 0.235], null, 'glass', { seg: 8, glossy: true }),
+    P('chest', 'torus', [0.11, 0.025], [0, 0.1, 0.235], [PI / 2, 0, 0], 'seam', { seg: 8 }),
+    P('spine', 'box', [0.46, 0.24, 0.34], [0, 0.07, 0], [0, -0.08, -0.04], 'rust'), P('hips', 'box', [0.54, 0.2, 0.36], [0, 0, 0], [0, 0.05, 0.02], 'rust'),
+    P('hips', 'box', [0.56, 0.03, 0.38], [0, 0.11, 0], [0, 0.05, 0.02], 'seam'),
+    P('head', 'box', [0.2, 0.17, 0.22], [0, 0.0, 0.08], [0.15, 0, 0], 'rust'),
+    P('head', 'box', [0.15, 0.035, 0.02], [0, 0.02, 0.2], [0.15, 0, 0], 'glass'),
   ];
   for (const s of [1, -1]) {
     const L = side(s);
-    parts.push(P('shoulder' + L, 'box', [0.3, 0.26, 0.32], [s * 0.18, 0.02, 0], null, 'rust'));
-    parts.push(P('arm' + L, 'box', [0.16, 0.3, 0.17], [0, -0.15, 0], null, 'rust'));
-    parts.push(P('fore' + L, 'box', [0.3, 0.36, 0.3], [0, -0.2, 0.02], null, 'rust'));
-    parts.push(P('fore' + L, 'box', [0.32, 0.03, 0.32], [0, -0.06, 0.02], null, 'seam'));
-    parts.push(P('hand' + L, 'box', [0.24, 0.16, 0.26], [0, -0.12, 0.02], null, 'iron'));
-    parts.push(P('thigh' + L, 'box', [0.2, 0.38, 0.22], [0, -0.2, 0], null, 'rust'));
-    parts.push(P('shin' + L, 'box', [0.22, 0.34, 0.24], [0, -0.2, 0], null, 'rust'));
-    parts.push(P('shin' + L, 'box', [0.235, 0.03, 0.255], [0, -0.02, 0], null, 'seam'));
-    parts.push(P('foot' + L, 'box', [0.24, 0.1, 0.34], [0, -0.03, 0.06], null, 'iron'));
+    parts.push(P('shoulder' + L, 'box', [0.34, 0.3, 0.36], [s * 0.2, 0.04, 0], [0, s * 0.1, s * -0.18], 'rust'));
+    parts.push(P('shoulder' + L, 'box', [0.36, 0.03, 0.38], [s * 0.2, -0.08, 0], [0, s * 0.1, s * -0.18], 'seam'));
+    parts.push(P('arm' + L, 'box', [0.16, 0.3, 0.17], [0, -0.15, 0], [0, 0, s * 0.05], 'rust'));
+    parts.push(P('fore' + L, 'box', [0.32, 0.38, 0.32], [0, -0.2, 0.02], [0.05, s * 0.12, 0], 'rust'));
+    parts.push(P('fore' + L, 'box', [0.34, 0.03, 0.34], [0, -0.06, 0.02], [0.05, s * 0.12, 0], 'seam'));
+    parts.push(P('hand' + L, 'box', [0.3, 0.22, 0.32], [0, -0.14, 0.02], [0, s * 0.2, 0], 'iron'));
+    parts.push(P('thigh' + L, 'box', [0.2, 0.38, 0.22], [0, -0.2, 0], [0, 0, s * 0.06], 'rust'));
+    parts.push(P('shin' + L, 'box', [0.24, 0.34, 0.26], [0, -0.2, 0], [0, s * 0.1, 0], 'rust'));
+    parts.push(P('shin' + L, 'box', [0.255, 0.03, 0.275], [0, -0.02, 0], [0, s * 0.1, 0], 'seam'));
+    parts.push(P('foot' + L, 'box', [0.26, 0.1, 0.36], [0, -0.03, 0.06], [0, s * 0.08, 0], 'iron'));
   }
   return {
     id: 'rust_golem', rig: 'giant', scale: 1.45, build, palette: { rust: CHAR.rust, seam: CHAR.verdigris, iron: 0x5a4a44, glass: GLASS },
-    emissive: { glass: 1.8, seam: 0.25 }, parts, radius: 0.8, outline: true, face: false,
+    emissive: { glass: 1.8, seam: 0.25 }, parts, radius: 0.8, outline: true, face: false, clips: { idle: 'humanoid.idle_golem' },
   };
 }
 
@@ -718,6 +727,7 @@ function crab() {
   return {
     id: 'scuttlecrab', rig: 'quadruped', scale: 1, build: { height: 0.9, shoulder: 0.5, bulk: 0.8, head: 1 },
     palette: { shell: CHAR.saltPlate, plate: 0xcfc2a6, under: 0x9a8a78, glass: GLASS }, emissive: { glass: 1.4 }, parts, radius: 0.7, outline: true, face: false,
+    clips: { idle: 'quadruped.idle_crab' },
   };
 }
 
@@ -803,7 +813,7 @@ function bramblehorn() {
   return {
     id: 'bramblehorn', rig: 'quadruped', scale: 3.4, build: { height: 1.2, shoulder: 0.42, bulk: 0.9, head: 1 },
     palette: { bark: CHAR.bark, moss: CHAR.moss, dark: 0x26221e, tusk: PALETTE.paper, glass: GLASS, thorn: 0x5a5040 },
-    emissive: { glass: 1.6 }, parts, radius: 2.0, outline: true, face: false,
+    emissive: { glass: 1.6 }, parts, radius: 2.0, outline: true, face: false, clips: { roar: 'quadruped.roar_rear' },
   };
 }
 
@@ -830,16 +840,18 @@ function gorrumaw() {
   for (const s of [1, -1]) {
     const L = side(s);
     parts.push(P('head', 'sphere', [0.05, 0.04, 0.03], [s * 0.15, 0.06, 0.3], null, 'glass', { seg: 5 }));
-    parts.push(P('claw' + L, 'box', [0.26, 0.12, 0.3], [s * 0.04, -0.22, 0.15], [0.3, 0, 0], 'plateDark'));
+    parts.push(P('claw' + L, 'sphere', [0.28, 0.16, 0.26], [s * 0.04, -0.22, 0.12], [0.3, 0, 0], 'plateDark', { seg: 7 }));
+    for (const x of [-0.08, 0, 0.08]) parts.push(P('claw' + L, 'cone', [0.045, 0.22], [s * 0.04 + x, -0.27, 0.3], [1.9, 0, x * 2], 'glass', { seg: 4 }));
     for (const fb of ['F', 'B']) {
       parts.push(P('leg' + fb + L, 'capsule', [0.12, 0.2], [s * 0.04, -0.14, 0], null, 'plate', { seg: 8 }));
       parts.push(P('foot' + fb + L, 'cylinder', [0.1, 0.3, 0.11], [0, -0.17, 0], null, 'skin', { seg: 6 }));
-      parts.push(P('foot' + fb + L, 'box', [0.2, 0.08, 0.26], [0, -0.32, 0.06], null, 'plateDark'));
+      parts.push(P('foot' + fb + L, 'sphere', [0.24, 0.12, 0.3], [0, -0.32, 0.05], null, 'plateDark', { seg: 6 }));
     }
   }
   return {
     id: 'gorrumaw', rig: 'quadruped', scale: 3.8, build: { height: 1.2, shoulder: 0.45, bulk: 1, head: 1 },
     palette: { plate: CHAR.rust, plateDark: 0x8a3e2c, skin: CHAR.paleSkin, glass: GLASS }, emissive: { glass: 1.6 }, parts, radius: 2.4, outline: true, face: false,
+    clips: { roar: 'quadruped.roar_rear' },
   };
 }
 
