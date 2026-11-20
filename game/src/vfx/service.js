@@ -360,7 +360,7 @@ export function createVfx(ctx) {
   const orbs = [];
   for (let i = 0; i < MAX_ORBS; i++) orbs.push({ on: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, t: 0 });
   const pickups = [];
-  for (let i = 0; i < MAX_PICKUPS; i++) pickups.push({ entId: 0, color: new Color(), acc: 0, t: 0 });
+  for (let i = 0; i < MAX_PICKUPS; i++) pickups.push({ entId: 0, color: new Color(), acc: 0, t: 0, lx: 0, ly: 0, lz: 0, has: false });
   const icons = [];
   for (let i = 0; i < MAX_ICONS; i++) icons.push({ entId: 0, t: 0, seconds: 0, color: new Color() });
   const afters = [];
@@ -1750,6 +1750,8 @@ export function createVfx(ctx) {
     }
   }
 
+  const cOrb = new Color(PALETTE.ora);
+  let lastGainT = -1;
   /** @param {any} c @param {number} dt @param {boolean} low */
   function updateOrbs(c, dt, low) {
     const pl = c.player;
@@ -1773,6 +1775,11 @@ export function createVfx(ctx) {
         if (d < 0.7 || o.t > 3.5) {
           o.on = false;
           vfx.burst('xp_orb', o.x, o.y, o.z);
+          // the XP arrives in the body: one chest pulse per short window, however many motes land together
+          if (c.time.real - lastGainT > 0.12) {
+            lastGainT = c.time.real;
+            vfx.burst('xp_gain', pl.pos.x, pl.pos.y + 1.1, pl.pos.z);
+          }
           continue;
         }
         const sp = 16 + o.t * 22;
@@ -1789,9 +1796,20 @@ export function createVfx(ctx) {
           if (o.vy < 0) o.vy *= -0.4;
         }
       }
-      const h = low ? 1.5 : 2;
-      parts.sprite(0, o.x, o.y, o.z, 0.75, 0, CELL.dot, 0.5 * h, 0.95 * h, 0.88 * h, 0.9, 0.9, 0, 0, 0, 0);
-      parts.sprite(0, o.x, o.y, o.z, 0.32, o.t * 6, CELL.spark, 2, 2, 2, 1, 1, 0, 0, 0, 0);
+      // an Ora mote: soft teal halo, white-hot spark and a streak along its flight
+      const h = low ? 1.6 : 2;
+      const cr = cOrb.r * h;
+      const cg = cOrb.g * h;
+      const cb = cOrb.b * h;
+      parts.sprite(0, o.x, o.y, o.z, 1.0, 0, CELL.dot, cr, cg, cb, 0.85, 0.9, 0, 0, 0, 0);
+      parts.sprite(0, o.x, o.y, o.z, 0.42, o.t * 6, CELL.spark, 2, 2, 2, 1, 1, 0, 0, 0, 0);
+      const sv = Math.sqrt(o.vx * o.vx + o.vy * o.vy + o.vz * o.vz);
+      if (sv > 2) {
+        const tl = Math.min(2.6, sv * 0.07);
+        const iv = 1 / sv;
+        parts.sprite(1, o.x - o.vx * iv * tl * 0.5, o.y - o.vy * iv * tl * 0.5, o.z - o.vz * iv * tl * 0.5, 0.22, 0, CELL.streak,
+          cr, cg, cb, 0.7, 0.5, tl, o.vx * iv, o.vy * iv, o.vz * iv);
+      }
     }
   }
 
@@ -1810,8 +1828,21 @@ export function createVfx(ctx) {
       c.ents.renderPos(ent, alpha, v1);
       const col = p.color;
       const pulse = 0.8 + 0.2 * Math.sin(p.t * 4);
-      parts.sprite(1, v1.x, v1.y + 0.75, v1.z, 0.24, 0, CELL.streak, col.r * 1.5, col.g * 1.5, col.b * 1.5, 0.75 * pulse, 0.6, 1.6, 0, 1, 0);
-      parts.sprite(0, v1.x, v1.y + 0.25, v1.z, 0.9, 0, CELL.dot, col.r * 1.3, col.g * 1.3, col.b * 1.3, 0.55 * pulse, 0.4, 0, 0, 0, 0);
+      // pulled toward the hero (magnet): a streak along the pull instead of the standing pillar
+      let mx = 0;
+      let my = 0;
+      let mz = 0;
+      if (p.has && dt > 0) { mx = v1.x - p.lx; my = v1.y - p.ly; mz = v1.z - p.lz; }
+      const ml = Math.sqrt(mx * mx + my * my + mz * mz);
+      if (ml > 2.5 * dt && ml > 1e-4) {
+        const tl = Math.min(2.4, 0.4 + ml * 3);
+        parts.sprite(1, v1.x - (mx / ml) * tl * 0.5, v1.y + 0.3 - (my / ml) * tl * 0.5, v1.z - (mz / ml) * tl * 0.5, 0.3, 0, CELL.streak,
+          col.r * 1.8, col.g * 1.8, col.b * 1.8, 0.85, 0.6, tl, mx / ml, my / ml, mz / ml);
+      } else {
+        parts.sprite(1, v1.x, v1.y + 1.1, v1.z, 0.26, 0, CELL.streak, col.r * 1.6, col.g * 1.6, col.b * 1.6, 0.8 * pulse, 0.6, 2.3, 0, 1, 0);
+      }
+      parts.sprite(0, v1.x, v1.y + 0.3, v1.z, 1.0, 0, CELL.dot, col.r * 1.4, col.g * 1.4, col.b * 1.4, 0.6 * pulse, 0.5, 0, 0, 0, 0);
+      p.lx = v1.x; p.ly = v1.y; p.lz = v1.z; p.has = true;
       p.acc += (low ? 3 : 5) * dt;
       if (p.acc >= 1) {
         p.acc -= 1;
@@ -1910,6 +1941,7 @@ export function createVfx(ctx) {
       const low = isLow();
       parts.clearSprites();
       applyFlashes(c);
+      if (dt > 0) updateLater(dt);
       updateEmitters(c, dt, alpha, low);
       updateAuras(c, dt, alpha, low, manual && frameDt > 0 ? Math.min(0.1, frameDt) : dt);
       updateSpeed(c, dt, alpha, low);
@@ -1946,6 +1978,66 @@ export function createVfx(ctx) {
   }
   let strikeN = 0;
   let contrailH = 0;
+  const poiAt = { x: 0, y: 0, z: 0 };
+  /**
+   * Where a world object is: its POI by id (into poiAt). An unknown id falls back to the nearest POI of that type
+   * within `near` metres of the player (gallery and test ids), or the point 5 m ahead of the player.
+   * @param {string} type @param {string} id @param {number} near metres, < 0 for no fallback @returns {boolean}
+   */
+  function findPoi(type, id, near) {
+    const w = ctx.world;
+    const list = w && typeof w.pois === 'function' ? w.pois(type) : null;
+    const p = ctx.player;
+    let best = null;
+    let bd = near * near;
+    if (list) {
+      for (let i = 0; i < list.length; i++) {
+        const q = list[i];
+        if (q.id === id) { best = q; break; }
+        if (near > 0 && p) {
+          const d = (q.x - p.pos.x) * (q.x - p.pos.x) + (q.z - p.pos.z) * (q.z - p.pos.z);
+          if (d < bd) { bd = d; best = q; }
+        }
+      }
+    }
+    if (best) {
+      poiAt.x = best.x; poiAt.z = best.z;
+      poiAt.y = typeof best.y === 'number' ? best.y : w.heightAt(best.x, best.z);
+      return true;
+    }
+    if (near < 0 || !p) return false;
+    poiAt.x = p.pos.x + Math.sin(p.yaw) * 5; poiAt.z = p.pos.z + Math.cos(p.yaw) * 5;
+    poiAt.y = w ? w.heightAt(poiAt.x, poiAt.z) : p.pos.y;
+    return true;
+  }
+  // delayed bursts (sequences such as the Siphon's implosion then burst); a small fixed queue
+  const MAX_LATER = 8;
+  const laterT = new Float32Array(MAX_LATER);
+  const laterX = new Float32Array(MAX_LATER);
+  const laterY = new Float32Array(MAX_LATER);
+  const laterZ = new Float32Array(MAX_LATER);
+  const laterS = new Float32Array(MAX_LATER);
+  /** @type {string[]} */
+  const laterId = ['', '', '', '', '', '', '', ''];
+  /** @param {number} t @param {string} id @param {number} x @param {number} y @param {number} z @param {number} scale */
+  function later(t, id, x, y, z, scale) {
+    for (let i = 0; i < MAX_LATER; i++) {
+      if (laterId[i]) continue;
+      laterId[i] = id; laterT[i] = t; laterX[i] = x; laterY[i] = y; laterZ[i] = z; laterS[i] = scale;
+      return;
+    }
+  }
+  /** @param {number} dt */
+  function updateLater(dt) {
+    for (let i = 0; i < MAX_LATER; i++) {
+      if (!laterId[i]) continue;
+      laterT[i] -= dt;
+      if (laterT[i] > 0) continue;
+      const id = laterId[i];
+      laterId[i] = '';
+      vfx.burst(id, laterX[i], laterY[i], laterZ[i], bopts(0, 1, 0, laterS[i], undefined));
+    }
+  }
   /** @param {number} h @returns {boolean} */
   function emitterLive(h) {
     for (let i = 0; i < emitters.length; i++) if (emitters[i].id === h && !emitters[i].dying) return true;
@@ -2136,7 +2228,7 @@ export function createVfx(ctx) {
       vfx.burst(choir ? 'death_choir' : 'death_beast', e.x, e.y + 0.9, e.z, bopts(0, 1, 0, boss ? 2.5 : 1, undefined));
       if (boss) vfx.burst('explosion_l', e.x, e.y + 1.5, e.z, bopts(0, 1, 0, 1.2, PALETTE.hostile));
       let n = boss ? 12 : Math.min(8, 3 + Math.floor((e.level || 1) / 5));
-      if (isLow()) n = Math.min(n, boss ? 6 : 3);
+      if (isLow()) n = Math.min(n, boss ? 8 : 5);
       for (let i = 0, k = 0; i < orbs.length && k < n; i++) {
         const o = orbs[i];
         if (o.on) continue;
@@ -2282,11 +2374,44 @@ export function createVfx(ctx) {
         p.entId = e.entId;
         p.t = 0;
         p.acc = 0;
+        p.has = false;
         const hex = e.rarity === 'fine' ? PALETTE.rarity.fine : e.rarity === 'rare' ? PALETTE.rarity.rare
           : e.kind === 'xp' ? PALETTE.ora : e.kind === 'shells' ? PALETTE.ember : PALETTE.rarity.common;
         p.color.setHex(hex);
         return;
       }
+    },
+    /** A pickup reaches the hero: a ring and sparks in its colour at the chest. @param {any} e pickup:collected */
+    collected(e) {
+      const p = ctx.player;
+      if (!p) return;
+      const hex = e.kind === 'xp' ? PALETTE.ora : e.kind === 'shells' ? PALETTE.ember : PALETTE.rarity.common;
+      vfx.burst('pickup_get', p.pos.x, p.pos.y + 1, p.pos.z, bopts(0, 1, 0, 1, hex));
+    },
+    /** A Ringstone wakes: a teal column and a ring at its foot. @param {any} e ringstone:activated */
+    ringstone(e) {
+      if (!findPoi('ringstone', e.id, 40)) return;
+      vfx.burst('ringstone_wake', poiAt.x, poiAt.y + 0.5, poiAt.z, bopts(0, 1, 0, 1, PALETTE.structure.ringstone));
+    },
+    /**
+     * Siphon states: opening flares the core; destruction draws the violet in, then bursts teal (the colour returns).
+     * @param {any} e siphon:state
+     */
+    siphon(e) {
+      if (!findPoi('siphon', e.id, -1)) return;
+      if (e.state === 'open') {
+        vfx.burst('siphon_core', poiAt.x, poiAt.y + 5, poiAt.z, bopts(0, 1, 0, 0.8, undefined));
+      } else if (e.state === 'destroyed') {
+        vfx.burst('siphon_implode', poiAt.x, poiAt.y + 6, poiAt.z, bopts(0, 1, 0, 1, undefined));
+        later(0.38, 'siphon_break', poiAt.x, poiAt.y + 6, poiAt.z, 0.4);
+      }
+    },
+    /** A boss changes phase: a hostile shock ring and a roar of streaks. @param {any} e boss:phase */
+    bossPhase(e) {
+      const ent = ctx.ents.get(e.entId);
+      if (!ent) return;
+      const s = Math.max(1, (ent.radius || 1) * 0.8);
+      vfx.burst('boss_phase', ent.pos.x, ent.pos.y + (ent.height || 2) * 0.5, ent.pos.z, bopts(0, 1, 0, Math.min(2, s), undefined));
     },
     /** @param {any} e fx:impact (pooled) */
     impact(e) {

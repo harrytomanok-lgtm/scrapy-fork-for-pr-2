@@ -276,7 +276,7 @@ const EFFECTS = [
   } },
   // ---------------------------------------------------------------- rewards and world
   { name: 'pickup', label: 'Pickups (common, fine, rare)', fn: (g, P, fx) => {
-    fx.cam(P, 0.9, -0.15, 7); g.step(2);
+    fx.cam(P, 0.25, -0.15, 8); g.step(2);
     const rows = [['common', -1.8], ['fine', 0], ['rare', 1.8]];
     for (const [rar, s] of rows) {
       const q = fx.at(P, 6, s);
@@ -293,18 +293,33 @@ const EFFECTS = [
     g.ctx.bus.emit('rpg:levelUp', { level: 26, statPoints: 3, tp: 1 }); fx.run(18);
   } },
   { name: 'ringstone', label: 'Ringstone activation', fn: (g, P, fx) => {
-    fx.cam(P, 0.9, -0.15, 9); g.step(2);
+    fx.cam(P, 0.3, -0.12, 10); g.step(2);
     const q = fx.at(P, 5);
     g.ctx.vfx.shockwave(q.x, q.y + 0.5, q.z, { radius: 6, color: 0x5fd3c4, seconds: 0.5 });
     g.ctx.bus.emit('ringstone:activated', { id: 'fx_gallery', first: true });
     fx.run(12);
   } },
-  { name: 'siphon-break', label: 'Siphon destruction', fn: (g, P, fx) => {
-    fx.cam(P, 0.9, -0.2, 16); g.step(2);
-    const q = fx.at(P, 22);
-    g.ctx.vfx.burst('siphon_break', q.x, q.y + 6, q.z, { scale: 0.35 });
-    g.ctx.vfx.shockwave(q.x, q.y + 2, q.z, { radius: 60, color: 0x5fd3c4, seconds: 1.2, ground: true });
-    fx.run(10);
+  { name: 'siphon-implode', label: 'Siphon destruction: implosion', fn: (g, P, fx) => {
+    const s = g.ctx.world.pois('siphon')[0];
+    const d = Math.hypot(s.x, s.z) || 1;
+    const x = s.x + (s.x / d) * 34;
+    const z = s.z + (s.z / d) * 34;
+    g.teleport(x, z, { yaw: Math.atan2(s.x - x, s.z - z) });
+    g.cmd.flushBuilds();
+    g.setCamera({ yaw: Math.atan2(s.x - x, s.z - z) + 0.05, pitch: 0.02, dist: 8 }); g.step(4);
+    g.ctx.bus.emit('siphon:state', { id: s.id, state: 'destroyed', regionId: s.regionId }); fx.run(14);
+  } },
+  { name: 'siphon-break', label: 'Siphon destruction: burst', fn: (g, P, fx) => {
+    const s = g.ctx.world.pois('siphon')[0];
+    const d = Math.hypot(s.x, s.z) || 1;
+    const x = s.x + (s.x / d) * 34;
+    const z = s.z + (s.z / d) * 34;
+    g.teleport(x, z, { yaw: Math.atan2(s.x - x, s.z - z) });
+    g.cmd.flushBuilds();
+    g.setCamera({ yaw: Math.atan2(s.x - x, s.z - z) + 0.05, pitch: 0.02, dist: 8 }); g.step(4);
+    g.ctx.bus.emit('siphon:state', { id: s.id, state: 'destroyed', regionId: s.regionId });
+    g.ctx.vfx.shockwave(s.x, s.y + 2, s.z, { radius: 60, color: 0x5fd3c4, seconds: 1.2, ground: true });
+    fx.run(32);
   } },
   // ---------------------------------------------------------------- movement
   { name: 'land-heavy', label: 'Landing after a long fall', fn: (g, P, fx) => {

@@ -33,6 +33,10 @@ export const pkg = {
     bus.on('move:jump', auto.jump);
     bus.on('move:mode', auto.mode);
     bus.on('pickup:spawned', auto.pickup);
+    bus.on('pickup:collected', auto.collected);
+    bus.on('ringstone:activated', auto.ringstone);
+    bus.on('siphon:state', auto.siphon);
+    bus.on('boss:phase', auto.bossPhase);
     bus.on('fx:impact', auto.impact);
     bus.on('quality:changed', auto.quality);
     registerVfxTestbed(ctx);

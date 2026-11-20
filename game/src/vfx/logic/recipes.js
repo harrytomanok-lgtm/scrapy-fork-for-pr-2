@@ -231,16 +231,50 @@ export const RECIPES = {
     { m: 2, cell: smoke, n: 14, lo: 7, sp: [0.4, 1.4], life: [0.8, 1.3], sz: [0.4, 1.0], col: 'paper', a: 0.55, sh: 'column', r: 1.6, fb: 4, g: -2.5, dr: 1.5 },
     { m: 1, cell: streak, n: 8, lo: 4, sp: [5, 9], life: [0.2, 0.35], sz: [0.05, 0.02], col: 'hostile', sh: 'sphere', st: 0.05, dr: 5, hdr: 1.6 },
     { m: 2, cell: chip, n: 8, lo: 4, sp: [3, 6], life: [0.4, 0.7], sz: [0.12, 0.06], col: 'zenith', sh: 'sphere', g: 12, rv: 12 },
+    { m: 0, cell: spark, n: 12, lo: 9, sp: [0.8, 2.2], life: [0.6, 1.0], sz: [0.28, 0.05], col: 'ora', sh: 'column', r: 1.5, g: -3.5, dr: 1.2, hdr: 2 },
   ] },
+  // the body bursts and fades to motes: violet growths, then the freed Ora rising as teal motes
   death_beast: { body: 'hostile', layers: [
     { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [2.4, 1.4], col: 'core', sh: 'still', hdr: 2, k: 1 },
+    { m: 0, cell: spark, n: 12, lo: 9, sp: [0.8, 2.2], life: [0.6, 1.0], sz: [0.28, 0.05], col: 'ora', sh: 'column', r: 1.3, g: -3.5, dr: 1.2, hdr: 2 },
     { m: 0, cell: spark, n: 18, lo: 9, sp: [0.6, 2], life: [0.8, 1.3], sz: [0.22, 0.04], col: 'body', sh: 'column', r: 1.4, g: -3, dr: 1.5, hdr: 1.8 },
     { m: 1, cell: streak, n: 10, lo: 5, sp: [5, 10], life: [0.2, 0.35], sz: [0.06, 0.02], col: 'body', sh: 'hemi', st: 0.05, dr: 5, hdr: 1.8 },
     { m: 2, cell: smoke, n: 6, lo: 3, sp: [0.5, 1.5], life: [0.7, 1.1], sz: [0.6, 1.4], col: 'corruption', a: 0.5, sh: 'column', r: 1.2, fb: 4, g: -1.5 },
   ] },
   xp_orb: { body: 'ora', layers: [
-    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.14, 0.14], sz: [0.3, 0.7], col: 'core', sh: 'still', hdr: 2, rv: 5 },
-    { m: 0, cell: spark, n: 4, lo: 2, sp: [1, 3], life: [0.18, 0.3], sz: [0.12, 0.02], col: 'body', sh: 'sphere', hdr: 1.8 },
+    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.14, 0.14], sz: [0.5, 1.1], col: 'core', sh: 'still', hdr: 2.2, rv: 5 },
+    { m: 0, cell: spark, n: 4, lo: 3, sp: [1, 3], life: [0.18, 0.3], sz: [0.16, 0.03], col: 'body', sh: 'sphere', hdr: 1.8 },
+  ] },
+  /** XP arriving in the body: a ring pulse around the chest and motes drawn in (internal id). */
+  xp_gain: { body: 'ora', layers: [
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.22, 0.22], sz: [0.5, 2.2], col: 'body', sh: 'still', hdr: 2 },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.18, 0.18], sz: [1.6, 0.6], col: 'body', sh: 'still', hdr: 1.6, k: 0.6 },
+    { m: 1, cell: streak, n: 5, lo: 4, sp: [2, 4], life: [0.2, 0.3], sz: [0.08, 0.03], col: 'core', sh: 'up', r: 0.4, st: 0.06, hdr: 2, k: 1 },
+  ] },
+  /** A pickup collected: a rising ring and sparks in its rarity colour (internal id). */
+  pickup_get: { body: 'common', layers: [
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.25, 0.25], sz: [0.4, 2.0], col: 'body', sh: 'still', hdr: 2 },
+    { m: 0, cell: spark, n: 8, lo: 6, sp: [1.5, 3.5], life: [0.35, 0.55], sz: [0.2, 0.04], col: 'body', sh: 'up', r: 0.4, g: -1, hdr: 2 },
+  ] },
+  /** A Ringstone wakes: a teal column, a ring of light at its foot and motes rising (internal id). */
+  ringstone_wake: { body: 'ora', pillar: { h: 40, w: 0.7, t: 1.4, col: 'body' }, shock: { r: 7, t: 0.6, ground: true, col: 'body' }, layers: [
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.25, 0.25], sz: [3, 1.5], col: 'core', sh: 'still', hdr: 2.2, k: 1 },
+    { m: 0, cell: ring, n: 2, lo: 2, sp: [0, 0], life: [0.4, 0.6], sz: [1, 6], col: 'body', sh: 'still', hdr: 2 },
+    { m: 0, cell: spark, n: 24, lo: 16, sp: [2, 5], life: [0.9, 1.5], sz: [0.3, 0.06], col: 'body', sh: 'column', r: 3, g: -2, hdr: 2 },
+    { m: 1, cell: streak, n: 16, lo: 10, sp: [8, 14], life: [0.3, 0.5], sz: [0.1, 0.03], col: 'core', sh: 'up', r: 0.8, st: 0.06, hdr: 2, k: 1 },
+  ] },
+  /** A Siphon's last breath: violet drawn into the core before the teal burst (internal id). */
+  siphon_implode: { body: 'hostile', layers: [
+    { m: 1, cell: streak, n: 40, lo: 26, sp: [10, 16], life: [0.3, 0.4], sz: [0.16, 0.05], col: 'body', sh: 'inward', r: 6, st: 0.06, hdr: 2, k: 0.5 },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.35, 0.35], sz: [1, 6], col: 'body', sh: 'still', hdr: 2, k: 0.4, fi: 0.8 },
+    { m: 0, cell: spiral, n: 1, lo: 1, sp: [0, 0], life: [0.4, 0.4], sz: [8, 1], col: 'body', sh: 'still', hdr: 1.8, rv: -8 },
+  ] },
+  /** A boss enters a new phase: a hostile shock ring, a roar of streaks and a dark puff (internal id). */
+  boss_phase: { body: 'hostile', shock: { r: 9, t: 0.45, ground: true, col: 'body' }, layers: [
+    { m: 0, cell: ring, n: 2, lo: 2, sp: [0, 0], life: [0.3, 0.45], sz: [1, 9], col: 'body', sh: 'still', hdr: 2, rr: true },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.2, 0.2], sz: [4, 2], col: 'body', sh: 'still', hdr: 1.8, k: 0.5 },
+    { m: 1, cell: streak, n: 24, lo: 16, sp: [12, 20], life: [0.25, 0.4], sz: [0.14, 0.04], col: 'body', sh: 'ring', r: 1, st: 0.05, dr: 4, hdr: 2, lift: 4 },
+    { m: 2, cell: smoke, n: 10, lo: 8, sp: [4, 7], life: [0.6, 1.0], sz: [1.2, 2.6], col: 'smoke', a: 0.6, sh: 'ring', r: 1, fb: 4, dr: 2.5, gnd: true },
   ] },
   level_up: { body: 'ora', pillar: { h: 12, w: 1.6, t: 0.9, col: 'body' }, decal: { kind: 'glyph', r: 3, t: 1.6 }, shock: { r: 5, t: 0.4, ground: true, col: 'body' }, layers: [
     { m: 1, cell: streak, n: 30, lo: 14, sp: [6, 12], life: [0.5, 0.9], sz: [0.08, 0.03], col: 'body', sh: 'up', r: 1.2, st: 0.06, hdr: 2, k: 0.5 },
