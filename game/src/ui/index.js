@@ -121,7 +121,7 @@ export function createUi(ctx) {
     },
     /** Diagnostics for scenarios: HUD piece rectangles, the HUD mode, focus graph of the top screen. */
     debug() {
-      return { mode: hud.mode, pieces: hud.pieces(), keepOut: hud.keepOut(), centre: hud.centre(), focus: mgr.focusReport(), stack: mgr.stack.slice() };
+      return { mode: hud.mode, pieces: hud.pieces(), keepOut: hud.keepOut(), centre: hud.centre(), held: hud.held(), focus: mgr.focusReport(), stack: mgr.stack.slice() };
     },
     dispose() {
       mgr.closeAll();

@@ -94,8 +94,10 @@ export function createHud(ctx, kit, ui) {
   const bars = kit.el('div', 'ui-bars', block);
   const hpBar = piece(kit.el('div', 'ui-bar ui-hp', bars), 'hp');
   const hpChip = kit.el('div', 'ui-fill ui-chipfill', hpBar);
+  const hpHeal = kit.el('div', 'ui-fill ui-healfill', hpBar);
   const hpFill = kit.el('div', 'ui-fill', hpBar);
   const oraBar = piece(kit.el('div', 'ui-bar ui-ora', bars), 'ora');
+  const oraSpent = kit.el('div', 'ui-fill ui-spentfill', oraBar);
   const oraFill = kit.el('div', 'ui-fill', oraBar);
   const oraTicks = kit.el('div', 'ui-ticks', oraBar);
   const res = piece(kit.el('div', 'ui-res', block), 'resonance');
@@ -225,6 +227,7 @@ export function createHud(ctx, kit, ui) {
   let bannerUntil = 0;
   /** Clock time before which the next queued message waits (the exit of the last one). */
   let bannerFree = 0;
+  let bannerHeld = false;
   /** @typedef {{ kind:string, key:string, args:any, sub:string|null, subArgs:any }} BannerMsg */
   /** @type {BannerMsg|null} */
   let bannerNow = null;
@@ -364,6 +367,10 @@ export function createHud(ctx, kit, ui) {
   const dmgZ = new Float32Array(DMG_COUNT);
   const dmgT = new Float32Array(DMG_COUNT);
   const dmgDx = new Float32Array(DMG_COUNT);
+  /** Scale of each number: bigger for strong hits and crits. */
+  const dmgS = new Float32Array(DMG_COUNT);
+  const dmgAmt = new Float32Array(DMG_COUNT);
+  const dmgWho = new Int32Array(DMG_COUNT);
   for (let i = 0; i < DMG_COUNT; i++) {
     const n = kit.el('div', 'ui-dmg', dmgBox);
     n.hidden = true;
@@ -376,16 +383,25 @@ export function createHud(ctx, kit, ui) {
   const heroBox = { x: 0, y: 0, w: 0, h: 0, on: false };
   const tgtBox = { x: 0, y: 0, w: 0, h: 0, on: false };
   const keeps = [heroBox, tgtBox];
+  /** The combo counter also keeps clear of the lane and the toasts. */
+  const laneBox = { x: 0, y: 0, w: 0, h: 0, on: false };
+  const toastRect = { x: 0, y: 0, w: 0, h: 0, on: false };
+  const keeps2 = [heroBox, tgtBox, laneBox, toastRect];
+  let toastsHeld = false;
   const laneBase = { x: 0, y: 0, w: 0, h: 0 };
   const laneAt = { dx: 0, dy: 0 };
   const bnrBase = { x: 0, y: 0, w: 0, h: 0 };
   const bnrAt = { dx: 0, dy: 0 };
   const comboBase = { x: 0, y: 0, w: 0, h: 0 };
   const comboAt = { dx: 0, dy: 0 };
+  const toastBase = { x: 0, y: 0, w: 0, h: 0 };
+  const toastAt = { dx: 0, dy: 0 };
   let comboDirty = true;
-  const placed = { dx: 0, dy: 0, moved: false };
-  const lim = { minTop: 0, minX: 8, maxX: 0 };
+  const placed = { dx: 0, dy: 0, moved: false, ok: true };
+  /** @type {{ minTop:number, minX:number, maxX:number, maxBottom?:number }} */
+  const lim = { minTop: 0, minX: 8, maxX: 0, maxBottom: undefined };
   let laneDirty = true;
+  let laneDirtyT = true;
   let bnrDirty = true;
   /** Top of the free band under the top HUD rows (CSS px), measured on relayout. */
   let topBand = 0;
@@ -415,6 +431,12 @@ export function createHud(ctx, kit, ui) {
   let fadeT = 0;
   let faded = false;
   let chipVal = 1;
+  /** Shown HP while healing: the fill grows to the new value behind a bright heal layer. */
+  let hpShown = 1;
+  /** Spent Ora: a bright segment that holds briefly where Ora was, then drains to the fill. */
+  let spentVal = 0;
+  let spentHold = 0;
+  let oraPrev = -1;
   let chipHold = 0;
   let tChipVal = 1;
   let tChipHold = 0;
@@ -431,7 +453,7 @@ export function createHud(ctx, kit, ui) {
   const roll = createRoll(0);
   let rollInit = false;
   let resFlashUntil = 0;
-  const last = { hp: -1, chip: -1, ora: -1, xp: -1, surge: -1, tick: -1, t: -1, tc: -1, tp: -1, burn: false, low: false, full: false, res: '' };
+  const last = { hp: -1, chip: -1, heal: -1, spent: -1, ora: -1, xp: -1, surge: -1, tick: -1, t: -1, tc: -1, tp: -1, burn: false, low: false, full: false, res: '' };
   let coarse = false;
   try {
     coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -471,6 +493,7 @@ export function createHud(ctx, kit, ui) {
     } else if (toastBox.parentNode !== root) root.insertBefore(toastBox, lane);
     topBand = mode === 'portrait' ? compass.offsetTop + 60 : compass.offsetTop + 64;
     laneDirty = true;
+    laneDirtyT = true;
     bnrDirty = true;
     comboDirty = true;
     renderPrompt();
@@ -496,6 +519,7 @@ export function createHud(ctx, kit, ui) {
     s.node.className = 'ui-toast' + (kind === 'good' ? ' ui-good' : kind === 'warn' ? ' ui-warnk' : '');
     s.node.hidden = false;
     laneDirty = true;
+    laneDirtyT = true;
     // Newest last in reading order.
     toastBox.appendChild(s.node);
     void s.node.offsetWidth;
@@ -578,6 +602,7 @@ export function createHud(ctx, kit, ui) {
   function renderPill() {
     if (!focusKey) {
       if (!pill.hidden) laneDirty = true;
+      laneDirtyT = true;
       pill.hidden = true;
       return;
     }
@@ -585,9 +610,11 @@ export function createHud(ctx, kit, ui) {
     pillText.textContent = kit.t(focusKey);
     pill.hidden = false;
     laneDirty = true;
+    laneDirtyT = true;
   }
   function renderPrompt() {
     laneDirty = true;
+    laneDirtyT = true;
     if (!tutKey && !tutAction) {
       prompt.hidden = true;
       ghost.hidden = true;
@@ -663,7 +690,9 @@ export function createHud(ctx, kit, ui) {
   function frameBars(p, dt) {
     const st = p.stats;
     const hpK = st.hp / (st.hpMax > 0 ? st.hpMax : 1);
-    scale(hpFill, 'hp', hpK);
+    hpShown = hpK < hpShown ? hpK : Math.min(hpK, hpShown + dt * 0.7);
+    scale(hpFill, 'hp', hpShown);
+    scale(hpHeal, 'heal', hpK);
     if (hpK < chipVal) {
       chipHold += dt;
       if (chipHold > CHIP_DELAY) chipVal = Math.max(hpK, chipVal - dt * 0.9);
@@ -677,8 +706,24 @@ export function createHud(ctx, kit, ui) {
       last.low = low;
       hpBar.classList.toggle('ui-low', low);
       vignette.classList.toggle('ui-on', low);
+      med.classList.toggle('ui-lowhp', low);
     }
-    scale(oraFill, 'ora', st.ora / (st.oraMax > 0 ? st.oraMax : 1));
+    const oraK = st.ora / (st.oraMax > 0 ? st.oraMax : 1);
+    scale(oraFill, 'ora', oraK);
+    if (oraPrev >= 0 && oraK < oraPrev - 0.04) {
+      // A chunk of Ora was spent: the segment flashes where it was.
+      spentVal = Math.max(spentVal, oraPrev);
+      spentHold = 0;
+      oraSpent.classList.remove('ui-on');
+      void oraSpent.offsetWidth;
+      oraSpent.classList.add('ui-on');
+    }
+    oraPrev = oraK;
+    if (spentVal > oraK) {
+      spentHold += dt;
+      if (spentHold > 0.25) spentVal = Math.max(oraK, spentVal - dt * 1.6);
+    } else spentVal = oraK;
+    scale(oraSpent, 'spent', spentVal);
     if (last.tick !== st.oraMax) {
       last.tick = st.oraMax;
       oraTicks.style.setProperty('--tick', ((25 / Math.max(25, st.oraMax)) * 100).toFixed(3) + '%');
@@ -878,7 +923,7 @@ export function createHud(ctx, kit, ui) {
         continue;
       }
       const u = t / DMG_LIFE;
-      const pop = u < 0.15 ? 0.6 + (u / 0.15) * 0.55 : 1.15 - Math.min(0.15, (u - 0.15) * 0.6);
+      const pop = (u < 0.15 ? 0.6 + (u / 0.15) * 0.55 : 1.15 - Math.min(0.15, (u - 0.15) * 0.6)) * dmgS[i];
       n.style.opacity = u < 0.6 ? '1' : (1 - (u - 0.6) / 0.4).toFixed(2);
       n.style.transform = 'translate(' + (proj.x + dmgDx[i]).toFixed(1) + 'px,' + (proj.y - u * 28).toFixed(1) + 'px) translate(-50%,-50%) scale(' + pop.toFixed(2) + ')';
     }
@@ -925,10 +970,57 @@ export function createHud(ctx, kit, ui) {
       if (tb > lim.minTop) lim.minTop = tb;
     }
     placeAround(laneBase, keeps, lim, placed);
+    if (!placed.ok && !toastsHeld && toastBox.parentNode === lane && toastPool.live > 0) {
+      // No clear place for the whole lane: the toasts wait until they expire, the lane shrinks, try again.
+      toastsHeld = true;
+      lane.classList.add('ui-holdt');
+      laneDirty = true;
+      return;
+    }
+    if (toastsHeld && toastPool.live === 0) {
+      toastsHeld = false;
+      lane.classList.remove('ui-holdt');
+      laneDirty = true;
+    }
+    laneBox.on = laneBase.h > 0;
+    laneBox.x = laneBase.x + placed.dx;
+    laneBox.y = laneBase.y + placed.dy;
+    laneBox.w = laneBase.w;
+    laneBox.h = laneBase.h;
     if (Math.abs(placed.dx - laneAt.dx) > 2 || Math.abs(placed.dy - laneAt.dy) > 2) {
       laneAt.dx = placed.dx;
       laneAt.dy = placed.dy;
       lane.style.transform = 'translate(calc(-50% + ' + Math.round(placed.dx) + 'px),' + Math.round(placed.dy) + 'px)';
+    }
+    // Outside portrait the toasts sit at the top centre: they step aside from a target that rises into them.
+    if (mode !== 'portrait' && toastPool.live > 0) {
+      if (laneDirtyT) {
+        laneDirtyT = false;
+        toastBase.w = toastBox.offsetWidth;
+        toastBase.h = toastBox.offsetHeight;
+        toastBase.x = toastBox.offsetLeft - toastBase.w * 0.5;
+        toastBase.y = toastBox.offsetTop;
+      }
+      // Never up into the target frame: down or aside only.
+      lim.minTop = toastBase.y;
+      lim.maxBottom = viewH * 0.6;
+      placeAround(toastBase, keeps, lim, placed);
+      lim.maxBottom = undefined;
+      toastRect.on = true;
+      toastRect.x = toastBase.x + placed.dx;
+      toastRect.y = toastBase.y + placed.dy;
+      toastRect.w = toastBase.w;
+      toastRect.h = toastBase.h;
+      if (Math.abs(placed.dx - toastAt.dx) > 2 || Math.abs(placed.dy - toastAt.dy) > 2) {
+        toastAt.dx = placed.dx;
+        toastAt.dy = placed.dy;
+        toastBox.style.translate = Math.round(placed.dx) + 'px ' + Math.round(placed.dy) + 'px';
+      }
+    } else if (toastAt.dx || toastAt.dy || toastRect.on) {
+      toastRect.on = false;
+      toastAt.dx = 0;
+      toastAt.dy = 0;
+      toastBox.style.translate = '';
     }
     if (!combo.hidden) {
       if (comboDirty) {
@@ -939,7 +1031,9 @@ export function createHud(ctx, kit, ui) {
         comboBase.h = combo.offsetHeight;
       }
       lim.minTop = topBand - 20;
-      placeAround(comboBase, keeps, lim, placed);
+      lim.maxBottom = viewH * 0.66;
+      placeAround(comboBase, keeps2, lim, placed);
+      lim.maxBottom = undefined;
       if (Math.abs(placed.dx - comboAt.dx) > 2 || Math.abs(placed.dy - comboAt.dy) > 2) {
         comboAt.dx = placed.dx;
         comboAt.dy = placed.dy;
@@ -958,7 +1052,14 @@ export function createHud(ctx, kit, ui) {
     lim.minTop = topBand - 20;
     // Never up onto the target frame or the boss bar.
     if (!target.hidden) lim.minTop = Math.max(lim.minTop, target.offsetTop + target.offsetHeight + 6);
+    lim.maxBottom = viewH * 0.62;
     placeAround(bnrBase, keeps, lim, placed);
+    lim.maxBottom = undefined;
+    // With no clear place the message holds back (its time still runs) rather than cover the hero or target.
+    if (placed.ok === bannerHeld) {
+      bannerHeld = !placed.ok;
+      banner.classList.toggle('ui-held', bannerHeld);
+    }
     if (Math.abs(placed.dx - bnrAt.dx) > 2 || Math.abs(placed.dy - bnrAt.dy) > 2) {
       bnrAt.dx = placed.dx;
       bnrAt.dy = placed.dy;
@@ -1006,10 +1107,14 @@ export function createHud(ctx, kit, ui) {
       if (tgtBox.on) out.push({ name: 'target', x: tgtBox.x, y: tgtBox.y, w: tgtBox.w, h: tgtBox.h });
       return out;
     },
+    /** Pieces held back because no place clear of the hero and target was found (scenarios). */
+    held() {
+      return { toasts: toastsHeld, banner: bannerHeld };
+    },
     /** Transient centre messages on show: the banner and the call-out (scenarios). */
     centre() {
       const out = [];
-      if (bannerNow) {
+      if (bannerNow && !bannerHeld) {
         const r = banner.getBoundingClientRect();
         out.push({ name: 'banner', kind: bannerNow.kind, x: r.left, y: r.top, w: r.width, h: r.height, queued: bannerQueue.length });
       }
@@ -1063,6 +1168,7 @@ export function createHud(ctx, kit, ui) {
           s.node.classList.remove('ui-on');
           s.node.hidden = true;
           laneDirty = true;
+          laneDirtyT = true;
         }
       }
       if (bannerUntil && bannerUntil <= clock) {
@@ -1070,6 +1176,8 @@ export function createHud(ctx, kit, ui) {
         bannerNow = null;
         bannerFree = clock + BANNER_GAP;
         banner.classList.remove('ui-on');
+        banner.classList.remove('ui-held');
+        bannerHeld = false;
         med.classList.remove('ui-burst');
         root.classList.remove('ui-bnr');
       }
@@ -1092,6 +1200,7 @@ export function createHud(ctx, kit, ui) {
       if (comboHideAt && clock >= comboHideAt) {
         comboHideAt = 0;
         combo.hidden = true;
+        root.classList.remove('ui-cmb');
         combo.classList.remove('ui-out');
         comboLast = -1;
         comboRankNow = 0;
@@ -1171,15 +1280,41 @@ export function createHud(ctx, kit, ui) {
         const s = ctx.save && ctx.save.settings;
         if (s && s.damageNumbers === false) return;
         if (!(e.amount > 0) && !e.blocked) return;
+        const hurt = !!(p && e.targetId === p.id);
+        // Rapid hits on one target fold into one growing number instead of a wall of numbers.
+        let j = -1;
+        if (!e.blocked && !e.crit) {
+          for (let k = 0; k < DMG_COUNT; k++) {
+            if (dmgPool.busy[k] && dmgWho[k] === e.targetId && dmgT[k] < 0.3 && dmgAmt[k] > 0) j = k;
+          }
+        }
+        const te = ctx.ents.get(e.targetId);
+        const hpMax = te && te.stats && te.stats.hpMax > 0 ? te.stats.hpMax : 100;
+        if (j >= 0) {
+          dmgAmt[j] += e.amount;
+          dmgT[j] = 0.02;
+          const r = dmgAmt[j] / hpMax;
+          dmgS[j] = Math.min(1.6, Math.max(dmgS[j], 1 + r * 2));
+          dmgNodes[j].textContent = formatCompact(dmgAmt[j]);
+          return;
+        }
         const i = acquire(dmgPool);
+        dmgWho[i] = e.targetId;
+        dmgAmt[i] = e.blocked ? 0 : e.amount;
+        const ratio = e.amount / hpMax;
+        dmgS[i] = hurt ? 1 : Math.min(1.6, 1 + ratio * 2 + (e.crit ? 0.15 : 0));
         dmgX[i] = e.x;
         dmgY[i] = e.y;
         dmgZ[i] = e.z;
         dmgT[i] = 0;
         dmgDx[i] = ((dmgPool.serial * 37) % 41) - 20;
         const n = dmgNodes[i];
-        const hurt = !!(p && e.targetId === p.id);
-        n.className = 'ui-dmg' + (hurt ? ' ui-hurt' : e.blocked ? ' ui-blocked' : e.crit ? ' ui-crit' : '');
+        n.className = 'ui-dmg' + (hurt ? ' ui-hurt' : e.blocked ? ' ui-blocked' : e.crit ? ' ui-crit' : ratio >= 0.12 ? ' ui-strong' : '');
+        if (hurt && e.amount > 0) {
+          hpBar.classList.remove('ui-hit');
+          void hpBar.offsetWidth;
+          hpBar.classList.add('ui-hit');
+        }
         n.textContent = e.amount > 0 ? formatCompact(e.amount) : '0';
         n.style.opacity = '0';
         n.hidden = false;
@@ -1214,6 +1349,7 @@ export function createHud(ctx, kit, ui) {
         combo.classList.remove('ui-out');
         if (combo.hidden) {
           combo.hidden = false;
+          root.classList.add('ui-cmb');
           combo.classList.remove('ui-in');
           void combo.offsetWidth;
           combo.classList.add('ui-in');
@@ -1419,6 +1555,9 @@ export function createHud(ctx, kit, ui) {
         lastLevel = -1;
         trackerDirty = true;
         chipVal = 1;
+        hpShown = 1;
+        oraPrev = -1;
+        spentVal = 0;
         fadeT = 0;
         hud.on.badge();
         hint.reset();

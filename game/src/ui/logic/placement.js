@@ -52,12 +52,14 @@ function clearOf(r, keeps, dx, dy) {
  * @param {{x:number,y:number,w:number,h:number}} base
  * @param {ReadonlyArray<Box>} keeps
  * @param {{ minTop:number, minX:number, maxX:number, maxBottom?:number }} lim
- * @param {{ dx:number, dy:number, moved:boolean }} out
+ * `out.ok` is false when no place clear of the boxes was found (the caller may hold the piece back).
+ * @param {{ dx:number, dy:number, moved:boolean, ok?:boolean }} out
  */
 export function placeAround(base, keeps, lim, out) {
   out.dx = 0;
   out.dy = 0;
   out.moved = false;
+  out.ok = true;
   if (base.w <= 0 || base.h <= 0 || clearOf(base, keeps, 0, 0)) return out;
   // Lift: the bottom goes above the top of every box the piece would meet on its way up.
   let top = Infinity;
@@ -104,5 +106,6 @@ export function placeAround(base, keeps, lim, out) {
       }
     }
   }
+  out.ok = out.moved;
   return out;
 }

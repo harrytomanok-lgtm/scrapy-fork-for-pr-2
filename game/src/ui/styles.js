@@ -57,6 +57,12 @@ export const UI_CSS = `
 #app[dir=rtl] .ui-fill{transform-origin:right center}
 .ui-hp .ui-fill{background:linear-gradient(to bottom,#F27A82 0,var(--hp) 55%,#B8394A 100%)}
 .ui-hp .ui-chipfill{background:var(--ui-chip)}
+.ui-hp .ui-healfill{background:linear-gradient(to bottom,#F4FFF4,var(--ok));opacity:.9}
+.ui-hp.ui-hit{animation:ui-barhit 260ms ease-out}
+.ui-ora .ui-spentfill{background:#F4FFFD;opacity:0}
+.ui-ora .ui-spentfill.ui-on{animation:ui-spent 520ms ease-out forwards}
+.ui-med.ui-lowhp{box-shadow:0 0 0 2px var(--ink),inset 0 0 0 1px var(--line),0 0 10px 2px rgba(232,80,91,.7);animation:ui-heart 900ms ease-in-out infinite}
+.ui-med.ui-full{animation:ui-surgefull 1.4s ease-in-out infinite}
 .ui-hp.ui-low .ui-fill{animation:ui-lowhp 900ms ease-in-out infinite}
 .ui-ora .ui-fill{background:linear-gradient(to bottom,#C8FFF6 0,var(--accent) 60%,#3FB7A8 100%)}
 .ui-ticks{position:absolute;inset:0;background-image:repeating-linear-gradient(to right,transparent 0,transparent calc(var(--tick,25%) - 2px),var(--ink) calc(var(--tick,25%) - 2px),var(--ink) var(--tick,25%))}
@@ -139,7 +145,7 @@ export const UI_CSS = `
 
 .ui-toasts{position:absolute;inset-block-start:calc(var(--safe-top) + 68px);left:var(--ui-cx);transform:translateX(-50%);inline-size:var(--tw);
   display:flex;flex-direction:column;gap:6px;align-items:center}
-.ui-lane .ui-toasts{position:relative;inset:auto;left:auto;transform:none;flex-direction:column-reverse;inline-size:100%}
+.ui-lane .ui-toasts{position:relative;inset:auto;left:auto;transform:none;flex-direction:column-reverse;inline-size:auto;max-inline-size:100%}
 .ui-m-desktop .ui-toasts{inset-block-start:calc(var(--safe-top) + 84px)}
 .ui-toasts{transition:opacity 200ms ease-out}
 .ui-hud.ui-bnr:not(.ui-m-portrait) .ui-toasts{opacity:0}
@@ -198,7 +204,9 @@ export const UI_CSS = `
   align-items:baseline;justify-content:start;column-gap:6px;direction:ltr;text-shadow:${OUTLINE},0 3px 0 var(--ink);pointer-events:none;transform-origin:0 50%}
 .ui-combo[hidden]{display:none}
 .ui-m-portrait .ui-combo{inset-block-start:38%;left:var(--safe-left)}
-.ui-m-short .ui-combo{inset-block-start:calc(var(--safe-top) + 94px);left:calc(var(--safe-left) + 152px)}
+/* Touch landscape: the counter takes the quest tracker's place under Gather and Item while a chain runs. */
+.ui-hud.ui-touch:not(.ui-m-portrait) .ui-combo{left:var(--safe-left);inset-block-start:calc(100% - env(safe-area-inset-bottom,0px) - 234px)}
+.ui-hud.ui-touch.ui-cmb:not(.ui-m-portrait) .ui-tracker{display:none}
 .ui-m-desktop .ui-combo{inset-block-start:38%;left:auto;right:calc(var(--safe-right) + 40px);transform-origin:100% 50%}
 .ui-combo-n{font:400 34px/1 var(--font-display);color:var(--paper)}
 .ui-combo-l{font:400 13px/1 var(--font-display);color:var(--paper-dim);letter-spacing:.06em}
@@ -237,11 +245,13 @@ export const UI_CSS = `
 .ui-flashfx{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,246,216,.55),rgba(255,212,90,.15) 60%,transparent 80%)}
 .ui-flashfx.ui-on{animation:ui-flash 380ms ease-out}
 
-.ui-lane{position:absolute;inset-block-end:calc(var(--safe-bottom) + 110px);left:var(--ui-cx);transform:translateX(-50%);inline-size:var(--tw);
+.ui-lane{position:absolute;inset-block-end:calc(var(--safe-bottom) + 110px);left:var(--ui-cx);transform:translateX(-50%);inline-size:max-content;max-inline-size:var(--tw);
   display:flex;flex-direction:column-reverse;align-items:center;gap:8px;pointer-events:none;transition:transform 240ms var(--ui-ease)}
-.ui-m-portrait .ui-lane{inset-block-end:calc(32% + 10px);inline-size:min(320px,calc(100% - 32px))}
+.ui-m-portrait .ui-lane{inset-block-end:calc(32% + 10px);max-inline-size:min(320px,calc(100% - 32px))}
+.ui-lane.ui-holdt .ui-toasts{display:none}
+.ui-banner.ui-held{visibility:hidden}
 .ui-m-short .ui-lane{inset-block-end:calc(var(--safe-bottom) + 114px)}
-.ui-m-desktop .ui-lane{inset-block-end:16%;inline-size:420px}
+.ui-m-desktop .ui-lane{inset-block-end:16%;max-inline-size:420px}
 .ui-lane .ui-pill,.ui-lane .ui-prompt{max-inline-size:100%!important}
 .ui-pill{position:relative;flex:none;display:flex;align-items:center;gap:8px;
   min-block-size:44px;max-inline-size:var(--tw);padding:4px 16px 4px 6px;border:0;border-radius:24px;background:var(--panel);color:var(--paper);
@@ -279,6 +289,8 @@ export const UI_CSS = `
   will-change:transform,opacity;direction:ltr}
 .ui-dmg[hidden]{display:none}
 .ui-dmg.ui-crit{color:var(--ui-crit);font-size:26px}
+.ui-dmg.ui-crit::after{content:"!";margin-inline-start:1px}
+.ui-dmg.ui-strong{color:#FFE7C2;font-size:24px}
 .ui-dmg.ui-hurt{color:var(--ui-hurt);font-size:16px}
 .ui-dmg.ui-blocked{color:var(--paper-dim);font-size:15px}
 .ui-m-portrait .ui-dmg{font-size:17px}
@@ -289,7 +301,7 @@ export const UI_CSS = `
 .ui-letterbox .ui-letter{transform:none}
 .ui-fade{position:absolute;inset:0;background:var(--ink);opacity:0;pointer-events:none;transition-property:opacity;transition-timing-function:linear}
 .ui-vignette{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 300ms;background:radial-gradient(ellipse at center,transparent 55%,rgba(232,80,91,.45) 100%)}
-.ui-vignette.ui-on{opacity:1}
+.ui-vignette.ui-on{opacity:1;animation:ui-heartv 900ms ease-in-out infinite}
 
 /* ------------------------------------------------------------------ screens */
 .ui-scr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:auto;
@@ -545,6 +557,11 @@ export const UI_CSS = `
 @keyframes ui-lowhp{0%,100%{filter:none}50%{filter:brightness(1.5)}}
 @keyframes ui-resflash{0%{color:var(--accent);text-shadow:0 0 12px var(--accent)}100%{color:var(--paper)}}
 @keyframes ui-sweep{0%,60%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+@keyframes ui-barhit{0%{filter:brightness(2.2)}100%{filter:none}}
+@keyframes ui-spent{0%{opacity:1}100%{opacity:.35}}
+@keyframes ui-heart{0%,100%{transform:none}12%{transform:scale(1.07)}24%{transform:none}36%{transform:scale(1.05)}}
+@keyframes ui-heartv{0%,100%{opacity:.75}15%{opacity:1}30%{opacity:.8}45%{opacity:1}}
+@keyframes ui-surgefull{0%,100%{filter:drop-shadow(0 0 0 rgba(255,212,90,0))}50%{filter:drop-shadow(0 0 7px rgba(255,212,90,.95))}}
 @keyframes ui-sheen{to{transform:translateX(110%)}}
 @keyframes ui-pop{0%{transform:scale(1.45)}100%{transform:scale(1)}}
 @keyframes ui-comboin{from{opacity:0;transform:translateX(-14px) scale(.8)}to{opacity:1;transform:none}}
@@ -568,6 +585,7 @@ export const UI_CSS = `
 .ui-reduced .ui-combo-n.ui-pop,.ui-reduced .ui-combo.ui-in,.ui-reduced .ui-combo.ui-rankup .ui-combo-r,.ui-reduced .ui-med.ui-burst,.ui-reduced .ui-med.ui-burst::after,
 .ui-reduced .ui-banner-main::after,.ui-reduced .ui-flashfx.ui-on{animation:none}
 .ui-reduced .ui-fly{display:none}
+.ui-reduced .ui-med.ui-lowhp,.ui-reduced .ui-med.ui-full,.ui-reduced .ui-hp.ui-hit{animation:none}
 .ui-photo .ui-flashfx.ui-on{animation-name:ui-flashlow}
 @keyframes ui-flashlow{0%{opacity:0}15%{opacity:.45}100%{opacity:0}}
 `;
