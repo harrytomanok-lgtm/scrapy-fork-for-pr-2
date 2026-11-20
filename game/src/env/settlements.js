@@ -39,6 +39,8 @@ export function createSettlements(ctx) {
   let kiteMaterial = null;
   /** Kite instances: pivot x,y,z, base yaw offset, phase, length scale. */
   const kites = [];
+  /** Chimney tops (world xyz) for the smoke of env/life. */
+  const chimneys = [];
   /** Spinning parts: { mesh, axis:'z'|'y', speed }. */
   const spinners = [];
   let built = false;
@@ -131,6 +133,15 @@ export function createSettlements(ctx) {
       B.add(prim.cone(r * 0.72, 1.3, 8), f.m(0, y0 + wallH + roofH * 0.45 + 1.5, 0), SLOT.COPPER);
     }
     const top = y0 + wallH - 0.1 + roofH + (kind === 'house_l' ? 1.4 : 0);
+    if (kind !== 'house_s' || style === 'mountain') {
+      // a clay chimney through the roof at the back (smoke rises from it: env/life)
+      const cxl = -r * 0.45;
+      const czl = -r * 0.35;
+      const ch = roofH * 0.95 + 0.9;
+      B.add(prim.drum(0.32, 0.38, ch, 6), f.m(cxl, y0 + wallH - 0.1 + roofH * 0.2, czl), SLOT.TERRA, undefined, 0.2);
+      B.add(prim.drum(0.42, 0.42, 0.2, 6), f.m(cxl, y0 + wallH - 0.1 + roofH * 0.2 + ch, czl), SLOT.STONE);
+      chimneys.push({ x: f.wx(cxl, czl), y: f.y + y0 + wallH + roofH * 0.2 + ch + 0.3, z: f.wz(cxl, czl) });
+    }
     B.add(prim.drum(0.05, 0.07, 0.7, 4, true), f.m(0, top - 0.25, 0), SLOT.IRON);
     B.add(prim.ring(0.36, 0.06, 3, 7), f.m(0, top + 0.7, 0), SLOT.COPPER);
     // round door with a teal curtain and a terracotta frame
@@ -682,6 +693,11 @@ export function createSettlements(ctx) {
       updateKites(dt, wind);
     },
 
+    /** Chimney tops of every built settlement (live list, do not mutate). */
+    chimneys() {
+      return chimneys;
+    },
+
     /** @param {string} id */
     info(id) {
       return infos[id] || null;
@@ -718,6 +734,7 @@ export function createSettlements(ctx) {
       }
       meshes.length = 0;
       spinners.length = 0;
+      chimneys.length = 0;
       if (kiteMesh) {
         if (kiteMesh.parent) kiteMesh.parent.remove(kiteMesh);
         kiteMesh.geometry.dispose();

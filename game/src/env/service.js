@@ -14,6 +14,7 @@ import {
 import { createSky, CLOUD_HEIGHT, CLOUD_UV } from './sky.js';
 import { createSettlements } from './settlements.js';
 import { createProps } from './props.js';
+import { createLife } from './life.js';
 
 /** Region fog colours in linear space, by region id. */
 /**
@@ -79,6 +80,8 @@ export function createEnv(ctx) {
   const props = createProps(ctx);
   /** @type {any[]} settlement camp fires */
   const fires = [];
+  /** @type {any} ambient life (env/life), built with the settlements */
+  let life = null;
 
   /** @returns {any} store.state.world or null */
   function state() {
@@ -212,6 +215,7 @@ export function createEnv(ctx) {
     if (renderer) renderer.setClearColor(g.uFogColor.value, 1);
     settlements.frame(dt, lanternFactor(h), wind, cam);
     props.frame(dt, cam, wind);
+    if (life) life.frame(dt, cam, wind, night);
   }
 
   const env = {
@@ -302,11 +306,13 @@ export function createEnv(ctx) {
 
     /** Diagnostics for scenarios. */
     info() {
-      return { settlements: settlements.stats(), props: props.count(), sky: !!sky, clockScale, fog: fogOv.k };
+      return { settlements: settlements.stats(), props: props.count(), sky: !!sky, clockScale, fog: fogOv.k, life: life ? life.count() : null };
     },
 
     dispose() {
       fires.length = 0;
+      if (life) life.dispose();
+      life = null;
       props.dispose();
       settlements.dispose();
       if (sky) sky.dispose();
@@ -332,8 +338,16 @@ export function createEnv(ctx) {
     props.warm();
     // camp fires at every settlement spot named 'fire'
     const out = { x: 0, y: 0, z: 0, yaw: 0 };
+    const smoke = [];
     for (const def of ctx.defs ? ctx.defs.all('settlement') : []) {
-      if (settlements.spot(def.id, 'fire', out)) fires.push(props.spawn('campfire', out.x, out.y, out.z, { yaw: out.yaw }));
+      if (settlements.spot(def.id, 'fire', out)) {
+        fires.push(props.spawn('campfire', out.x, out.y, out.z, { yaw: out.yaw }));
+        smoke.push({ x: out.x, y: out.y + 1, z: out.z });
+      }
+    }
+    if (!life) {
+      for (const c of settlements.chimneys()) smoke.push(c);
+      life = createLife(ctx, () => smoke);
     }
   }
 
