@@ -38,6 +38,8 @@ export function createCam(ctx, shared) {
     // Orbit angles at the start of the last sim step: the rig shows yaw and pitch between these and the current
     // ones with the frame alpha (prevYaw above is the roll-rate state, a different thing).
     stepYaw0: 0, stepPitch0: -12 * D2R,
+    // Camera push (finisher): fraction of the arm, start (real s) and duration.
+    pushAmt: 0, pushStart: -10, pushDur: 0.9,
   };
   const sDist = { x: 5.5, v: 0 };
   const sHeight = { x: 1.6, v: 0 };
@@ -248,6 +250,20 @@ export function createCam(ctx, shared) {
     },
 
     /**
+     * Push the camera in on the followed body and back out (the finisher): the arm shortens by `amount` (fraction)
+     * and the view narrows a little, easing in over the first quarter of `seconds` and out over the rest.
+     * @param {number} amount 0..0.5 @param {number} seconds @param {number} [entId] unused (the push centres on the hero)
+     */
+    push(amount, seconds, entId) {
+      void entId;
+      const settings = ctx.save && ctx.save.settings;
+      const k = settings && settings.reducedMotion ? 0.3 : 1;
+      st.pushAmt = clamp(amount || 0, 0, 0.5) * k;
+      st.pushStart = ctx.time.real;
+      st.pushDur = Math.max(0.1, seconds || 0.9);
+    },
+
+    /**
      * @param {string} id @param {any[]} shots @param {{ skippable?:boolean, freeze?:boolean }} [opts]
      * @returns {Promise<{ skipped:boolean }>}
      */
@@ -296,6 +312,18 @@ export function createCam(ctx, shared) {
       finishCine(true);
     },
   };
+
+  /** Current push fraction: quick ease in (first 25%), smooth ease out. @param {number} real */
+  function pushEnvelope(real) {
+    if (st.pushAmt <= 0) return 0;
+    const u = (real - st.pushStart) / st.pushDur;
+    if (u >= 1 || u < 0) {
+      if (u >= 1) st.pushAmt = 0;
+      return 0;
+    }
+    const e = u < 0.25 ? smoothstep(0, 0.25, u) : 1 - smoothstep(0.25, 1, u);
+    return st.pushAmt * e;
+  }
 
   /** @param {any} c @param {any} target @returns {string} */
   function modeOf(c, target) {
@@ -520,8 +548,9 @@ export function createCam(ctx, shared) {
       const upX = -sp * Math.sin(yaw);
       const upY = cp;
       const upZ = -sp * Math.cos(yaw);
-      const fov = sFov.x;
-      const dist = sDist.x;
+      const push = pushEnvelope(real);
+      const fov = sFov.x - push * 14;
+      const dist = sDist.x * (1 - push);
       // Frame the body (not the pivot, which sits above it): the body's centre lands at the framing height.
       const bodyY = p.y + (target.height > 0 ? target.height : 1.8) * 0.5;
       const shift = frameShift(sFrame.x, dist, fov) - (sPy.x - bodyY) * cp;
@@ -636,6 +665,7 @@ export function createCam(ctx, shared) {
     st.trauma = 0;
     st.kickPeak = 0;
     st.blendT = 0;
+    st.pushAmt = 0;
   }
 
   return { cam, lookSystem, rigSystem, onLock, onPress, onEnded };

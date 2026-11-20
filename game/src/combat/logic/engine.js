@@ -15,6 +15,7 @@ import { BALANCE } from '../../core/balance.js';
 import * as F from '../../core/formulas.js';
 import { PALETTE } from '../../core/palette.js';
 import { resolveRank } from './rank.js';
+import { STYLE, createStyle, resetStyle, styleHit, styleBonus, styleHurt, styleStep } from './style.js';
 import {
   TAG, KIND_MASK, frontal, isPerfectGuard, isPerfectFlicker, hitAmount, surgeForHit, surgeForHpLoss, surgeDecay,
   knockVelocity, intentScore, relAngle, sweepCapsuleT, nearCollider, falloffPower,
@@ -39,8 +40,11 @@ const STRING_GRACE = 0.7;
 const AIR_HANG_SECONDS = 0.9;
 /** The rising lunge reaches a hovering target at most this far above a grounded hero (m, body to body). */
 const RISE_MAX = 6.5;
-/** Seconds between two hits that keep the combo counter running. */
-const COMBO_WINDOW = 2.0;
+/**
+ * The finisher (the last enemy of a group falls): slow motion scale and unscaled seconds, the camera push
+ * (fraction of the arm and seconds) and the group size from which it plays.
+ */
+const FINISHER = Object.freeze({ slowScale: 0.3, slowSeconds: 0.55, push: 0.22, pushSeconds: 0.9, minGroup: 2, radius: 45 });
 /** Ticks between line-of-sight checks of the hard lock. */
 const LOS_EVERY = 6;
 /** Seconds the player is staggered by a red or violet attack (GDD 6.4). */
@@ -93,7 +97,9 @@ export function createCombatEngine(ctx) {
   const chained = new Map();
   /** Forms transformed into this session (the first time plays the long sequence). */
   const seenForms = new Set();
-  const st = { hardTarget: 0, softMelee: 0, softOra: 0, inCombat: false, threat: 0, tick: 0, losLost: 0, comboCount: 0, comboT: 0 };
+  const st = { hardTarget: 0, softMelee: 0, softOra: 0, inCombat: false, threat: 0, tick: 0, losLost: 0, comboCount: 0, comboT: 0, groupPeak: 0, engaged: 0 };
+  /** Combo counter and style rank of the player (logic/style.js). */
+  const style = createStyle();
 
   // Reused event payloads (7.2 rule 1; listeners never retain them).
   const pDamaged = { targetId: 0, sourceId: 0, amount: 0, crit: false, blocked: false, perfect: false, techId: null, kind: 'melee', x: 0, y: 0, z: 0, hpAfter: 0 };
@@ -116,7 +122,7 @@ export function createCombatEngine(ctx) {
   const pLock = { entId: 0, targetId: 0 };
   const pSurge = { value: 0, full: false };
   const pState = { inCombat: false, threat: 0 };
-  const pCombo = { count: 0 };
+  const pCombo = { count: 0, rank: 0, rankId: '', expired: false, best: 0 };
   const pShotOn = { entId: 0, fxId: 'bolt', ownerId: 0, color: 0 };
   const pShotOff = { entId: 0, fxId: 'bolt', hit: false, x: 0, y: 0, z: 0 };
   /** Internal damage request (fields beyond DamageRequest: staggerPlayer, juggle, burn, slamFraction). */
@@ -1294,6 +1300,8 @@ export function createCombatEngine(ctx) {
       th = Math.min(1, Math.max(engaged, 1) / 5 + (boss ? 0.5 : 0) + (hp < 0.35 ? 0.25 : 0));
       th = Math.round(th * 4) / 4;
     }
+    st.engaged = engaged;
+    if (on) { if (engaged > st.groupPeak) st.groupPeak = engaged; } else st.groupPeak = 0;
     if (on !== st.inCombat || Math.abs(th - st.threat) >= 0.25) {
       st.inCombat = on;
       st.threat = th;
@@ -1640,6 +1648,7 @@ export function createCombatEngine(ctx) {
           pPerfect.entId = t.id; pPerfect.kind = 'flicker'; pPerfect.attackerId = src.id;
           ctx.bus.emit('combat:perfect', pPerfect);
           combat.addSurge(t, FLICK.perfect.surge);
+          styleReward(t, STYLE.perfect);
           if (st.hardTarget && ctx.move) {
             const ht = ctx.ents.get(st.hardTarget);
             if (ht && ht.alive) {
@@ -1773,13 +1782,13 @@ export function createCombatEngine(ctx) {
       pHit.blocked = blocked; pHit.perfect = perfect; pHit.crit = crit;
       ctx.bus.emit('combat:hit', pHit);
       hitFeel(t, src, cls, dirX, dirZ, amount, blocked, killed, hurtle);
-      if (sPlayer && amount > 0) {
-        st.comboCount = st.comboT > 0 ? st.comboCount + 1 : 1;
-        st.comboT = COMBO_WINDOW;
-        pCombo.count = st.comboCount;
-        ctx.bus.emit('combat:combo', pCombo);
-      }
+      if (sPlayer && amount > 0 && !blocked) {
+        const sg = styleHit(style, req.techId || null, airborne(src), airborne(t)) + (killed ? styleBonus(style, STYLE.kill) : 0);
+        comboEvent(false);
+        if (sg > 0) combat.addSurge(src, sg);
+      } else if (tPlayer && amount > 0 && !blocked && styleHurt(style)) comboEvent(false);
       if (perfect) {
+        if (tPlayer) styleReward(t, STYLE.perfect);
         pPerfect.entId = t.id; pPerfect.kind = 'guard'; pPerfect.attackerId = src ? src.id : 0;
         ctx.bus.emit('combat:perfect', pPerfect);
         combat.addSurge(t, GUARD.perfect.surge);
@@ -1795,7 +1804,10 @@ export function createCombatEngine(ctx) {
         else if (tPlayer && req.staggerPlayer && !blocked) staggerEnt(t, RED_STAGGER, false);
         else if (!tPlayer && stt.poiseMax <= 0 && !blocked && !hurtle && amount > 0 && ctx.actors) anim(t, 'stagger', false);
       }
-      if (killed) combat.kill(t, req.sourceId || 0);
+      if (killed) {
+        combat.kill(t, req.sourceId || 0);
+        if (sPlayer && (t.tags & TAG.BOSS) === 0 && t.team === 2) finisherCheck(t);
+      }
       return res;
     },
 
@@ -2127,6 +2139,9 @@ export function createCombatEngine(ctx) {
     st.losLost = 0;
     st.comboCount = 0;
     st.comboT = 0;
+    st.groupPeak = 0;
+    st.engaged = 0;
+    resetStyle(style);
     seenForms.clear();
   }
 
@@ -2146,13 +2161,59 @@ export function createCombatEngine(ctx) {
     }
   }
 
+  /** Emit combat:combo { count, rank, rankId, expired, best } (the UI shows it). @param {boolean} expired */
+  function comboEvent(expired) {
+    pCombo.count = style.count; pCombo.rank = style.rank; pCombo.rankId = style.rank > 0 ? STYLE.rankIds[style.rank - 1] : '';
+    pCombo.expired = expired; pCombo.best = style.best;
+    if (expired) style.count = 0;
+    ctx.bus.emit('combat:combo', pCombo);
+  }
+
+  /** A flat style bonus for the player (kill, slam, perfect defence), with its Surge. */
+  function styleReward(p, pts) {
+    if (!isPlayer(p)) return;
+    const before = style.rank;
+    const sg = styleBonus(style, pts);
+    if (style.rank !== before) comboEvent(false);
+    if (sg > 0) combat.addSurge(p, sg);
+  }
+
+  /**
+   * The finisher: when the player kills the last engaged enemy of a group of at least FINISHER.minGroup, a short
+   * slow motion and a camera push (the camera eases in on the hero, then back).
+   * @param {any} dead
+   */
+  function finisherCheck(dead) {
+    const p = ctx.player;
+    if (!p || !p.alive || st.groupPeak < FINISHER.minGroup) return;
+    const list = ctx.ents.all();
+    const r2 = FINISHER.radius * FINISHER.radius;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (e === dead || e.team !== 2 || !e.alive || e.combat === null || e.kind === 'projectile' || e.combat.state === 'dead') continue;
+      if (e.combat.inCombatT <= 0) continue;
+      const dx = e.pos.x - p.pos.x;
+      const dz = e.pos.z - p.pos.z;
+      if (dx * dx + dz * dz <= r2 || e.combat.targetId === p.id) return;
+    }
+    st.groupPeak = 0;
+    ctx.time.slowMo(FINISHER.slowScale, FINISHER.slowSeconds);
+    const cam = ctx.cam;
+    if (cam && typeof cam.push === 'function') cam.push(FINISHER.push, FINISHER.pushSeconds, dead.id);
+    if (ctx.fx) ctx.fx.impact('finisher', dead.pos.x, dead.pos.y + dead.height * 0.5, dead.pos.z, 1);
+    styleReward(p, STYLE.kill);
+  }
+
   const runSystem = {
     id: 'combat.run',
     phase: 'combat',
     /** @param {any} c @param {number} dt */
     step(c, dt) {
       st.tick++;
-      if (st.comboT > 0) st.comboT -= dt;
+      const sf = styleStep(style, dt);
+      if (sf !== 0) comboEvent((sf & 1) !== 0);
+      st.comboCount = style.count;
+      st.comboT = style.gapT;
       const list = c.ents.all();
       for (let i = 0; i < list.length; i++) {
         const e = list[i];
@@ -2181,7 +2242,10 @@ export function createCombatEngine(ctx) {
         combat.damage(REQ, RES);
       }
       const src = e.sourceId ? ctx.ents.get(e.sourceId) : null;
-      if (src && isPlayer(src)) combat.addSurge(src, CB.slam.surge);
+      if (src && isPlayer(src)) {
+        combat.addSurge(src, CB.slam.surge);
+        styleReward(src, STYLE.slam);
+      }
       const w = ctx.world;
       if (w) {
         const radius = Math.min(CB.crater.deformRadius - 0.5, Math.max(1.5, e.speed / 9));
@@ -2205,5 +2269,5 @@ export function createCombatEngine(ctx) {
     },
   };
 
-  return { combat, runSystem, on, recList, recOf, reset, defOf, state: st, airborne };
+  return { combat, runSystem, on, recList, recOf, reset, defOf, state: st, airborne, style };
 }

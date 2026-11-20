@@ -3,6 +3,7 @@
  * invulnerability, crit multiplier, difficulty, poise break and refill, event order, Form multipliers once,
  * Second Breath.
  */
+import { STYLE } from '../../src/combat/logic/style.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeCtx } from './fakeCtx.mjs';
@@ -91,7 +92,8 @@ test('perfect guard: no damage, attacker staggered 0.8 s, +8 Surge', () => {
   assert.equal(p.stats.hp, p.stats.hpMax);
   assert.equal(e.combat.state, 'stagger');
   assert.ok(Math.abs(e.combat.staggerT - BALANCE.tech.guard.perfect.attackerStagger) < 1e-9);
-  assert.equal(p.combat.surge, BALANCE.surge.perfect);
+  // +8 for the perfect defence, plus the style reward for reaching the first rank (logic/style.js).
+  assert.equal(p.combat.surge, BALANCE.surge.perfect + STYLE.surgePerRank);
   assert.equal(h.of('combat:perfect')[0].kind, 'guard');
 });
 

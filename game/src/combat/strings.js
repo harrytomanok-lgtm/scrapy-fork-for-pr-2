@@ -7,6 +7,12 @@
 
 /** @type {Array<[string, string, string]>} [key, en, he] */
 const ROWS = [
+  // Style ranks of the combo counter (logic/style.js STYLE.rankIds), lowest first.
+  ['combat.rank.glint', 'Glint', 'נצנוץ'],
+  ['combat.rank.gleam', 'Gleam', 'הבהק'],
+  ['combat.rank.blaze', 'Blaze', 'בערה'],
+  ['combat.rank.radiant', 'Radiant', 'זוהר'],
+  ['combat.rank.dawn', 'Dawnbright', 'אור השחר'],
   ['tech.strike_string.desc', 'A rapid string of strikes. The first lunges to your target; from the second hit you can cancel into any technique.', 'שרשרת מכות מהירה. המכה הראשונה מזנקת אל המטרה; מהמכה השנייה אפשר לעבור לכל טכניקה.'],
   ['tech.breaker.desc', 'Hold Attack: launch a grounded enemy into the sky. After three string hits it smashes them away instead.', 'החזקת התקפה מעיפה אויב מהקרקע אל השמיים. אחרי שלוש מכות בשרשרת היא הודפת אותו הצידה.'],
   ['tech.meteor_heel.desc', 'Breaker in the air: drive the enemy into the ground hard enough to leave a crater.', 'שובר באוויר: ריסוק האויב אל הקרקע בעוצמה שמשאירה מכתש.'],
