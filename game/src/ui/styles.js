@@ -613,6 +613,7 @@ export const UI_CSS = `
   .ui-resbig{font-size:1.5rem}
 }
 @media (max-width:760px){.ui-tabs .ui-tab.ui-hasico:not(.ui-sel) span{display:none}.ui-tabs .ui-tab.ui-hasico:not(.ui-sel){flex:0 0 48px}}
+@media (max-width:420px){.ui-tabs .ui-tab.ui-hasico span{display:none}.ui-tabs .ui-tab.ui-hasico,.ui-tabs .ui-tab.ui-hasico.ui-sel{flex:1 1 0;min-inline-size:40px}}
 .ui-looks .ui-slot{align-items:center;min-block-size:0;padding-block:6px}
 .ui-looks .ui-li-title,.ui-looks .ui-li-sub{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 .ui-looks .ui-li-sub{font-size:var(--fs-small);line-height:1.2}
