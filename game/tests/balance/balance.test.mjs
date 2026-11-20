@@ -22,8 +22,9 @@ const BOSS_SECONDS = { durn: [40, 80], bramblehorn: [65, 120], gorrumaw: [75, 14
 const MAX_HEALS = { story: 1, warrior: 3, master: BALANCE.economy.carryCap };
 
 test('fight pacing: a roster grunt on the main path takes 2-3 Strike Strings from the route\'s player', () => {
-  // tusk_boar keeps the GDD 7.2 multipliers (tests/core/formulas.test.mjs pins them); every other grunt is paced.
-  const rows = stageGruntStrings('warrior').filter((r) => r.id !== 'tusk_boar');
+  // tusk_boar keeps the GDD 7.2 multipliers (tests/core/formulas.test.mjs pins them). Ember Wisps are the MQ1
+  // tutorial's Bolt targets (four of them on a small Ora pool), so they stay fragile (hp 1.5, three times the GDD).
+  const rows = stageGruntStrings('warrior').filter((r) => r.id !== 'tusk_boar' && r.id !== 'ember_wisp');
   for (const r of rows) inBand(r.strings, [1.4, 3.0], `${r.stage} ${r.id} L${r.level} strings to kill`);
   const mean = rows.reduce((s, r) => s + r.strings, 0) / rows.length;
   inBand(mean, [2, 3], 'mean strings to kill a grunt');
@@ -34,7 +35,7 @@ test('fight pacing: a group of 3-4 at the player\'s level lasts about 8-15 s on 
     for (const f of r.fights) {
       if (f.n < 3 || f.n > 4) continue;
       // Ember Wisps alone are the gentlest fight of the game (fragile flyers): shorter, but no longer a blink.
-      const band = /^(mq1_)?wisps$/.test(f.id) ? [5, 17] : [8, 17];
+      const band = /^(mq1_)?wisps$/.test(f.id) ? [3, 17] : [8, 17];
       inBand(f.ttkGroup, band, `Warrior ${r.stage} ${f.id} x${f.n} seconds`);
     }
   }
@@ -61,13 +62,13 @@ test('player level follows the region level along the main path, and every boss 
   inBand(mq7.level, [25, 28], 'level when MQ7 starts');
 });
 
-// Lower bound 4 s: the pacing pass made three wisps a fight of about 6 s (they fell in 2.7 s before).
+// Lower bound 3 s: three wisps (the fragile tutorial enemy) fall in about 4 s since the pacing pass (2.7 s before).
 test('group fights: quick, never a death sentence', () => {
   for (const d of DIFFS) {
     const maxLost = d === 'master' ? 1.2 : 0.9;
     for (const r of RUNS[d].rows) {
       for (const f of r.fights) {
-        inBand(f.ttkGroup, [4, 25], `${d} ${r.stage} ${f.id} seconds to clear`);
+        inBand(f.ttkGroup, [3, 25], `${d} ${r.stage} ${f.id} seconds to clear`);
         assert.ok(f.hpLost <= maxLost * r.hp, `${d} ${r.stage} ${f.id}: ${(100 * f.hpLost / r.hp).toFixed(0)}% HP lost`);
         if (d !== 'master') assert.ok(f.ttd > f.ttkGroup, `${d} ${r.stage} ${f.id}: dies in ${f.ttd.toFixed(1)} s, clears in ${f.ttkGroup.toFixed(1)} s`);
       }

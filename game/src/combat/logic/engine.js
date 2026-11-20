@@ -58,7 +58,7 @@ const THREAT_RANGE = 60;
  */
 const AIM = Object.freeze({
   meleeRange: CB.softLock.meleeRange, oraRange: CB.softLock.oraRange, coneDeg: CB.softLock.coneDeg,
-  closeRange: 6, meleeDown: 4, airBand: 10, oraBand: 60, keepRatio: 0.9, relockRange: 40,
+  closeRange: 6, oraClose: 14, meleeDown: 4, airBand: 10, oraBand: 60, keepRatio: 0.9, relockRange: 40,
 });
 
 /** @param {string} s */
@@ -1366,7 +1366,7 @@ export function createCombatEngine(ctx) {
       const sm = intentScore(dx, dy, dz, sx, sz, sw, CAMD.x, CAMD.z, SL.meleeRange, SL.coneDeg, mUp, mDown, SL.closeRange);
       if (sm >= 0 && sm < bestMS) { bestMS = sm; bestM = e; }
       if (e.id === st.softMelee) curMS = sm;
-      const so = intentScore(dx, dy, dz, sx, sz, sw, CAMD.x, CAMD.z, SL.oraRange, SL.coneDeg, SL.oraBand, SL.oraBand, SL.closeRange);
+      const so = intentScore(dx, dy, dz, sx, sz, sw, CAMD.x, CAMD.z, SL.oraRange, SL.coneDeg, SL.oraBand, SL.oraBand, SL.oraClose);
       if (so >= 0 && so < bestOS) { bestOS = so; bestO = e; }
       if (e.id === st.softOra) curOS = so;
     }

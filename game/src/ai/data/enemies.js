@@ -164,7 +164,7 @@ export const GROUPS = [
   { id: 'siphon_wave_2', members: [{ enemy: 'choir_acolyte', count: 2 }, { enemy: 'choir_caster', count: 2 }] },
   { id: 'camp_choir_small', members: [{ enemy: 'choir_acolyte', count: 2 }, { enemy: 'choir_caster', count: 1 }] },
   { id: 'camp_choir_large', members: [{ enemy: 'choir_acolyte', count: 4 }, { enemy: 'choir_caster', count: 2 }] },
-  { id: 'camp_beasts', members: [{ enemy: 'tusk_boar', count: 2 }, { enemy: 'ember_wisp', count: 2 }] },
+  { id: 'camp_beasts', members: [{ enemy: 'tusk_boar', count: 3 }, { enemy: 'ember_wisp', count: 1 }] },
   // Region camp groups (additions: the beasts of each region band).
   { id: 'camp_coast', members: [{ enemy: 'scuttlecrab', count: 2 }, { enemy: 'choir_caster', count: 1 }] },
   { id: 'camp_thornwood', members: [{ enemy: 'bramble_boar', count: 2 }, { enemy: 'choir_acolyte', count: 2 }] },

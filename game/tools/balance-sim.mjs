@@ -103,7 +103,7 @@ export const STAGES = [
     fights: [{ id: 'mq1_wisps', members: [['ember_wisp', 4]], level: 1 }, { id: 'mq1_boars', members: [['tusk_boar', 2]], level: 1 }] },
   { id: 'Meadows', minute: 12, region: 'meadows', t: 0.3, unlocks: ['flare_barrage'],
     gear: [['training_wraps', 1], ['apprentice_garb', 1], ['wind_charm', 4]],
-    fights: [{ id: 'wisps', members: [['ember_wisp', 3]] }, { id: 'boars', members: [['tusk_boar', 2]] }, { id: 'camp_beasts', members: [['tusk_boar', 2], ['ember_wisp', 2]] },
+    fights: [{ id: 'wisps', members: [['ember_wisp', 3]] }, { id: 'boars', members: [['tusk_boar', 2]] }, { id: 'camp_beasts', members: [['tusk_boar', 3], ['ember_wisp', 1]] },
       { id: 'camp_choir_small', members: [['choir_acolyte', 2], ['choir_caster', 1]] }] },
   { id: 'MQ2', minute: 22, region: 'meadows', t: 0.5, unlocks: ['flare_barrage'],
     gear: [['racers_wraps', 3], ['meadow_garb', 3], ['wind_charm', 4], ['sunfruit_charm', 3]],
