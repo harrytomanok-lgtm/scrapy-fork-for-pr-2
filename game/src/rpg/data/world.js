@@ -5,6 +5,7 @@
  */
 
 import { BALANCE } from '../../core/balance.js';
+import { spireCircuit } from './challenges.js';
 
 /** @param {string} id @param {object} home @param {object} [o] */
 const npc = (id, home, o) => Object.assign({ id, specId: 'npc_' + id, home, idleDialogue: id + '_idle', voicePitch: 300 }, o || {});
@@ -65,4 +66,4 @@ export const COURSES = [{
     { x: -1235, z: 1240, alt: 14 }, { x: -1215, z: 1185, alt: 18 },
   ],
   medals: Object.assign({}, BALANCE.world.race.windmill_run), goldReward: 'ember_charm',
-}];
+}, spireCircuit()];

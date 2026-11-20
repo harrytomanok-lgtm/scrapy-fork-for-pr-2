@@ -1,3 +1,4 @@
+import { TRIALS } from '../../src/rpg/data/challenges.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -33,7 +34,9 @@ test('defs.validate passes with the rpg content over the stand-ins', () => {
 
 test('every id of IDS for the kinds rpg owns is defined, and nothing extra', () => {
   for (const kind of ['item', 'shop', 'lootTable', 'npc', 'quest', 'object', 'course']) {
-    const ids = MINE[kind].map((d) => d.id).sort();
+    // The post-ending trial course (rpg/data/challenges) is content outside IDS, like the ai technique ids.
+    const extra = kind === 'course' ? Object.values(TRIALS).filter((t) => t.course).map((t) => t.course) : [];
+    const ids = MINE[kind].map((d) => d.id).filter((id) => extra.indexOf(id) < 0).sort();
     assert.deepEqual(ids, IDS[kind].slice().sort(), kind);
   }
 });

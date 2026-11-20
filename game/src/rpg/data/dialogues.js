@@ -46,12 +46,26 @@ function idle(npc, shop) {
   return { id: npc + '_idle', start: 'n1', nodes };
 }
 
+import { RINGSTONES, REMATCH, TRIALS } from './challenges.js';
+
 const S = 'sela';
 const T = 'tavi';
 
 export const DIALOGUES = [
   // MQ1 "The Spark": spoken by the tutorial scripts, two lines at most per box (GDD 8.4).
-  seq('mq1_post', [[S, 'mq1.l01'], [T, 'mq1.l02'], [S, 'mq1.l03']]),
+  seq('mq1_post', [[S, 'mq1.l01'], [T, 'mq1.l02']]),
+  seq('mq1_post_hit', [[S, 'mq1.l03']]),
+  // A returning player (MQ1 done in an earlier journey) may skip the training: the first choice keeps it.
+  {
+    id: 'mq1_skip', start: 'n1',
+    nodes: {
+      n1: { speaker: S, text: 'mq1.skip.l01', next: null, choices: [
+        { text: 'rpg.choice.train', next: 'train' },
+        { text: 'rpg.choice.skipTut', next: null, actions: [{ op: 'script', script: 'skip_tutorial' }] },
+      ] },
+      train: { speaker: S, text: 'mq1.l01', next: null },
+    },
+  },
   seq('mq1_wake', [[S, 'mq1.l04'], [T, 'mq1.l05'], [S, 'mq1.l06']]),
   seq('mq1_rings', [[T, 'mq1.l07'], [S, 'mq1.l08']]),
   seq('mq1_wisps', [[S, 'mq1.l09']]),
@@ -100,4 +114,25 @@ export const DIALOGUES = [
   idle('sela', null), idle('kerrin', null), idle('dov', 'dov_stall'), idle('mira', null), idle('ilan', null), idle('rina', null),
   idle('gal', null), idle('eli', 'aster_market'), idle('bren', null), idle('talia', 'talia_herbs'), idle('yael', 'yael_outpost'),
   idle('oren', 'ridgerest_provisions'), idle('noa', null),
+  // The Ringstone menu (rpg/challenges): rest, travel to an attuned stone, and after the ending the rematches and trials.
+  {
+    id: 'ringstone_menu', start: 'n1',
+    nodes: {
+      n1: { speaker: 'system', text: 'rpg.rs.menu', next: null, choices: [
+        { text: 'rpg.rs.rest', next: null },
+        { text: 'rpg.rs.travel', next: 'travel' },
+        { text: 'rpg.rs.rematch', next: 'rematch', if: { flag: 'credits' } },
+        { text: 'rpg.rs.trials', next: 'trials', if: { flag: 'credits' } },
+      ] },
+      travel: { speaker: 'system', text: 'rpg.rs.travelPick', next: null, choices: RINGSTONES.map((id) => (
+        { text: 'landmark.' + id + '.name', next: null, if: { flag: 'attuned.ringstone_' + id }, actions: [{ op: 'script', script: 'travel_' + id }] }))
+        .concat([{ text: 'rpg.choice.back', next: 'n1' }]) },
+      rematch: { speaker: 'system', text: 'rpg.rs.rematchPick', next: null, choices: Object.keys(REMATCH.bosses).map((id) => (
+        { text: 'enemy.' + id + '.name', next: null, actions: [{ op: 'script', script: 'rematch_' + id }] }))
+        .concat([{ text: 'rpg.choice.back', next: 'n1' }]) },
+      trials: { speaker: 'system', text: 'rpg.rs.trialPick', next: null, choices: Object.keys(TRIALS).map((id) => (
+        { text: 'rpg.' + id, next: null, actions: [{ op: 'script', script: id }] }))
+        .concat([{ text: 'rpg.choice.back', next: 'n1' }]) },
+    },
+  },
 ];

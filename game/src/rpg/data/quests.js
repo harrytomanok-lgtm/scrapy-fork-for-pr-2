@@ -76,8 +76,9 @@ export const QUESTS = [
       { id: 's1', type: 'talk', npc: 'bren', dialogue: 'mq4_bren', marker: { npc: 'bren' },
         onComplete: [{ op: 'unlockTech', tech: 'dawn_lance', slot: 1 }] },
       { id: 's2', type: 'useTechnique', tech: 'dawn_lance', count: 3, targetTag: 'saltglass_pillar', marker: { object: 'saltglass_pillar' } },
+      // Bren's thanks for holding the beacon (a reward between the Dawn Lance and the Siphon: the reward-cadence gap).
       { id: 's3', type: 'kill', tag: 'mq4_wave', count: 8, marker: { landmark: 'tide_beacon' },
-        onStart: [{ op: 'script', script: 'mq4_wave' }] },
+        onStart: [{ op: 'script', script: 'mq4_wave' }], onComplete: [{ op: 'giveItem', item: 'saltglass_wraps', level: 7 }] },
       { id: 's4', type: 'destroy', object: 'siphon_3', marker: { landmark: 'siphon_3' } },
       { id: 's5', type: 'talk', npc: 'bren', dialogue: 'mq4_bren_end', marker: { npc: 'bren' } },
     ],
@@ -98,7 +99,8 @@ export const QUESTS = [
     id: 'mq6', kind: 'main', order: 6, giver: 'noa', prereq: { quests: ['mq2'] },
     steps: [
       { id: 's1', type: 'talk', npc: 'noa', dialogue: 'mq6_noa', marker: { npc: 'noa' } },
-      { id: 's2', type: 'interact', objects: ['bell_1', 'bell_2', 'bell_3'] },
+      // The bells answer with the monastery's charm (a reward on the long climb to Iskra: the reward-cadence gap).
+      { id: 's2', type: 'interact', objects: ['bell_1', 'bell_2', 'bell_3'], onComplete: [{ op: 'giveItem', item: 'stillwind_charm', level: 20 }] },
       { id: 's3', type: 'goto', landmark: 'paleglass_summit', radius: 100, marker: { landmark: 'paleglass_summit' } },
       { id: 's4', type: 'defeat', boss: 'iskra', marker: { landmark: 'paleglass_summit' }, onStart: [{ op: 'startBoss', boss: 'iskra' }] },
       { id: 's5', type: 'talk', npc: 'noa', dialogue: 'mq6_noa_end', marker: { npc: 'noa' }, onComplete: [{ op: 'unlockForm', form: 'tempest' }] },

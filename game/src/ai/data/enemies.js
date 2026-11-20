@@ -45,7 +45,7 @@ const PARAMS = {
   tusk_boar: { sight: 32, leash: 70, engage: 12, prefer: [8, 16], strafe: 0.3, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 8 },
   bramble_boar: { sight: 36, leash: 75, engage: 12, prefer: [8, 16], strafe: 0.3, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 8.5 },
   choir_acolyte: { sight: 45, leash: 80, engage: 6, prefer: [1.5, 3], strafe: 0.5, guardChance: E.choir_acolyte.guardChance, fleeHp: 0.18, jumpAtFlyer: true },
-  choir_caster: { sight: 50, leash: 85, engage: 22, prefer: [E.choir_caster.keepRange - 7, E.choir_caster.keepRange + 5], strafe: 0.8, guardChance: 0, fleeHp: 0.2, hover: 3.5, jumpAtFlyer: false },
+  choir_caster: { sight: 50, leash: 85, engage: 22, prefer: [E.choir_caster.keepRange - 7, E.choir_caster.keepRange + 5], strafe: 0.8, guardChance: 0, fleeHp: 0.2, hover: 3.5, jumpAtFlyer: false, backline: 4 },
   scuttlecrab: { sight: 28, leash: 60, engage: 5, prefer: [1.5, 3], strafe: 0.6, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 5.5 },
   rust_golem: { sight: 40, leash: 70, engage: 8, prefer: [2, 4], strafe: 0.2, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 5 },
   frost_harrier: { sight: 60, leash: 110, engage: 16, prefer: [12, 26], strafe: 1, guardChance: 0, fleeHp: 0, hover: 16, jumpAtFlyer: false, flySpeed: 18 },
@@ -68,6 +68,21 @@ function roster() {
     return d;
   });
 }
+
+/**
+ * Camp elites (the experience pass): one member of every camp is an elite, its leader (the member with the most HP).
+ * Larger and ringed in the rare-loot colour, tougher, with one extra move, and a better reward (rpg: XP and the
+ * elite loot table). Multipliers apply to the base enemy at its level.
+ */
+export const ELITE = Object.freeze({ hp: 2.4, dmg: 1.2, poise: 1.6, scale: 1.25, xp: 3, color: PALETTE.rarity.rare });
+/** The elite's extra move per enemy. */
+export const ELITE_MOVE = Object.freeze({
+  tusk_boar: 'elite_quake', bramble_boar: 'elite_quake', choir_acolyte: 'elite_quake', scuttlecrab: 'elite_quake', rust_golem: 'elite_quake',
+  choir_vanguard: 'elite_quake', ember_wisp: 'elite_fan', choir_caster: 'elite_fan', frost_harrier: 'elite_fan',
+});
+
+/** Metres from the arena centre where a boss Retry puts the player. */
+const RETRY_NEAR = 26;
 
 /** Phase technique tables of the five bosses (GDD 7.3). */
 const BOSS_PHASES = {
@@ -125,7 +140,8 @@ export function bosses() {
     const b = B[id];
     const d = {
       id, enemyId: id, level: b.level, hpMult: b.hpMult, poise: b.poise,
-      arena: { landmarkId: b.arena.landmarkId, radius: b.arena.radius, retry: { dx: 0, dz: Math.round(b.arena.radius * 0.6) } },
+      // The retry point is close to the fight (a few seconds' run), inside the arena so the fight restarts at once.
+      arena: { landmarkId: b.arena.landmarkId, radius: b.arena.radius, retry: { dx: 0, dz: Math.round(Math.min(b.arena.radius * 0.6, RETRY_NEAR)) } },
       phases: BOSS_PHASES[id].map((ph, i) => {
         const p = { hpBelow: b.phases[i], techs: ph.techs.map((t) => ({ id: t.id, weight: t.weight })) };
         if (ph.speedMult) p.speedMult = ph.speedMult;

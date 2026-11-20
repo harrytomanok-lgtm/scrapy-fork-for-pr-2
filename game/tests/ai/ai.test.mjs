@@ -8,7 +8,7 @@ import { createStream } from '../../src/core/rng.js';
 import { standinDefs } from '../../src/standins/content.js';
 import { playerTechniques } from '../../src/combat/data/techniques.js';
 import { aiTechniques } from '../../src/ai/data/techniques.js';
-import { enemies, bosses, GROUPS, SPAWN_TABLES } from '../../src/ai/data/enemies.js';
+import { enemies, bosses, GROUPS, SPAWN_TABLES, ELITE, ELITE_MOVE } from '../../src/ai/data/enemies.js';
 import { AI_STRINGS } from '../../src/ai/strings.js';
 import { createDirector, tokenLimits } from '../../src/ai/logic/director.js';
 import { createBrain, createSense, techEntries, think, started, pickTech } from '../../src/ai/logic/brain.js';
@@ -498,4 +498,31 @@ test('body removal ignores entities ai did not spawn', () => {
   assert.deepEqual(removed, [mine.id]);
   assert.equal(other.alive, true);
   assert.equal(obj.alive, true);
+});
+
+test('camp elites: every camp leader has an extra telegraphed move it does not already have', () => {
+  const techs = new Map(aiTechniques().map((t) => [t.id, t]));
+  const defs = new Map(enemies().map((e) => [e.id, e]));
+  assert.ok(ELITE.hp > 1 && ELITE.scale > 1 && ELITE.xp > 1);
+  for (const tbl of SPAWN_TABLES) {
+    for (const row of tbl.camps) {
+      const g = GROUPS.find((x) => x.id === row.group);
+      let leader = null;
+      for (const m of g.members) if (!leader || defs.get(m.enemy).mult.hp > defs.get(leader).mult.hp) leader = m.enemy;
+      const mv = ELITE_MOVE[leader];
+      assert.ok(mv && techs.has(mv), row.group + ' leader ' + leader + ' has an elite move');
+      assert.ok(!defs.get(leader).techs.includes(mv), mv + ' is new for ' + leader);
+      assert.ok(['white', 'red', 'violet'].includes(techs.get(mv).telegraph.kind));
+    }
+  }
+});
+
+test('every boss phase after the first brings a pattern the phase before did not have', () => {
+  for (const b of bosses()) {
+    for (let i = 1; i < b.phases.length; i++) {
+      const before = new Set(b.phases[i - 1].techs.map((t) => t.id));
+      const fresh = b.phases[i].techs.filter((t) => !before.has(t.id) && t.weight > 0);
+      assert.ok(fresh.length > 0 || b.phases[i].summon || b.phases[i].onEnter, b.id + ' phase ' + (i + 1) + ' is new');
+    }
+  }
 });

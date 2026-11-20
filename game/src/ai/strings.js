@@ -6,6 +6,18 @@
 
 /** @type {Array<[string, string, string]>} [key, en, he] */
 const ROWS = [
+  // Camp elites' names (a camp's leader).
+  ['enemy.ember_wisp.elite', 'Ember Wisp Matriarch', 'אם רוחות הגחלת'],
+  ['enemy.tusk_boar.elite', 'Old Tusk, Herd Leader', 'החט הזקן, מוביל העדר'],
+  ['enemy.bramble_boar.elite', 'Thornback Boar', 'חזיר גב־הקוצים'],
+  ['enemy.choir_acolyte.elite', 'Choir Cantor', 'חזן המקהלה'],
+  ['enemy.choir_caster.elite', 'Choir Highcaster', 'מכשף־העל של המקהלה'],
+  ['enemy.scuttlecrab.elite', 'Ironshell Crab', 'סרטן שריון־הברזל'],
+  ['enemy.rust_golem.elite', 'Rust Colossus', 'ענק החלודה'],
+  ['enemy.frost_harrier.elite', 'Rime Harrier', 'נץ הכפור הלבן'],
+  ['enemy.choir_vanguard.elite', 'Vanguard Captain', 'סרן החלוצים'],
+  ['tech.elite_quake.name', 'Leader\'s Quake', 'רעידת המנהיג'],
+  ['tech.elite_fan.name', 'Fan of Embers', 'מניפת גחלים'],
   ['boss.durn.intro', 'Durn: "The Choir takes what it is owed."', 'דורן: "המקהלה לוקחת את מה שמגיע לה."'],
   ['boss.bramblehorn.intro', 'The hollow shakes. Something huge wakes in the brambles.', 'השקע רועד. משהו עצום מתעורר בין שיחי הסנה.'],
   ['boss.bramblehorn.phase2', 'Bramblehorn rages', 'קרן הסנה משתולל'],

@@ -294,6 +294,47 @@ const LIST = [
       assert.equal(r.nextDay.populated, true, 'refills a day later');
     },
   },
+  {
+    // A camp's leader is an elite: tougher than its kin, ringed in the rare colour, with its extra move, paying more.
+    name: 'ai-camp-elite',
+    width: 412, height: 915, query: 'hour=10&res=1&quality=low',
+    async run({ game, assert, shot }) {
+      await opening(game, assert, { level: 6 });
+      const r = await game((g) => {
+        g.god(true);
+        const p = g.ctx.player;
+        let best = null;
+        for (const c of g.cmd.aiCamps()) {
+          const d = Math.hypot(c.x - p.pos.x, c.z - p.pos.z);
+          if (c.regionId === 'meadows' && (!best || d < best.d)) best = { c, d };
+        }
+        const camp = best.c;
+        g.teleport(camp.x + 16, camp.z + 4, { yaw: Math.atan2(-16, -4) });
+        g.ambient(true);
+        g.step(40);
+        g.ambient(false);
+        const near = g.ctx.ents.list('enemy').filter((e) => e.alive && Math.hypot(e.pos.x - camp.x, e.pos.z - camp.z) < 30);
+        const elites = near.filter((e) => (e.tags & 8) !== 0);
+        const el = elites[0];
+        const kin = el ? near.find((e) => e !== el && e.defId === el.defId) : null;
+        const techs = el && el.brain ? el.brain.techs.map((t) => t.id) : [];
+        return { camp: camp.id, n: near.length, elites: elites.length, def: el && el.defId, hp: el && el.stats.hpMax, kinHp: kin && kin.stats.hpMax, techs, id: el && el.id };
+      });
+      await game((g, id) => { g.lock(id); g.step(10); }, r.id);
+      await shot('ai-camp-elite');
+      const k = await game((g, id) => {
+        const xp0 = g.ctx.rpg.level * 1e6 + g.ctx.rpg.xp;
+        g.kill(id);
+        g.step(5);
+        return { gained: g.ctx.rpg.level * 1e6 + g.ctx.rpg.xp - xp0 };
+      }, r.id);
+      console.log('    ' + JSON.stringify({ r, k }));
+      assert.equal(r.elites, 1, 'one elite per camp');
+      if (r.kinHp) assert.ok(r.hp > r.kinHp * 2, 'the elite is tougher than its kin');
+      assert.ok(r.techs.includes('elite_quake') || r.techs.includes('elite_fan'), 'the elite has its extra move');
+      assert.ok(k.gained > 0, 'the elite pays XP');
+    },
+  },
   ...['durn', 'bramblehorn', 'gorrumaw', 'iskra', 'vorrhal'].map((bossId) => ({
     name: 'ai-boss-' + bossId,
     width: 640,

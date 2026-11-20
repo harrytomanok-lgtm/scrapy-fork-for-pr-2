@@ -17,8 +17,11 @@ import { createDirector } from './logic/director.js';
 import { createBrain, createSense, techEntries, think, started } from './logic/brain.js';
 import { pickEntry, enemyLevel, campAvailable, phaseFor, createPendingBoss } from './logic/spawning.js';
 import { registerAiScripts } from './scripts.js';
+import { ELITE, ELITE_MOVE } from './data/enemies.js';
 
 const BODY_SECONDS = 1.5;
+/** Seconds of boss intro left after the player skips the intro shot (a beat to get the guard up). */
+const INTRO_AFTER_SKIP = 0.5;
 const MAX_BODIES = 128;
 const THINK_EVERY = 6;
 const RING_MIN = 90;
@@ -91,6 +94,8 @@ export function createAi(ctx) {
   let bossEngaged = false;
   /** The boss was held by a quest script while the player was outside the arena: it waits for the player to return. */
   let bossHeld = false;
+  /** Rematch levels by boss id (ai.startBoss opts.level), until the boss is defeated. @type {Map<string, number>} */
+  const bossLevels = new Map();
   /** The intro shot is playing (it ends with the sim-time intro, or when the boss goes). */
   let introPlaying = false;
   /** @type {number[]} */
@@ -256,10 +261,22 @@ export function createAi(ctx) {
       ent.stats.hp = Math.max(1, Math.round(ent.stats.hp * o.hpMult));
       ent.stats.hpMax = ent.stats.hp;
     }
-    ctx.actors.create(ent, def.specId, {});
+    const elite = !!o.elite && def.tier !== 'boss';
+    if (elite) {
+      ent.tags |= TAG.ELITE;
+      ent.nameKey = 'enemy.' + enemyId + '.elite';
+      ent.stats.hp = Math.max(1, Math.round(ent.stats.hp * ELITE.hp));
+      ent.stats.hpMax = ent.stats.hp;
+      ent.stats.poiseMax = Math.round(ent.stats.poiseMax * ELITE.poise);
+      ent.stats.poise = ent.stats.poiseMax;
+      ent.stats.dmgMult *= ELITE.dmg;
+    }
+    ctx.actors.create(ent, def.specId, elite ? { scale: ELITE.scale } : {});
+    if (elite && ctx.actors.rimGlow) ctx.actors.rimGlow(ent, ELITE.color, 0.6);
     ctx.move.initActor(ent, { canFly: flyer, mode: flyer ? 'fly' : 'ground' });
     ctx.combat.initActor(ent);
-    const techs = techEntries(def.techs, (id) => ctx.defs.find('technique', id));
+    const techIds = elite && ELITE_MOVE[enemyId] ? def.techs.concat([ELITE_MOVE[enemyId]]) : def.techs;
+    const techs = techEntries(techIds, (id) => ctx.defs.find('technique', id));
     const b = createBrain(def.brain, params, techs, { x, y: yy, z }, {
       passive: !!o.passive, aggro: !!o.aggro, leash: typeof o.leash === 'number' ? o.leash : undefined, flyer, seed: ent.id, hover: HOVER_RULE,
     });
@@ -286,6 +303,17 @@ export function createAi(ctx) {
     let total = 0;
     for (const m of g.members) if (!allow || allow(m.enemy)) total += m.count;
     let i = 0;
+    // A camp's leader (the member with the most HP) is its elite.
+    let leader = null;
+    if (origin === ORIGIN.camp) {
+      let best = -1;
+      for (const m of g.members) {
+        if (allow && !allow(m.enemy)) continue;
+        const d = ctx.defs.find('enemy', m.enemy);
+        const hp = d && d.mult ? d.mult.hp : 0;
+        if (hp > best) { best = hp; leader = m.enemy; }
+      }
+    }
     for (const m of g.members) {
       if (allow && !allow(m.enemy)) continue;
       const def = ctx.defs.find('enemy', m.enemy);
@@ -294,7 +322,8 @@ export function createAi(ctx) {
         let px = x + Math.sin(a) * radius;
         let pz = z + Math.cos(a) * radius;
         if (ctx.world && ctx.world.findSpot && ctx.world.findSpot(px, pz, 6, SPOT, {})) { px = SPOT.x; pz = SPOT.z; }
-        const so = { aggro: !!o.aggro, questTag: o.questTag, campId: o.campId };
+        const so = { aggro: !!o.aggro, questTag: o.questTag, campId: o.campId, elite: leader === m.enemy };
+        if (leader === m.enemy) leader = null;
         if (typeof o.level === 'number') so.level = def ? enemyLevel(o.level + (m.levelOffset || 0), o.clamp ? def.levels : [1, 99]) : o.level;
         const e = spawnInternal(m.enemy, px, ctx.world ? ctx.world.heightAt(px, pz) : 0, pz, so, undefined, origin);
         if (e) res.push(e.id);
@@ -764,7 +793,7 @@ export function createAi(ctx) {
       hpMult *= 1 + bd.hpPerSiphonStanding * Math.max(0, 5 - ctx.quests.siphonsSilenced());
     }
     const ent = spawnInternal(bd.enemyId, x, ctx.world ? ctx.world.heightAt(x, z) : 0, z,
-      { level: bd.level, aggro: true, leash: bd.arena.radius + BALANCE.bossRules.resetExtra + 40 }, { hpMult, poise: bd.poise }, ORIGIN.boss);
+      { level: bossLevels.get(bd.id) || bd.level, aggro: true, leash: bd.arena.radius + BALANCE.bossRules.resetExtra + 40 }, { hpMult, poise: bd.poise }, ORIGIN.boss);
     if (!ent) return null;
     ent.tags |= TAG.BOSS;
     const b = ent.brain;
@@ -891,7 +920,10 @@ export function createAi(ctx) {
     bossEnded = true;
     pBossEnd.bossId = bossDef ? bossDef.id : pending.pending || '';
     pBossEnd.defeated = defeated;
-    if (defeated) pending.defeat(pBossEnd.bossId);
+    if (defeated) {
+      pending.defeat(pBossEnd.bossId);
+      bossLevels.delete(pBossEnd.bossId);
+    }
     clearBossFog();
     ctx.bus.emit('boss:end', pBossEnd);
   }
@@ -975,7 +1007,11 @@ export function createAi(ctx) {
       despawn(entId);
     },
 
-    /** @param {string} id @param {{ skipIntro?:boolean }} [opts] */
+    /**
+     * @param {string} id
+     * @param {{ skipIntro?:boolean, level?:number }} [opts] `level`: a rematch at another level (kept for the fight's
+     *   restarts until the boss is defeated)
+     */
     startBoss(id, opts) {
       const bd = ctx.defs.find('boss', id);
       if (!bd) {
@@ -985,6 +1021,7 @@ export function createAi(ctx) {
       // Another boss's fight is reset, not dropped: it stays pending and restarts when the player enters its arena.
       if (bossEnt()) ai.resetBoss();
       clearAdds(false);
+      if (opts && typeof opts.level === 'number') bossLevels.set(bd.id, Math.max(1, Math.round(opts.level)));
       return spawnBoss(bd, !!(opts && opts.skipIntro));
     },
 
@@ -1088,6 +1125,7 @@ export function createAi(ctx) {
 
   function reset() {
     spawned.clear();
+    bossLevels.clear();
     bodyCount = 0;
     bossId = 0;
     bossDef = null;
@@ -1163,6 +1201,17 @@ export function createAi(ctx) {
   }
 
   const on = {
+    /**
+     * cine:end. A boss intro shot the player skips also cuts the boss's idle intro short: a skip puts the fight on
+     * at once instead of leaving both waiting out the rest of the 3 s.
+     * @param {any} e
+     */
+    cineEnd(e) {
+      if (!e || !e.skipped || typeof e.id !== 'string' || e.id.indexOf('boss.intro.') !== 0) return;
+      const be = bossEnt();
+      if (be && be.brain && be.brain.introT > INTRO_AFTER_SKIP) be.brain.introT = INTRO_AFTER_SKIP;
+      introPlaying = false;
+    },
     /** @param {any} e actor:died */
     died(e) {
       if ((e.kind !== 'enemy' && e.kind !== 'boss') || !spawned.has(e.entId)) return;

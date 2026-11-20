@@ -9,11 +9,14 @@
 import { createQuestEngine, needOf } from './logic/questEngine.js';
 import { createDialogueRunner } from './logic/dialogue.js';
 import { createActivities } from './activities.js';
+import { BALANCE } from '../core/balance.js';
 
 const NPC_RANGE = 300;
 const NPC_DESPAWN = 330;
 const FOCUS_RADIUS = 3;
 const FOCUS_RADIUS_FLY = 6;
+/** Seconds between the lines of a bark (a dialogue said as toasts while play goes on). */
+const BARK_GAP = 2.6;
 
 /**
  * @param {any} ctx
@@ -42,6 +45,8 @@ export function createQuests(ctx, rpgInternals) {
   let lastTechId = '';
   let tickN = 0;
   let loaded = false;
+  /** Bumped whenever the world is cleared, so pending bark lines of an earlier journey are dropped. */
+  let worldGen = 0;
   const spot = { x: 0, y: 0, z: 0, yaw: 0 };
   const tgt = { x: 0, z: 0 };
   const pFocus = { id: null, kind: null, promptKey: null };
@@ -186,8 +191,33 @@ export function createQuests(ctx, rpgInternals) {
       say(id) {
         return quests.talk(id, {});
       },
+      /**
+       * Speak a linear dialogue without stopping play: each line is a toast "Speaker: line", BARK_GAP seconds of sim
+       * time apart (lines still pending when the step ends are dropped). For lines said in the middle of the action.
+       * @param {string} id
+       */
+      bark(id) {
+        const d = ctx.defs.find('dialogue', id);
+        if (!d || !d.nodes) return;
+        const g = worldGen;
+        let nid = d.start;
+        for (let k = 0; nid && d.nodes[nid] && k < 6; k++) {
+          const n = d.nodes[nid];
+          if (k === 0) barkLine(n);
+          else api.wait(k * BARK_GAP).then(() => {
+            if (g === worldGen && (!rt.finished || rt.free)) barkLine(n);
+          });
+          nid = n.next;
+        }
+      },
     };
     return api;
+  }
+
+  /** @param {any} node a dialogue node shown as a toast */
+  function barkLine(node) {
+    const who = node.speaker === 'tavi' ? 'core.player.name' : 'npc.' + node.speaker + '.name';
+    ctx.bus.emit('ui:toast', { key: 'rpg.bark', args: { who: ctx.i18n.t(who), line: ctx.i18n.t(node.text) }, kind: 'info' });
   }
 
   // ------------------------------------------------------------------ dialogue
@@ -477,6 +507,15 @@ export function createQuests(ctx, rpgInternals) {
     advance(choiceIndex) {
       runner.advance(choiceIndex);
     },
+    /**
+     * Skip the rest of the open dialogue (its actions still run); stops at a choice, which stays the player's.
+     * For a Skip button on the dialogue screen. Returns false when no dialogue is open.
+     */
+    skipDialogue() {
+      if (!runner.open) return false;
+      runner.skip();
+      return true;
+    },
     get dialogueOpen() {
       return runner.open;
     },
@@ -524,6 +563,18 @@ export function createQuests(ctx, rpgInternals) {
     },
     objects() {
       return activities.objects();
+    },
+    /**
+     * Travel to an attuned Ringstone (for the map screen): false when it is not attuned or the player is in a fight,
+     * a boss arena, a race or a dialogue. @param {string} ringstoneId e.g. 'ringstone_tide_beacon'
+     */
+    travel(ringstoneId) {
+      if (runner.open) return false;
+      return activities.travel(ringstoneId);
+    },
+    /** The Ora-shard counter and markers for the map screen (see activities.shards). */
+    shards() {
+      return activities.shards();
     },
 
     /** The entity id of a spawned NPC, or 0 (debug, tests, scripts). @param {string} npcId */
@@ -630,6 +681,45 @@ export function createQuests(ctx, rpgInternals) {
     }
   }
 
+  /**
+   * Skip the MQ1 training (offered to a returning player): what MQ1 grants is granted (Gather, the Awakening,
+   * flight, the step XP), the tutorial's scripts and enemies go, the player arrives at the Sparkstead Ringstone and
+   * attunes it, and MQ1's last step completes, so its reward runs and MQ2 starts as in a played-through opening.
+   */
+  function skipTutorial() {
+    const q = Q();
+    const a = q.active.mq1;
+    const def = ctx.defs.find('quest', 'mq1');
+    if (!a || !def) return;
+    const s = S();
+    const p = player();
+    ctx.rpg.unlockTech('gather');
+    if (!s.player.awakened) ctx.rpg.awaken();
+    s.player.canFly = true;
+    if (p) ctx.move.setCanFly(p, true);
+    for (const k of Array.from(runtime.keys())) if (k === 'mq1' || k.indexOf('script:mq1') === 0 || k.indexOf('script:tut') === 0) teardown(k);
+    if (ctx.ai) {
+      const list = ctx.ents.list('enemy');
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].questTag && String(list[i].questTag).indexOf('mq1_') === 0) ctx.ai.despawn(list[i].id);
+    }
+    if (a.step < def.steps.length - 1) ctx.rpg.grantXp(BALANCE.quests.mq1.stepXp, 'quest');
+    const rs = activities.record('ringstone_sparkstead');
+    if (p && rs) {
+      ctx.move.teleport(p, rs.x, ctx.world.heightAt(rs.x, rs.z), rs.z, p.yaw);
+      ctx.move.setMode(p, 'ground');
+    }
+    ctx.bus.emit('tutorial:prompt', { action: null, textKey: null });
+    a.step = def.steps.length - 1;
+    activities.attune('ringstone_sparkstead');
+    if (q.active.mq1 === a) engine.completeStep('mq1');
+  }
+
+  // The dialogue action of the skip offer (op 'script', script 'skip_tutorial').
+  scripts.set('skip_tutorial', (c, api) => {
+    api.done();
+    skipTutorial();
+  });
+
   // ------------------------------------------------------------------ focus
 
   /** @param {any} best */
@@ -665,6 +755,7 @@ export function createQuests(ctx, rpgInternals) {
   }
 
   function clearWorld() {
+    worldGen++;
     for (const k of Array.from(runtime.keys())) teardown(k);
     for (const w of waits) w.resolve();
     waits.length = 0;

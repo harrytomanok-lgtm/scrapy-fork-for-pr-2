@@ -246,6 +246,43 @@ test('dialogue: traversal, node and choice actions, conditional choices', () => 
   assert.equal(events.filter((e) => e[0] === 'dialogue:end').length, 2);
 });
 
+test('dialogue: skip runs the remaining actions, stops at a choice, ends a linear dialogue', () => {
+  const events = [];
+  const ran = [];
+  const defs = {
+    lin: { id: 'lin', start: 'a', nodes: {
+      a: { speaker: 'sela', text: 'k.a', next: 'b' },
+      b: { speaker: 'tavi', text: 'k.b', next: 'c', actions: [{ op: 'giveXp' }] },
+      c: { speaker: 'sela', text: 'k.c', next: null, actions: [{ op: 'giveItem' }] },
+    } },
+    ch: { id: 'ch', start: 'a', nodes: {
+      a: { speaker: 'sela', text: 'k.a', next: 'b' },
+      b: { speaker: 'sela', text: 'k.b', choices: [{ text: 'c.1', next: null }, { text: 'c.2', next: null }] },
+    } },
+  };
+  let ended = 0;
+  const r = createDialogueRunner({
+    dialogue: (id) => defs[id] || null,
+    cond: () => true,
+    run: (a) => ran.push(...a.map((x) => x.op)),
+    emit: (t, p) => events.push([t, p]),
+    ended: () => ended++,
+  });
+  assert.ok(r.start('lin', null));
+  r.skip();
+  assert.deepEqual(ran, ['giveXp', 'giveItem'], 'the skipped lines still grant');
+  assert.equal(r.open, false);
+  assert.equal(ended, 1);
+  assert.ok(r.start('ch', null));
+  r.skip();
+  assert.equal(r.open, true, 'a choice is never skipped');
+  assert.equal(r.nodeId, 'b');
+  const line = events.filter((e) => e[0] === 'dialogue:line').at(-1)[1];
+  assert.deepEqual(line.choices.map((c) => c.textKey), ['c.1', 'c.2'], 'the choice is shown');
+  r.skip();
+  assert.equal(r.nodeId, 'b', 'skip at a choice waits for it');
+});
+
 test('activities: medals and the Siphon core cycle (4 s open in every 8 s)', () => {
   const m = { bronze: 75, silver: 55, gold: 42 };
   assert.equal(medalFor(40, m), 'gold');

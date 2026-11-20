@@ -8,6 +8,7 @@
 
 import { BALANCE } from '../core/balance.js';
 import * as F from '../core/formulas.js';
+import { TAG } from '../core/ents.js';
 import * as P from './logic/progression.js';
 import * as I from './logic/inventory.js';
 import { gearPool, rollLoot } from './logic/loot.js';
@@ -15,6 +16,15 @@ import { gearPool, rollLoot } from './logic/loot.js';
 const PICKUP_LIFE = 120;
 const PICKUP_SPEED = 16;
 const COLLECT_RADIUS = 1.4;
+/** XP multiplier of a camp elite. */
+const ELITE_XP = 3;
+/**
+ * Flying pickups up: in flight the magnet reaches further and pulls faster than the flight speed, and the pickup is
+ * taken within a wider radius, so a pass at speed collects what it brushes (Ora shards in the air, drops in a fight).
+ */
+const FLY_MAGNET = 14;
+const FLY_PICKUP_SPEED = 70;
+const FLY_COLLECT_RADIUS = 3.5;
 
 /**
  * @param {any} ctx
@@ -51,6 +61,8 @@ export function createRpg(ctx) {
   };
 
   const S = () => ctx.store.state;
+  /** @type {null|{ available:boolean, run:()=>boolean, clear:()=>void }} */
+  let trialRetry = null;
   const PL = () => ctx.store.state.player;
   const INV = () => ctx.store.state.inv;
   const ent = () => {
@@ -550,6 +562,9 @@ export function createRpg(ctx) {
       if (!e || !e.stats) return;
       const p = PL();
       const retry = !!(opts && opts.retry && retryBoss);
+      // A trial fight lost: its Retry runs it again (the trial puts the player back on the Ledge).
+      const retryTrial = !!(opts && opts.retry && !retryBoss && trialRetry && trialRetry.available);
+      if (!retryTrial && trialRetry) trialRetry.clear();
       let x = p.x;
       let z = p.z;
       let yaw = e.yaw;
@@ -581,7 +596,13 @@ export function createRpg(ctx) {
       ctx.move.setMode(e, 'ground');
       ctx.combat.revive(e, 1);
       healLeft = 0;
-      ctx.bus.emit('player:respawned', { ringstoneId, retry });
+      ctx.bus.emit('player:respawned', { ringstoneId, retry: retry || retryTrial });
+      if (retryTrial) trialRetry.run();
+    },
+
+    /** True when the death screen's Retry has a fight to put the player back into (a boss, or a trial fight). */
+    get canRetry() {
+      return !!retryBoss || !!(trialRetry && trialRetry.available);
     },
 
     /** Drop private state, pickups and the save hooks. */
@@ -602,6 +623,7 @@ export function createRpg(ctx) {
 
   /** @param {any} p store.player after a level was applied */
   function onLevel(p) {
+    levelTechs(p, true);
     recompute();
     fullRestore();
     ctx.bus.emit('rpg:levelUp', { level: p.level, statPoints: p.statPoints, tp: p.tp });
@@ -661,6 +683,10 @@ export function createRpg(ctx) {
         }
       }
       const list = c.ents.list('pickup');
+      const flying = !!(e && e.move && e.move.mode === 'fly');
+      const magnet = flying ? FLY_MAGNET : BALANCE.pickups.magnetRadius;
+      const reach = flying ? FLY_COLLECT_RADIUS : COLLECT_RADIUS;
+      const pull = flying ? FLY_PICKUP_SPEED : PICKUP_SPEED;
       for (let i = 0; i < list.length; i++) {
         const k = list[i];
         const d = k.data;
@@ -675,14 +701,14 @@ export function createRpg(ctx) {
         const dy = e.pos.y + 0.8 - k.pos.y;
         const dz = e.pos.z - k.pos.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist <= COLLECT_RADIUS) {
+        if (dist <= reach) {
           if (d.kind === 'shells') rpg.addShells(d.amount, 'pickup');
           else if (d.kind === 'xp') rpg.grantXp(d.amount, 'pickup');
           else if (d.itemId && !rpg.addItem(d.itemId, d.amount, { level: d.level })) continue;
           c.bus.post('pickup:collected', { kind: d.kind, itemId: d.itemId, amount: d.amount });
           c.ents.destroy(k.id);
-        } else if (dist <= BALANCE.pickups.magnetRadius) {
-          const s = Math.min(dist, PICKUP_SPEED * dt) / dist;
+        } else if (dist <= magnet) {
+          const s = Math.min(dist, pull * dt) / dist;
           k.pos.x += dx * s;
           k.pos.y += dy * s;
           k.pos.z += dz * s;
@@ -704,10 +730,14 @@ export function createRpg(ctx) {
       // Bosses use xpMult 6 (GDD 4.1); applied here unless the boss's enemy def already carries it.
       const ownMult = def.mult && typeof def.mult.xp === 'number' ? def.mult.xp : 1;
       if ((p.kind === 'boss' || def.tier === 'boss') && ownMult < BALANCE.bossRules.xpMult) xp = Math.round(xp * BALANCE.bossRules.xpMult / ownMult);
+      // A camp elite (ai tags it ELITE) pays more and drops from the elite table.
+      const ent = ctx.ents.get(p.entId);
+      const elite = p.kind === 'enemy' && def.tier !== 'elite' && !!ent && (ent.tags & TAG.ELITE) !== 0;
+      if (elite) xp *= ELITE_XP;
       rpg.grantXp(xp, 'kill');
       const bd = p.kind === 'boss' ? ctx.defs.find('boss', p.defId) : null;
       const bi = bd && BALANCE.bosses[bd.id] ? BALANCE.bosses[bd.id].index : 1;
-      dropFrom(def.lootTable, p.level, p.x, p.y, p.z, def, bi);
+      dropFrom(elite && ctx.defs.find('lootTable', 'elite') ? 'elite' : def.lootTable, p.level, p.x, p.y, p.z, def, bi);
     },
     playerDied() {
       S().stats.deaths++;
@@ -743,7 +773,12 @@ export function createRpg(ctx) {
     },
     /** The tutorial=0 shortcut (4.11). */
     newGame() {
-      if (ctx.flags.tutorial !== 0) return;
+      if (ctx.flags.tutorial !== 0) {
+        // A returning player (a journey in any slot, restored from a code or played here, got past MQ1) is offered
+        // to skip the training when it starts (rpg/scripts tut_move).
+        if (returningPlayer()) S().quests.flags['tut.skipOffer'] = true;
+        return;
+      }
       const s = S();
       const p = s.player;
       const q = s.quests;
@@ -773,6 +808,36 @@ export function createRpg(ctx) {
     },
   };
 
+  /**
+   * Techniques that open at a level and cost no TP (Meteor Heel at level 4: rank 1 has no tree node, so nothing else
+   * ever granted it). Learned on the level-up, with the usual techLearned event; `announce` false after a load.
+   * @param {any} p store.player @param {boolean} announce
+   */
+  function levelTechs(p, announce) {
+    for (const d of ctx.defs.all('technique')) {
+      const lv = d.unlock && typeof d.unlock.level === 'number' ? d.unlock.level : 0;
+      if (!lv || p.level < lv || p.techs.indexOf(d.id) >= 0 || ctx.defs.find('techNode', d.id + '_r1')) continue;
+      if (announce) {
+        rpg.unlockTech(d.id);
+        ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.newTech', args: { name: ctx.i18n.t('tech.' + d.id + '.name') } });
+      }
+      else p.techs.push(d.id);
+    }
+  }
+
+  /** True when a saved journey in any slot has finished MQ1. Read before the new journey is first saved. */
+  function returningPlayer() {
+    try {
+      for (let n = 1; n <= 3; n++) {
+        const st = ctx.save.load(n);
+        if (st && st.quests && Array.isArray(st.quests.done) && st.quests.done.indexOf('mq1') >= 0) return true;
+      }
+    } catch (e) {
+      return false;
+    }
+    return false;
+  }
+
   /** @param {number} sourceId */
   function isPlayerSide(sourceId) {
     if (!sourceId) return false;
@@ -791,6 +856,7 @@ export function createRpg(ctx) {
       state.player.surge = e.combat ? Math.round(e.combat.surge) : 0;
     }));
     unsubs.push(ctx.save.onAfterLoad((state) => {
+      if (state && state.player && Array.isArray(state.player.techs)) levelTechs(state.player, false);
       const e = anyEnt();
       if (!e || !e.stats || !state || !state.player) return;
       const st = e.stats;
@@ -799,5 +865,10 @@ export function createRpg(ctx) {
     }));
   }
 
-  return { rpg, tickSystem, on, hooks, isPlayerSide };
+  /** @param {{ available:boolean, run:()=>boolean, clear:()=>void }} r the challenge trials' retry */
+  function setTrialRetry(r) {
+    trialRetry = r || null;
+  }
+
+  return { rpg, tickSystem, on, hooks, isPlayerSide, setTrialRetry };
 }

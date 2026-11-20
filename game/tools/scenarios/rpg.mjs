@@ -452,6 +452,215 @@ export const scenarios = [
     },
   },
   {
+    // The returning player's offer: Skip the training lands at the Sparkstead Ringstone with MQ1 done and MQ2 on;
+    // a new journey after a saved one past MQ1 opens with the offer instead of the drills.
+    name: 'rpg-mq1-skip',
+    width: W, height: H,
+    query: 'tutorial=1',
+    async run({ game, assert, shot }) {
+      const r = await game((g, drain) => {
+        const d = (0, eval)('(' + drain + ')');
+        const Q = g.ctx.quests;
+        d(g);
+        g.step(5);
+        const xp0 = g.ctx.rpg.xp;
+        Q.talk('mq1_skip', {});
+        const first = Q.dialogueState();
+        Q.advance(1);
+        g.step(5);
+        d(g);
+        g.step(5);
+        const p = g.ctx.player;
+        const rs = g.pois('ringstone').find((x) => x.id === 'ringstone_sparkstead');
+        const out = { first, mq1: Q.state('mq1'), mq2: Q.state('mq2'), lvl: g.ctx.rpg.level, xp0, fly: g.state().player.canFly, awake: g.state().player.awakened,
+          techs: g.state().player.techs.slice(), dist: Math.round(Math.hypot(p.pos.x - rs.x, p.pos.z - rs.z)), attuned: g.state().world.ringstones.slice(),
+          tutEnemies: g.ctx.ents.list('enemy').filter((e) => e.alive && String(e.questTag || '').startsWith('mq1_')).length };
+        // A second journey: the saved one is past MQ1, so the opening is the offer.
+        g.save();
+        g.ctx.session.start({ slot: 1, newGame: true });
+        out.offer = Q.dialogueState();
+        out.mq1b = Q.state('mq1');
+        d(g);
+        return out;
+      }, drainSrc.toString());
+      console.log('    ' + JSON.stringify(r));
+      assert.equal(r.first && r.first.dialogueId, 'mq1_skip');
+      assert.equal(r.mq1, 'done', 'Skip completes MQ1');
+      assert.equal(r.mq2, 'active', 'MQ2 starts');
+      assert.ok(r.lvl >= 2, 'MQ1 XP granted (level ' + r.lvl + ')');
+      assert.ok(r.fly && r.awake && r.techs.includes('gather'), 'flight, the Awakening and Gather granted');
+      assert.ok(r.dist < 20, 'at the Sparkstead Ringstone (' + r.dist + ' m)');
+      assert.ok(r.attuned.includes('ringstone_sparkstead'), 'the Ringstone is attuned');
+      assert.equal(r.tutEnemies, 0, 'no tutorial enemies left');
+      assert.equal(r.offer && r.offer.dialogueId, 'mq1_skip', 'a returning player is offered the skip');
+      await shot('rpg-mq1-skip');
+    },
+  },
+  {
+    // Ora shards: a fixed set per region, collected by flying through them (the pickup system), a counter for the
+    // map, a light column on the nearest, TP at five, and the region's viewpoint revealing its places.
+    name: 'rpg-shards',
+    width: 412, height: 915,
+    query: 'res=1&quality=low',
+    async run({ game, assert, shot }) {
+      const a = await game((g) => {
+        const Q = g.ctx.quests;
+        g.god(true);
+        const s0 = Q.shards();
+        const meadows = s0.list.filter((s) => s.regionId === 'meadows');
+        const view = meadows.find((s) => s.view);
+        const sky = meadows.find((s) => s.kind === 'sky');
+        // Approach the sky shard in flight from 120 m and look at its light column.
+        g.teleport(sky.x - 120, sky.z, { alt: sky.y - g.heightAt(sky.x - 120, sky.z), fly: true, yaw: Math.PI / 2 });
+        g.step(25);
+        return { total: s0.total, regions: s0.regions.map((r) => r.id + ':' + r.total), kinds: [...new Set(s0.list.map((s) => s.kind))], view, sky, tp0: g.state().player.tp };
+      });
+      await game((g) => g.ctx.cam.setOrbit(Math.PI / 2, 0.1));
+      await game((g) => g.step(4));
+      await shot('rpg-shards-01-beacon');
+      const b = await game((g, a) => {
+        const Q = g.ctx.quests;
+        const pickups = g.ctx.ents.list('pickup').filter((e) => e.alive && e.data && String(e.data.itemId).startsWith('shard_')).length;
+        // Fly past 10 m from it: the flight magnet takes it.
+        g.teleport(a.sky.x - 8, a.sky.z + 6, { alt: a.sky.y - g.heightAt(a.sky.x - 8, a.sky.z + 6), fly: true, yaw: Math.PI / 2 });
+        for (let i = 0; i < 12 && Q.shards().found === 0; i++) g.step(5);
+        const afterPass = Q.shards().found;
+        // The viewpoint: the region's highest peak.
+        g.teleport(a.view.x, a.view.z, { alt: 2, fly: true });
+        g.step(40);
+        const st = Q.shards();
+        const vb = g.events(['ui:banner']).find((e) => e.payload.key === 'rpg.banner.viewpoint');
+        return { pickups, afterPass, found: st.found, revealed: st.revealed.includes('meadows'), disc: vb ? vb.payload.args.n : 0 };
+      }, a);
+      // Five shards: +1 TP.
+      const c = await game((g) => {
+        const Q = g.ctx.quests;
+        for (const s of Q.shards().list.filter((x) => !x.found).slice(0, 3)) {
+          g.teleport(s.x, s.z, { alt: s.y - g.heightAt(s.x, s.z), fly: true });
+          g.step(30);
+        }
+        const banner = g.events(['ui:banner']).some((e) => e.payload.key === 'rpg.banner.shardsTp');
+        return { found: Q.shards().found, tp: g.state().player.tp, saved: (g.state().quests.flags['ora.shards'] || []).length, banner };
+      });
+      console.log('    ' + JSON.stringify({ a: { total: a.total, regions: a.regions, kinds: a.kinds }, b, c }));
+      assert.ok(a.total >= 40, 'about eight shards in each of six regions (' + a.total + ')');
+      assert.deepEqual(a.kinds.sort(), ['islet', 'peak', 'roof', 'sky'].filter((k) => a.kinds.includes(k)).sort());
+      assert.ok(a.kinds.includes('peak') && a.kinds.includes('sky') && a.kinds.includes('roof'), 'peaks, open air and roofs');
+      assert.ok(b.pickups >= 1, 'the nearby shard stands as a pickup');
+      assert.equal(b.afterPass, 1, 'flying past collects it');
+      assert.ok(b.revealed && b.disc > 3, 'the viewpoint puts the region on the map (' + b.disc + ' places)');
+      assert.equal(c.found, 5);
+      assert.equal(c.saved, 5, 'the count is kept in the journey');
+      assert.ok(c.banner && c.tp > a.tp0, 'five shards: +1 TP (with the level-ups of their XP)');
+    },
+  },
+  {
+    // After the ending: Ringstone travel, the menu, a boss rematch at a higher level with a medal, a timed trial and
+    // the Spire Circuit.
+    name: 'rpg-after-ending',
+    width: 412, height: 915,
+    query: 'res=1&quality=low',
+    async run({ game, assert, shot }) {
+      const r = await game((g, drain) => {
+        const d = (0, eval)('(' + drain + ')');
+        const Q = g.ctx.quests;
+        const st = g.ctx.store.state;
+        g.god(true);
+        g.setLevel(30);
+        st.quests.flags.credits = true;
+        for (const id of ['ringstone_tide_beacon', 'ringstone_copperwatch']) {
+          st.world.ringstones.push(id);
+          st.quests.flags['attuned.' + id] = true;
+        }
+        const out = {};
+        // Travel by the service (the map screen's call) and by the menu.
+        out.travel = Q.travel('ringstone_tide_beacon');
+        const rs = g.pois('ringstone').find((x) => x.id === 'ringstone_tide_beacon');
+        out.travelDist = Math.round(Math.hypot(g.ctx.player.pos.x - rs.x, g.ctx.player.pos.z - rs.z));
+        out.badTravel = Q.travel('ringstone_ridgerest');
+        Q.talk('ringstone_menu', {});
+        out.menu = Q.dialogueState();
+        Q.advance(1); // Travel
+        out.travelNode = Q.dialogueState() && Q.dialogueState().nodeId;
+        Q.advance(2); // the third attuned stone listed: Copperwatch (Sparkstead, Tide Beacon, Copperwatch)
+        g.step(5);
+        const cw = g.pois('ringstone').find((x) => x.id === 'ringstone_copperwatch');
+        out.menuTravelDist = Math.round(Math.hypot(g.ctx.player.pos.x - cw.x, g.ctx.player.pos.z - cw.z));
+        d(g);
+        // A rematch with Durn.
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(10);
+        const boss = g.ctx.ents.list('boss').find((b) => b.alive && b.defId === 'durn');
+        out.bossLevel = boss ? boss.level : 0;
+        for (let i = 0; i < 40 && boss && boss.alive && !st.quests.flags['rematch.durn']; i++) {
+          g.damage(boss.id, 0.2);
+          g.step(20);
+        }
+        g.step(200);
+        out.rematch = st.quests.flags['rematch.durn'];
+        // The gauntlet trial.
+        Q.runActions([{ op: 'script', script: 'trial_gauntlet' }]);
+        g.step(10);
+        out.trialFoes = g.ctx.ents.list('enemy').filter((e) => e.alive && e.questTag === 'trial_trial_gauntlet').length;
+        for (let i = 0; i < 6; i++) {
+          for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.questTag === 'trial_trial_gauntlet')) g.kill(e.id);
+          g.step(20);
+        }
+        out.trial = st.quests.flags['trial.trial_gauntlet'];
+        // Lose the wave trial, take the Retry: back on the Ledge with the first wave.
+        Q.runActions([{ op: 'script', script: 'trial_waves' }]);
+        g.step(10);
+        g.god(false);
+        g.kill(g.player().id);
+        g.step(5);
+        out.canRetry = g.ctx.rpg.canRetry;
+        g.ctx.rpg.respawn({ retry: true });
+        g.god(true);
+        g.step(10);
+        out.retryFoes = g.ctx.ents.list('enemy').filter((e) => e.alive && e.questTag === 'trial_trial_waves').length;
+        out.retryDist = Math.round(Math.hypot(g.ctx.player.pos.x + 1650, g.ctx.player.pos.z - 1835));
+        for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.questTag === 'trial_trial_waves')) g.ctx.ai.despawn(e.id);
+        Q.runActions([]);
+        // The Spire Circuit.
+        Q.runActions([{ op: 'script', script: 'trial_sky' }]);
+        g.step(5);
+        out.race = g.ctx.quests.objects().length > 0 && g.ctx.player.move.mode;
+        return out;
+      }, drainSrc.toString());
+      const ms = await game((g) => {
+        g.step(30);
+        g.ctx.world.flushBuilds();
+        const t0 = performance.now();
+        g.render();
+        const t1 = performance.now();
+        g.render();
+        return [Math.round(t1 - t0), Math.round(performance.now() - t1), g.cmd.drawBreakdown ? JSON.stringify(g.cmd.drawBreakdown()).slice(0, 300) : ''];
+      });
+      console.log('    render ms ' + JSON.stringify(ms));
+      // A screenshot can time out on a loaded machine: one retry, then go on (the assertions do not need it).
+      for (let k = 0; k < 2; k++) {
+        try {
+          await shot('rpg-after-ending-circuit');
+          break;
+        } catch (err) {
+          console.log('    shot retry: ' + String(err).split('\n')[0]);
+        }
+      }
+      console.log('    ' + JSON.stringify(r));
+      assert.ok(r.travel && r.travelDist < 15, 'travel to an attuned Ringstone');
+      assert.equal(r.badTravel, false, 'not to a stone never touched');
+      assert.equal(r.menu && r.menu.dialogueId, 'ringstone_menu');
+      assert.equal(r.travelNode, 'travel');
+      assert.ok(r.menuTravelDist < 15, 'the menu travels too');
+      assert.ok(r.bossLevel > 4, 'the rematch is above the first fight (level ' + r.bossLevel + ')');
+      assert.ok(r.rematch && r.rematch.medals.length >= 1, 'the rematch records a medal');
+      assert.ok(r.trialFoes >= 4, 'the gauntlet band spawns');
+      assert.ok(r.trial && r.trial.medals.length >= 1 && r.trial.best > 0, 'the trial records a time and a medal');
+      assert.ok(r.canRetry, 'a lost trial offers Retry');
+      assert.ok(r.retryFoes >= 1 && r.retryDist < 30, 'Retry puts the player back in the trial (' + r.retryFoes + ' foes, ' + r.retryDist + ' m)');
+    },
+  },
+  {
     name: 'rpg-finale',
     width: W, height: H,
     async run({ game, assert, shot }) {
