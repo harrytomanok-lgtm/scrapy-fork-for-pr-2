@@ -24,7 +24,7 @@ test('tier table: both rows complete and matching 7.1', () => {
   assert.equal(TIERS.low.programs, 30);
   assert.equal(TIERS.low.maxDpr, 2);
   assert.equal(TIERS.low.shadowSize, 1024);
-  assert.equal(TIERS.high.programs, 32);
+  assert.equal(TIERS.high.programs, 40);
   assert.equal(TIERS.low.particles, 800);
   assert.equal(TIERS.high.particles, 3500);
   assert.equal(TIERS.low.pointLights, 0);

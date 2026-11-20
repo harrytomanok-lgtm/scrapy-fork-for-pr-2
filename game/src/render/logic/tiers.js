@@ -47,7 +47,7 @@ export const TIERS = Object.freeze({
   high: Object.freeze({
     tier: 'high', targetFps: 60, maxDpr: 2, dynRes: Object.freeze({ min: 0.8, max: 1, step: 0.05, interval: 0.5, resize: false }),
     drawCalls: 350, triangles: 1200000, lodRanges: Object.freeze([512, 1024, 1792]), chunkBuilds: 3,
-    treeRadius: 900, rockRadius: 700, tuftRadius: 30, tuftDensity: 1, tuftInstances: 1700, treeInstances: 4000, rockInstances: 2000, programs: 32, antialias: true,
+    treeRadius: 900, rockRadius: 700, tuftRadius: 30, tuftDensity: 1, tuftInstances: 1700, treeInstances: 4000, rockInstances: 2000, programs: 40, antialias: true,
     sfxVariants: 3, vegetationDrawCalls: 30, shadows: 'map2048', shadowSize: 2048, shadowHalf: 45, calibrate: false, bloom: true, outlines: 'range100', outlineNearest: 64,
     outlineCharRange: 100, outlinePropRange: 40, cloudLayers: 2, waterWaves: true,
     particles: 3500, pointLights: 2, activeEnemies: 24, animatedActors: 20, projectiles: 256, audioVoices: 32, reverb: 'convolver', farPlane: 9000,
