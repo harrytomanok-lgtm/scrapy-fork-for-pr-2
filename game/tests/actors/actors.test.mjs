@@ -4,7 +4,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { IDS } from '../../src/core/ids.js';
-import { buildSpecs, budgetOf } from '../../src/actors/data/specs.js';
+import { buildSpecs, budgetOf, villagerLook } from '../../src/actors/data/specs.js';
+import { CHAIN_KINDS } from '../../src/actors/builder.js';
+import { DEFAULT_CHAINS } from '../../src/actors/logic/rigs.js';
 import { validateSpec } from '../../src/actors/logic/validate.js';
 import { mergeSpec, partTriangles, specParts } from '../../src/actors/logic/mesh.js';
 import { boneNames, skeleton, RIG_KINDS, MAX_BONES } from '../../src/actors/logic/rigs.js';
@@ -157,4 +159,38 @@ test('clip keys are ordered, start at 0 and end at the clip length', () => {
     assert.ok(Math.abs(def.keys[def.keys.length - 1].t - def.seconds) < 1e-9, def.id);
     for (let i = 1; i < def.keys.length; i++) assert.ok(def.keys[i].t >= def.keys[i - 1].t, def.id);
   }
+});
+
+test('spring chains: humanoids carry sash, hair tail and hem flaps; quadrupeds a tail and ears; all on real bones', () => {
+  for (const [rig, chains] of Object.entries(DEFAULT_CHAINS)) {
+    const names = boneNames(rig);
+    for (const c of chains) {
+      for (const b of c.bones) assert.ok(names.includes(b), `${rig}: chain bone ${b}`);
+      assert.ok(CHAIN_KINDS.includes(c.kind), `${rig}: chain kind ${c.kind}`);
+    }
+  }
+  const kinds = (rig) => [...new Set(DEFAULT_CHAINS[rig].map((c) => c.kind))].sort();
+  assert.deepEqual(kinds('humanoid'), ['cloth', 'hair', 'hem']);
+  assert.deepEqual(kinds('quadruped'), ['ear', 'tail']);
+  assert.ok(byId.get('hero_a').parts.some((p) => p.bone === 'eyes'), 'the hero blinks (eye parts on the eyes bone)');
+  for (const b of ['tail2', 'tail3', 'hemL', 'hemR']) assert.ok(byId.get('hero_a').parts.some((p) => p.bone === b), `hero part on ${b}`);
+});
+
+test('wind-ups per attack exist for each creature family, and strikes start from their anticipation key', () => {
+  const def = (id) => CLIP_DEFS.find((d) => d.id === id);
+  for (const fam of ['humanoid', 'quadruped', 'flyer']) for (const a of ['slam', 'bite', 'ranged']) assert.ok(def(`${fam}.windup_${a}`), `${fam}.windup_${a}`);
+  assert.ok(compileClip(def('humanoid.slam')).lead > 0, 'slam has an anticipation key');
+  assert.equal(compileClip(def('humanoid.idle')).lead, 0, 'idle has none');
+  for (const f of ['ember', 'tempest', 'zenith']) assert.ok(def('humanoid.transform_' + f), 'transformation pose for ' + f);
+  for (const s of SPECS) if (s.clips) for (const id of Object.values(s.clips)) assert.ok(def(id), `${s.id} override ${id}`);
+});
+
+test('generic villagers get a deterministic look per person', () => {
+  const a = villagerLook(17);
+  assert.deepEqual(villagerLook(17), a);
+  const looks = new Set();
+  for (let i = 1; i < 40; i++) looks.add(JSON.stringify(villagerLook(i).palette));
+  assert.ok(looks.size >= 12, `variety (${looks.size} looks in 39 people)`);
+  for (let i = 1; i < 40; i++) { const k = villagerLook(i).scale; assert.ok(k >= 0.94 && k <= 1.04); }
+  for (const k of Object.keys(a.palette)) assert.ok(k in byId.get('npc_villager_1').palette, 'slot ' + k);
 });

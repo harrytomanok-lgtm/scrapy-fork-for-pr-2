@@ -116,6 +116,19 @@ function registerDebug(ctx) {
     actorsPlay(entId, clipId, opts) {
       ctx.actors.play(ctx.ents.get(entId), clipId, opts);
     },
+    /**
+     * Freeze an actor in a clip at `t` seconds (pose sheets): plays the clip with no blend and stops its clock.
+     * @param {number} entId @param {string} clipId @param {number} t
+     */
+    actorsPose(entId, clipId, t) {
+      const e = ctx.ents.get(entId);
+      ctx.actors.play(e, clipId, { blend: 0, hold: true });
+      const r = e && e.visual && e.visual.actorsRecord ? e.visual : null;
+      if (!r) return;
+      const s = r.upper.id === clipId && r.upper.clip ? r.upper : r.full;
+      s.t = t;
+      s.speed = 1e-6;
+    },
     /** @param {number} entId @param {string|null} formKey */
     actorsForm(entId, formKey) {
       ctx.actors.setForm(ctx.ents.get(entId), formKey);
@@ -166,6 +179,10 @@ export const pkg = {
     ctx.bus.on('actor:staggered', on.staggered);
     ctx.bus.on('combat:form', on.form);
     ctx.bus.on('dialogue:line', on.line);
+    ctx.bus.on('combat:state', on.combatState);
+    ctx.bus.on('actor:landed', on.landed);
+    ctx.bus.on('rpg:levelUp', on.levelUp);
+    ctx.bus.on('combat:techStart', on.techStart);
     if (ctx.debug && ctx.debug.register) registerDebug(ctx);
   },
 };

@@ -44,6 +44,11 @@ const LEGS_READY = {
   thighL: [-0.38, 0, 0.12], shinL: [0.48, 0, 0], footL: [-0.1, 0, 0], thighR: [0.22, 0, -0.14], shinR: [0.36, 0, 0], footR: [-0.1, 0, 0],
   hips: [0, -0.25, 0], _off: [0, -0.07, 0],
 };
+const IDLE = {
+  hips: [0, -0.18, 0.05], _off: [0.014, -0.012, 0], spine: [0.02, 0.06, -0.03], chest: [-0.02, 0.1, -0.02], head: [0.05, 0.05, 0.03],
+  thighL: [-0.16, 0.18, 0.12], shinL: [0.26, 0, 0], footL: [-0.08, 0.25, -0.06], thighR: [0.04, -0.06, -0.08], shinR: [0.04, 0, 0], footR: [0, -0.12, 0.03],
+  armL: [0.08, 0.1, 0.2], foreL: [-0.35, 0, 0], handL: [-0.1, 0, 0.05], armR: [0.02, -0.1, -0.24], foreR: [-0.45, 0, 0], handR: [-0.15, 0, 0],
+};
 const READY = mix(LEGS_READY, {
   spine: [0.05, 0, 0], chest: [0.1, 0.2, 0], head: [0, 0.05, 0],
   armL: [-0.95, 0, 0.3], foreL: [-1.55, 0, 0], armR: [-0.55, 0, -0.35], foreR: [-1.95, 0, 0],
@@ -59,24 +64,24 @@ const WALK_P = {
   spine: [0.04, 0, 0], chest: [0.04, 0, 0], _off: [0, 0.015, 0],
 };
 const RUN_C = {
-  thighL: [-0.95, 0, 0.04], shinL: [0.4, 0, 0], footL: [-0.15, 0, 0], thighR: [0.55, 0, -0.04], shinR: [0.95, 0, 0], footR: [0.45, 0, 0],
-  armL: [0.75, 0, 0.18], foreL: [-1.3, 0, 0], armR: [-0.85, 0, -0.12], foreR: [-1.45, 0, 0],
-  spine: [0.12, 0, 0], chest: [0.16, 0.18, 0], head: [-0.15, -0.12, 0], hips: [0.06, -0.15, 0], _off: [0, -0.06, 0],
+  thighL: [-1.0, 0, 0.04], shinL: [0.35, 0, 0], footL: [-0.2, 0, 0], thighR: [0.62, 0, -0.04], shinR: [1.05, 0, 0], footR: [0.5, 0, 0],
+  armL: [0.7, 0, 0.2], foreL: [-1.05, 0, 0], armR: [-0.95, 0, -0.12], foreR: [-1.55, 0, 0], handR: [-0.2, 0, 0],
+  spine: [0.16, 0.08, 0], chest: [0.18, 0.22, 0], neck: [-0.06, 0, 0], head: [-0.16, -0.18, 0], hips: [0.08, -0.18, 0], _off: [0, -0.07, 0],
 };
 const RUN_P = {
-  thighL: [-0.05, 0, 0.04], shinL: [0.45, 0, 0], footL: [0.1, 0, 0], thighR: [-0.65, 0, -0.04], shinR: [1.75, 0, 0], footR: [0.45, 0, 0],
-  armL: [0.15, 0, 0.18], foreL: [-1.35, 0, 0], armR: [-0.15, 0, -0.18], foreR: [-1.35, 0, 0],
-  spine: [0.12, 0, 0], chest: [0.16, 0, 0], head: [-0.15, 0, 0], hips: [0.06, 0, 0], _off: [0, 0.07, 0],
+  thighL: [-0.1, 0, 0.04], shinL: [0.5, 0, 0], footL: [0.1, 0, 0], thighR: [-0.62, 0, -0.04], shinR: [1.9, 0, 0], footR: [0.5, 0, 0],
+  armL: [0.12, 0, 0.2], foreL: [-1.35, 0, 0], armR: [-0.18, 0, -0.18], foreR: [-1.4, 0, 0],
+  spine: [0.16, 0, 0], chest: [0.18, 0, 0], neck: [-0.06, 0, 0], head: [-0.16, 0, 0], hips: [0.08, 0, 0], _off: [0, 0.07, 0],
 };
 const SPRINT_C = {
-  thighL: [-1.15, 0, 0.04], shinL: [0.55, 0, 0], footL: [-0.1, 0, 0], thighR: [0.65, 0, -0.04], shinR: [1.2, 0, 0], footR: [0.55, 0, 0],
-  armL: [1.15, 0, 0.32], foreL: [-0.25, 0, 0], armR: [1.05, 0, -0.32], foreR: [-0.25, 0, 0],
-  spine: [0.25, 0, 0], chest: [0.3, 0.1, 0], neck: [-0.15, 0, 0], head: [-0.35, 0, 0], hips: [0.1, -0.1, 0], _off: [0, -0.1, 0],
+  thighL: [-1.2, 0, 0.04], shinL: [0.45, 0, 0], footL: [-0.15, 0, 0], thighR: [0.72, 0, -0.04], shinR: [1.25, 0, 0], footR: [0.6, 0, 0],
+  armL: [1.0, 0, 0.16], foreL: [-0.95, 0, 0], armR: [-1.25, 0, -0.1], foreR: [-1.7, 0, 0], handR: [-0.25, 0, 0],
+  spine: [0.26, 0.1, 0], chest: [0.28, 0.26, 0], neck: [-0.12, 0, 0], head: [-0.3, -0.2, 0], hips: [0.12, -0.2, 0], _off: [0, -0.1, 0],
 };
 const SPRINT_P = {
-  thighL: [-0.1, 0, 0.04], shinL: [0.55, 0, 0], thighR: [-0.75, 0, -0.04], shinR: [2.0, 0, 0], footR: [0.5, 0, 0],
-  armL: [1.15, 0, 0.32], foreL: [-0.25, 0, 0], armR: [1.15, 0, -0.32], foreR: [-0.25, 0, 0],
-  spine: [0.25, 0, 0], chest: [0.3, 0, 0], neck: [-0.15, 0, 0], head: [-0.35, 0, 0], hips: [0.1, 0, 0], _off: [0, 0.05, 0],
+  thighL: [-0.12, 0, 0.04], shinL: [0.6, 0, 0], thighR: [-0.78, 0, -0.04], shinR: [2.05, 0, 0], footR: [0.55, 0, 0],
+  armL: [0.2, 0, 0.16], foreL: [-1.4, 0, 0], armR: [-0.25, 0, -0.16], foreR: [-1.45, 0, 0],
+  spine: [0.26, 0, 0], chest: [0.28, 0, 0], neck: [-0.12, 0, 0], head: [-0.3, 0, 0], hips: [0.12, 0, 0], _off: [0, 0.06, 0],
 };
 const FLY_HOVER = {
   hips: [0.12, 0, 0], thighL: [-0.4, 0, 0.06], shinL: [0.75, 0, 0], footL: [0.55, 0, 0], thighR: [-0.08, 0, -0.06], shinR: [0.35, 0, 0], footR: [0.6, 0, 0],
@@ -85,7 +90,7 @@ const FLY_HOVER = {
 const FLY_CRUISE = {
   hips: [1.2, 0, 0], spine: [-0.08, 0, 0], chest: [-0.1, 0, 0], neck: [-0.4, 0, 0], head: [-0.5, 0, 0],
   thighL: [0.0, 0, 0.06], shinL: [0.45, 0, 0], footL: [0.7, 0, 0], thighR: [0.15, 0, -0.06], shinR: [0.7, 0, 0], footR: [0.7, 0, 0],
-  armL: [0.22, 0, 0.5], foreL: [-0.3, 0, 0], armR: [0.22, 0, -0.5], foreR: [-0.3, 0, 0], _off: [0, 0.1, 0],
+  armL: [0.75, 0, 0.32], foreL: [-0.35, 0, 0], armR: [0.7, 0, -0.32], foreR: [-0.4, 0, 0], _off: [0, 0.1, 0],
 };
 const FLY_BOOST = {
   hips: [1.42, 0, 0], spine: [-0.05, 0, 0], chest: [-0.08, 0, 0], neck: [-0.45, 0, 0], head: [-0.75, 0, 0],
@@ -113,8 +118,9 @@ const GUARD = mix(LEGS_READY, {
   armL: [-1.25, 0, -0.2], foreL: [-1.65, 0.2, 0], armR: [-1.15, 0, 0.25], foreR: [-1.75, -0.2, 0],
 });
 const GATHER = {
-  _off: [0, -0.16, 0], thighL: [-0.32, 0, 0.38], shinL: [0.62, 0, 0], footL: [-0.25, 0, -0.2], thighR: [-0.32, 0, -0.38], shinR: [0.62, 0, 0], footR: [-0.25, 0, 0.2],
-  armL: [0.3, 0, 0.42], foreL: [-1.5, 0, 0], armR: [0.3, 0, -0.42], foreR: [-1.5, 0, 0], chest: [-0.14, 0, 0], head: [-0.18, 0, 0], spine: [-0.05, 0, 0],
+  _off: [0, -0.24, 0], hips: [-0.05, 0, 0], thighL: [-0.55, 0, 0.5], shinL: [0.95, 0, 0], footL: [-0.35, 0, -0.35], thighR: [-0.55, 0, -0.5], shinR: [0.95, 0, 0], footR: [-0.35, 0, 0.35],
+  armL: [0.4, 0, 0.55], foreL: [-1.75, 0.3, 0], handL: [0, 0, -0.2], armR: [0.4, 0, -0.55], foreR: [-1.75, -0.3, 0], handR: [0, 0, 0.2],
+  spine: [-0.06, 0, 0], chest: [-0.2, 0, 0], neck: [-0.1, 0, 0], head: [-0.2, 0, 0], shoulderL: [0, 0, 0.12], shoulderR: [0, 0, -0.12],
 };
 const CURL = {
   _off: [0, -0.22, 0], spine: [0.3, 0, 0], chest: [0.45, 0, 0], head: [0.35, 0, 0], thighL: [-0.85, 0, 0.15], shinL: [1.1, 0, 0], thighR: [-0.85, 0, -0.15], shinR: [1.1, 0, 0],
@@ -128,23 +134,22 @@ const BURST = {
 /** @type {Record<string, Record<string, number[]>>} */
 const HUMANOID = {
   rest: {},
-  idle: {
-    hips: [0, -0.12, 0.02], spine: [0.03, 0, 0], chest: [0.04, 0.08, 0], head: [0.04, 0.06, 0],
-    thighL: [-0.1, 0, 0.1], shinL: [0.12, 0, 0], footL: [-0.02, 0, -0.05], thighR: [0.06, 0, -0.08], shinR: [0.06, 0, 0],
-    armL: [0.05, 0, 0.14], foreL: [-0.25, 0, 0], armR: [0.02, 0, -0.12], foreR: [-0.35, 0, 0], _off: [0, -0.01, 0],
-  },
-  idle_b: {
-    hips: [0, -0.12, 0.02], spine: [0.01, 0, 0], chest: [0.0, 0.08, 0], head: [0.0, 0.06, 0], shoulderL: [0, 0, 0.04], shoulderR: [0, 0, -0.04],
-    thighL: [-0.1, 0, 0.1], shinL: [0.12, 0, 0], footL: [-0.02, 0, -0.05], thighR: [0.06, 0, -0.08], shinR: [0.06, 0, 0],
-    armL: [0.03, 0, 0.18], foreL: [-0.22, 0, 0], armR: [0.0, 0, -0.16], foreR: [-0.3, 0, 0], _off: [0, 0.004, 0],
-  },
+  idle: IDLE,
+  idle_b: mix(IDLE, {
+    spine: [0.0, 0.05, -0.02], chest: [-0.05, 0.08, -0.02], head: [0.02, 0.04, 0.03], shoulderL: [0, 0, 0.06], shoulderR: [0, 0, -0.06],
+    armL: [0.06, 0.1, 0.24], armR: [0.0, -0.1, -0.28], foreL: [-0.32, 0, 0], foreR: [-0.42, 0, 0], _off: [0.012, -0.004, 0],
+  }),
+  idle_c: mix(IDLE, {
+    hips: [0, -0.16, 0.03], _off: [0.006, -0.01, 0], spine: [0.03, 0.08, -0.01], chest: [0.0, 0.14, -0.01], head: [0.05, 0.22, 0.02],
+    armR: [0.05, -0.08, -0.2], foreR: [-0.55, 0, 0], handR: [-0.25, 0, 0],
+  }),
   ready: READY,
   walk_c: WALK_C, walk_p: WALK_P, walk_c2: mirror(WALK_C), walk_p2: mirror(WALK_P),
   run_c: RUN_C, run_p: RUN_P, run_c2: mirror(RUN_C), run_p2: mirror(RUN_P),
   sprint_c: SPRINT_C, sprint_p: SPRINT_P, sprint_c2: mirror(SPRINT_C), sprint_p2: mirror(SPRINT_P),
   jump: {
-    thighL: [-1.25, 0, 0.1], shinL: [1.55, 0, 0], footL: [0.4, 0, 0], thighR: [0.25, 0, -0.08], shinR: [0.7, 0, 0], footR: [0.6, 0, 0],
-    armL: [-0.7, 0, 0.55], foreL: [-0.9, 0, 0], armR: [0.35, 0, -0.5], foreR: [-0.4, 0, 0], chest: [-0.12, 0, 0], head: [-0.18, 0, 0],
+    thighL: [-1.0, 0, 0.1], shinL: [1.35, 0, 0], footL: [0.35, 0, 0], thighR: [-0.45, 0, -0.08], shinR: [1.1, 0, 0], footR: [0.5, 0, 0],
+    armL: [-1.5, 0, 0.4], foreL: [-0.55, 0, 0], armR: [-1.25, 0, -0.45], foreR: [-0.7, 0, 0], spine: [-0.05, 0, 0], chest: [-0.12, 0, 0], head: [-0.15, 0, 0],
   },
   fall: FALL,
   fall_b: mix(FALL, { armL: [-0.5, 0, 1.25], armR: [-0.1, 0, -1.2], thighL: [-0.45, 0, 0.2], thighR: [-0.25, 0, -0.1] }),
@@ -155,7 +160,7 @@ const HUMANOID = {
   fly_hover: FLY_HOVER,
   fly_hover_b: mix(FLY_HOVER, { thighL: [-0.3, 0, 0.06], shinL: [0.6, 0, 0], thighR: [-0.16, 0, -0.06], shinR: [0.5, 0, 0], armL: [0.1, 0, 0.5], armR: [0.1, 0, -0.5], _off: [0, 0.03, 0] }),
   fly_cruise: FLY_CRUISE,
-  fly_cruise_b: mix(FLY_CRUISE, { thighL: [0.12, 0, 0.06], shinL: [0.7, 0, 0], thighR: [0.02, 0, -0.06], shinR: [0.45, 0, 0], armL: [0.28, 0, 0.55], armR: [0.18, 0, -0.45] }),
+  fly_cruise_b: mix(FLY_CRUISE, { thighL: [0.12, 0, 0.06], shinL: [0.7, 0, 0], thighR: [0.02, 0, -0.06], shinR: [0.45, 0, 0], armL: [0.8, 0, 0.38], armR: [0.65, 0, -0.28] }),
   fly_boost: FLY_BOOST,
   fly_boost_b: mix(FLY_BOOST, { thighL: [0.08, 0, 0.05], thighR: [0.04, 0, -0.05], head: [-0.72, 0.04, 0] }),
   swim_a: SWIM_A, swim_b: mirror(SWIM_A),
@@ -173,9 +178,18 @@ const HUMANOID = {
   guard: GUARD,
   guard_b: mix(GUARD, { _off: [0, -0.12, 0], chest: [0.22, 0.05, 0] }),
   gather: GATHER,
-  gather_b: mix(GATHER, { chest: [-0.24, 0, 0], head: [-0.28, 0, 0], armL: [0.4, 0, 0.55], armR: [0.4, 0, -0.55], _off: [0, -0.19, 0] }),
+  gather_b: mix(GATHER, { chest: [-0.28, 0, 0], head: [-0.3, 0, 0], armL: [0.5, 0, 0.68], armR: [0.5, 0, -0.68], shoulderL: [0, 0, 0.2], shoulderR: [0, 0, -0.2], _off: [0, -0.27, 0] }),
   curl: CURL,
   burst: BURST,
+  // Ember: fists driven down and out, chest thrown up, head back (the body lights like a lantern)
+  burst_ember: mix(BURST, { armL: [0.15, 0, 0.75], foreL: [-0.35, 0, 0], armR: [0.15, 0, -0.75], foreR: [-0.35, 0, 0], chest: [-0.4, 0, 0], head: [-0.5, 0, 0],
+    thighL: [-0.35, 0, 0.42], shinL: [0.55, 0, 0], thighR: [-0.35, 0, -0.42], shinR: [0.55, 0, 0], _off: [0, -0.1, 0], shoulderL: [0, 0, 0.15], shoulderR: [0, 0, -0.15] }),
+  // Tempest: one arm sweeps out wide and the body twists into the wind, weight on the toes
+  burst_tempest: mix(BURST, { hips: [0, 0.35, 0], chest: [-0.2, -0.55, 0.1], head: [-0.25, 0.45, 0], armL: [-0.3, 0, 1.55], foreL: [-0.2, 0, 0],
+    armR: [0.6, 0, -0.5], foreR: [-1.2, 0, 0], thighL: [-0.4, 0, 0.2], shinL: [0.45, 0, 0], thighR: [0.25, 0, -0.25], shinR: [0.35, 0, 0], footR: [0.6, 0, 0], _off: [0, 0.02, 0] }),
+  // Zenith: rising on the toes, arms raised in a wide V with open palms, head lifted, calm
+  burst_zenith: mix(BURST, { armL: [-0.3, 0, 2.35], foreL: [-0.15, 0, 0], handL: [0.4, 0, 0], armR: [-0.3, 0, -2.35], foreR: [-0.15, 0, 0], handR: [0.4, 0, 0],
+    chest: [-0.15, 0, 0], head: [-0.35, 0, 0], thighL: [-0.05, 0, 0.1], thighR: [-0.05, 0, -0.1], shinL: [0.05, 0, 0], shinR: [0.05, 0, 0], footL: [0.5, 0, 0], footR: [0.5, 0, 0], _off: [0, 0.07, 0] }),
   flicker: {
     _off: [0, -0.22, 0], hips: [0.35, 0, 0], spine: [0.2, 0, 0], chest: [0.35, 0, 0], head: [-0.6, 0, 0],
     armL: [1.1, 0, 0.3], foreL: [-0.1, 0, 0], armR: [1.1, 0, -0.3], foreR: [-0.1, 0, 0], thighL: [-1.05, 0, 0.1], shinL: [1.3, 0, 0], thighR: [0.45, 0, -0.1], shinR: [0.75, 0, 0],
@@ -188,8 +202,9 @@ const HUMANOID = {
     hips: [0, 0.2, 0], chest: [0.15, 0.6, 0], head: [0, -0.4, 0], armR: [-1.55, 0, -0.02], foreR: [-0.05, 0, 0], armL: [-0.6, 0, 0.45], foreL: [-1.9, 0, 0],
     thighR: [0.45, 0, -0.12], shinR: [0.15, 0, 0], footR: [0.4, 0, 0], _off: [0, -0.1, 0.08],
   }),
-  hook_wind: mix(READY, { chest: [0.1, 0.55, 0], armL: [-0.6, 0, 0.9], foreL: [-1.3, 0, 0] }),
-  hook_hit: mix(READY, { chest: [0.15, -0.75, 0], head: [0, 0.45, 0], armL: [-1.45, -0.2, 0.75], foreL: [-1.25, 0, 0], _off: [0, -0.12, 0.05] }),
+  hook_wind: mix(READY, { hips: [0, 0.15, 0], chest: [0.12, 0.7, 0], head: [0, -0.3, 0], armL: [-0.2, 0.3, 1.25], foreL: [-1.7, 0, 0], _off: [0, -0.12, -0.02] }),
+  hook_hit: mix(READY, { hips: [0, -0.45, 0], spine: [0.12, -0.2, 0], chest: [0.18, -0.85, 0.05], head: [0, 0.6, 0], armL: [0, -0.55, 1.35], foreL: [-1.6, 0, 0],
+    armR: [-0.4, 0, -0.5], foreR: [-2.0, 0, 0], thighL: [-0.6, 0, 0.14], shinL: [0.65, 0, 0], thighR: [0.35, 0, -0.16], shinR: [0.45, 0, 0], footR: [0.5, 0, 0], _off: [0, -0.14, 0.07] }),
   kick_wind: mix(READY, { thighR: [-1.2, 0, -0.35], shinR: [1.9, 0, 0], chest: [-0.1, 0.35, 0.1], armL: [-0.6, 0, 0.7], armR: [0.2, 0, -0.6] }),
   kick_hit: {
     hips: [0, 0.6, 0.3], spine: [-0.1, 0, 0], chest: [-0.2, 0.45, -0.25], head: [0.1, -0.6, 0.2],
@@ -202,20 +217,22 @@ const HUMANOID = {
     armR: [-2.7, 0, -0.12], foreR: [-0.55, 0, 0], armL: [0.3, 0, 0.5], foreL: [-1.6, 0, 0],
     thighL: [-0.65, 0, 0.1], shinL: [0.65, 0, 0], thighR: [0.3, 0, -0.1], shinR: [0.25, 0, 0], footR: [0.6, 0, 0],
   },
-  palm_wind: mix(READY, { _off: [0, -0.16, -0.04], chest: [-0.05, 0, 0], armL: [0.45, 0, 0.3], foreL: [-1.8, 0, 0], armR: [0.45, 0, -0.3], foreR: [-1.8, 0, 0] }),
-  palm_hit: mix(LEGS_READY, {
-    _off: [0, -0.14, 0.1], hips: [0, 0, 0], spine: [0.15, 0, 0], chest: [0.25, 0, 0], head: [-0.15, 0, 0],
-    armL: [-1.5, 0, -0.08], foreL: [-0.1, 0, 0], armR: [-1.5, 0, 0.08], foreR: [-0.1, 0, 0], thighL: [-0.85, 0, 0.12], shinL: [0.7, 0, 0], thighR: [0.55, 0, -0.12], shinR: [0.2, 0, 0],
-  }),
+  palm_wind: mix(READY, { _off: [0, -0.2, -0.04], hips: [0, 1.1, 0], chest: [0.2, 0.6, 0], head: [0, -1.2, 0], armL: [-0.6, 0, 0.9], foreL: [-1.6, 0, 0], armR: [0.3, 0, -0.9], foreR: [-1.4, 0, 0],
+    thighL: [-0.75, 0, 0.1], shinL: [1.1, 0, 0], thighR: [-0.5, 0, -0.1], shinR: [1.2, 0, 0] }),
+  palm_hit: {
+    _off: [0, -0.04, 0.06], hips: [0, -0.95, 0.4], spine: [-0.1, 0, 0.2], chest: [-0.15, 0.15, 0.25], head: [0, 0.65, -0.3],
+    thighR: [-1.55, 0, -0.35], shinR: [0.15, 0, 0], footR: [0.8, 0, 0], thighL: [-0.1, 0, 0.18], shinL: [0.3, 0, 0], footL: [0.1, 0, 0],
+    armL: [-0.4, 0, 1.3], foreL: [-0.5, 0, 0], armR: [0.4, 0, -1.2], foreR: [-0.6, 0, 0],
+  },
   heavy_charge: {
     _off: [0, -0.22, -0.05], hips: [0, -0.4, 0], spine: [0.15, 0, 0], chest: [0.2, 1.0, 0], head: [0, -0.8, 0],
     armR: [0.95, 0, -0.45], foreR: [-1.7, 0, 0], armL: [-1.35, 0, 0.35], foreL: [-0.25, 0, 0],
     thighL: [-0.95, 0, 0.2], shinL: [1.05, 0, 0], thighR: [0.55, 0, -0.2], shinR: [0.75, 0, 0], footR: [0.2, 0, 0],
   },
   heavy_hit: {
-    _off: [0, -0.16, 0.14], hips: [0, 0.25, 0], spine: [0.15, 0, 0], chest: [0.3, -0.55, 0], head: [-0.1, 0.35, 0],
-    armR: [-1.6, 0, -0.02], foreR: [0, 0, 0], armL: [0.75, 0, 0.45], foreL: [-1.3, 0, 0],
-    thighL: [-1.05, 0, 0.15], shinL: [0.85, 0, 0], thighR: [0.85, 0, -0.15], shinR: [0.1, 0, 0], footR: [0.5, 0, 0],
+    _off: [0, -0.24, 0.2], hips: [0.05, 0.35, 0], spine: [0.2, 0, 0], chest: [0.3, -0.65, 0], neck: [0.05, 0, 0], head: [-0.2, 0.45, 0],
+    armR: [-1.62, 0, -0.04], foreR: [0, 0, 0], handR: [0.1, 0, 0], armL: [0.9, 0, 0.35], foreL: [-1.7, 0, 0], shoulderR: [0, 0.25, 0],
+    thighL: [-1.25, 0, 0.18], shinL: [1.15, 0, 0], footL: [0.1, 0, 0], thighR: [0.95, 0, -0.15], shinR: [0.05, 0, 0], footR: [0.6, 0, 0],
   },
   axe_wind: {
     spine: [-0.2, 0, 0], chest: [-0.4, 0, 0], head: [-0.2, 0, 0], armL: [-2.9, 0, 0.2], foreL: [-0.8, 0, 0], armR: [-2.9, 0, -0.2], foreR: [-0.8, 0, 0],
@@ -255,8 +272,19 @@ const HUMANOID = {
     hips: [2.1, 0, 0], head: [-0.7, 0, 0], neck: [-0.3, 0, 0], armR: [-2.9, 0, -0.05], foreR: [0, 0, 0], armL: [0.7, 0, 0.45], foreL: [-0.2, 0, 0],
     thighL: [0.05, 0, 0.05], shinL: [0.2, 0, 0], thighR: [0.15, 0, -0.05], shinR: [0.4, 0, 0], footL: [0.8, 0, 0], footR: [0.8, 0, 0],
   },
-  talk_a: { head: [0.06, 0.1, 0.05], chest: [0.02, 0.05, 0], armR: [-0.55, 0.3, -0.3], foreR: [-1.1, 0, 0], armL: [0.05, 0, 0.12], foreL: [-0.3, 0, 0], thighL: [-0.08, 0, 0.08], thighR: [0.05, 0, -0.08] },
-  talk_b: { head: [-0.04, -0.05, -0.03], chest: [0.0, -0.05, 0], armR: [-0.75, 0.5, -0.45], foreR: [-0.85, 0, 0], armL: [0.05, 0, 0.15], foreL: [-0.4, 0, 0], thighL: [-0.08, 0, 0.08], thighR: [0.05, 0, -0.08] },
+  talk_a: { head: [0.08, 0.1, 0.05], chest: [0.02, 0.05, 0], armR: [-0.55, 0.3, -0.3], foreR: [-1.1, 0, 0], handR: [0.3, 0, 0], armL: [0.05, 0, 0.12], foreL: [-0.3, 0, 0] },
+  talk_b: { head: [-0.06, -0.08, -0.03], chest: [-0.02, -0.08, 0], armR: [-0.8, 0.5, -0.5], foreR: [-0.8, 0, 0], handR: [0.5, 0, 0], armL: [-0.5, -0.4, 0.4], foreL: [-1.0, 0, 0], handL: [0.4, 0, 0] },
+  talk_c: { head: [0.12, 0.18, 0.06], chest: [0.05, 0.12, 0], armR: [-0.35, 0.2, -0.2], foreR: [-1.4, 0, 0], armL: [-0.2, -0.2, 0.25], foreL: [-1.2, 0, 0], handL: [0.3, 0, 0] },
+  // villager gestures at rest: arms crossed, a look around, a scratch of the head; Kerrin flips his sash ring
+  idle_cross: mix(IDLE, { armL: [-0.45, -1.1, 0.12], foreL: [-1.8, 0, 0], armR: [-0.4, 1.1, -0.12], foreR: [-1.8, 0, 0], chest: [-0.04, 0.05, 0], head: [0.0, 0.1, 0.05] }),
+  idle_cross_b: mix(IDLE, { armL: [-0.48, -1.1, 0.14], foreL: [-1.8, 0, 0], armR: [-0.43, 1.1, -0.14], foreR: [-1.8, 0, 0], chest: [-0.08, 0.05, 0], head: [-0.04, -0.25, 0.0] }),
+  look_a: mix(IDLE, { head: [0.0, 0.6, 0.05], chest: [0.0, 0.25, -0.02], neck: [0, 0.15, 0] }),
+  look_b: mix(IDLE, { head: [0.08, -0.55, -0.05], chest: [0.0, -0.1, -0.02], neck: [0, -0.15, 0] }),
+  scratch: mix(IDLE, { armR: [-2.3, 0.3, -0.55], foreR: [-1.9, 0, 0], handR: [0.3, 0, 0], head: [0.15, 0.2, -0.15], chest: [0, 0.1, 0.05] }),
+  scratch_b: mix(IDLE, { armR: [-2.4, 0.3, -0.5], foreR: [-2.1, 0, 0], handR: [0.4, 0, 0], head: [0.18, 0.15, -0.2], chest: [0, 0.1, 0.05] }),
+  ring_a: mix(IDLE, { armR: [-0.35, 0.2, -0.3], foreR: [-2.0, 0, 0], handR: [0.2, 0, 0], head: [0.15, -0.2, 0], chest: [0, -0.1, 0] }),
+  ring_b: mix(IDLE, { armR: [-0.9, 0.2, -0.35], foreR: [-2.35, 0, 0], handR: [-0.6, 0, 0], head: [-0.45, -0.1, 0], chest: [-0.06, -0.1, 0], _off: [0.014, -0.005, 0] }),
+  belly: mix(IDLE, { armL: [-0.3, -0.7, 0.45], foreL: [-1.4, 0, 0], armR: [-0.3, 0.7, -0.45], foreR: [-1.4, 0, 0], chest: [-0.1, 0, 0], head: [-0.06, 0.1, 0] }),
   interact: {
     _off: [0, -0.12, 0], spine: [0.25, 0, 0], chest: [0.35, 0, 0], head: [0.3, 0, 0], armR: [-1.0, 0, -0.1], foreR: [-0.35, 0, 0], armL: [-0.2, 0, 0.2], foreL: [-0.6, 0, 0],
     thighL: [-0.5, 0, 0.08], shinL: [0.7, 0, 0], thighR: [0.1, 0, -0.08], shinR: [0.5, 0, 0],
@@ -279,6 +307,51 @@ const HUMANOID = {
     _off: [0, -0.12, 0], spine: [-0.2, 0, 0], chest: [-0.35, 0, 0], head: [-0.5, 0, 0], armL: [0.25, 0, 0.95], foreL: [-1.15, 0, 0], armR: [0.25, 0, -0.95], foreR: [-1.15, 0, 0],
     thighL: [-0.3, 0, 0.3], shinL: [0.55, 0, 0], thighR: [-0.3, 0, -0.3], shinR: [0.55, 0, 0],
   },
+  // enemy wind-ups: each attack's own coiled pose, held with a tremble (the pose is part of the telegraph)
+  axe_wind2: {
+    _off: [0, -0.06, -0.04], spine: [-0.28, 0, 0], chest: [-0.5, 0, 0], head: [-0.1, 0, 0], armL: [-3.0, 0, 0.3], foreL: [-1.0, 0, 0], armR: [-3.0, 0, -0.3], foreR: [-1.0, 0, 0],
+    thighL: [-1.25, 0, 0.12], shinL: [1.5, 0, 0], thighR: [-0.25, 0, -0.12], shinR: [1.2, 0, 0], footR: [0.3, 0, 0],
+  },
+  shoulder_wind2: {
+    _off: [0, -0.3, -0.04], spine: [0.4, 0, 0], chest: [0.55, 0.55, 0], head: [-0.5, -0.4, 0], armR: [0.45, 0, -0.3], foreR: [-1.7, 0, 0], armL: [-0.75, 0, 0.7], foreL: [-1.25, 0, 0],
+    thighL: [-0.95, 0, 0.18], shinL: [1.25, 0, 0], thighR: [0.65, 0, -0.18], shinR: [1.05, 0, 0],
+  },
+  cast_wind2: mix(READY, { chest: [0.0, 0.7, 0], head: [0, -0.35, 0], armR: [0.5, 0, -0.55], foreR: [-2.2, 0, 0], handR: [-0.6, 0, 0], armL: [-1.1, 0, 0.45], foreL: [-1.1, 0, 0], _off: [0, -0.12, -0.04] }),
+  lunge_wind: mix(LEGS_READY, { _off: [0, -0.2, -0.06], spine: [0.2, 0, 0], chest: [0.3, 0.3, 0], head: [-0.35, -0.2, 0], armL: [0.6, 0, 0.5], foreL: [-1.6, 0, 0], armR: [0.6, 0, -0.5], foreR: [-1.6, 0, 0], thighL: [-0.9, 0, 0.14], shinL: [1.2, 0, 0], thighR: [0.4, 0, -0.14], shinR: [0.9, 0, 0] }),
+  // personalities at rest: the Choir hunch and sway; the golem's heavy breath; a duellist's guard; a floating caster
+  idle_choir: {
+    _off: [0, -0.04, 0], hips: [0.05, 0.1, 0], spine: [0.18, 0, 0], chest: [0.16, -0.08, 0.04], neck: [0.1, 0, 0], head: [0.15, 0.15, 0.25],
+    armL: [-0.15, 0, 0.18], foreL: [-0.6, 0, 0], armR: [-0.35, 0, -0.22], foreR: [-0.9, 0, 0], thighL: [-0.15, 0, 0.12], shinL: [0.25, 0, 0], thighR: [0.08, 0, -0.1], shinR: [0.15, 0, 0],
+  },
+  idle_choir_b: {
+    _off: [0, -0.05, 0], hips: [0.05, 0.02, 0], spine: [0.2, 0, 0], chest: [0.12, 0.08, -0.03], neck: [0.12, 0, 0], head: [0.1, -0.12, -0.2],
+    armL: [-0.1, 0, 0.2], foreL: [-0.5, 0, 0], armR: [-0.5, 0, -0.18], foreR: [-1.1, 0, 0], thighL: [-0.15, 0, 0.12], shinL: [0.25, 0, 0], thighR: [0.08, 0, -0.1], shinR: [0.15, 0, 0],
+  },
+  idle_golem: {
+    _off: [0, -0.08, 0], spine: [0.25, 0, 0], chest: [0.15, 0, 0], head: [0.1, 0, 0], shoulderL: [0, 0, -0.08], shoulderR: [0, 0, 0.08],
+    armL: [-0.25, 0, 0.32], foreL: [-0.55, 0, 0], armR: [-0.25, 0, -0.32], foreR: [-0.55, 0, 0], thighL: [-0.2, 0, 0.2], shinL: [0.3, 0, 0], thighR: [-0.2, 0, -0.2], shinR: [0.3, 0, 0],
+  },
+  idle_golem_b: {
+    _off: [0, -0.06, 0], spine: [0.18, 0, 0], chest: [0.05, 0, 0], head: [0.0, 0, 0], shoulderL: [0, 0, 0.1], shoulderR: [0, 0, -0.1],
+    armL: [-0.2, 0, 0.4], foreL: [-0.45, 0, 0], armR: [-0.2, 0, -0.4], foreR: [-0.45, 0, 0], thighL: [-0.2, 0, 0.2], shinL: [0.3, 0, 0], thighR: [-0.2, 0, -0.2], shinR: [0.3, 0, 0],
+  },
+  idle_duel: mix(READY, { hips: [0, -0.5, 0], chest: [0.08, 0.45, 0], head: [0.05, 0.1, 0], armR: [-0.7, 0, -0.3], foreR: [-1.3, 0, 0], armL: [-0.2, 0, 0.45], foreL: [-1.2, 0, 0], _off: [0, -0.1, 0] }),
+  idle_duel_b: mix(READY, { hips: [0, -0.45, 0], chest: [0.12, 0.35, 0], head: [0.08, 0.0, 0], armR: [-0.8, 0, -0.25], foreR: [-1.2, 0, 0], armL: [-0.25, 0, 0.5], foreL: [-1.3, 0, 0], _off: [0, -0.13, 0.01] }),
+  idle_float: {
+    spine: [0.1, 0, 0], chest: [0.12, 0, 0], head: [0.3, 0, 0], armL: [-0.35, 0, 0.55], foreL: [-0.5, 0, 0], armR: [-0.35, 0, -0.55], foreR: [-0.5, 0, 0],
+    thighL: [-0.25, 0, 0.05], shinL: [0.6, 0, 0], thighR: [-0.1, 0, -0.05], shinR: [0.5, 0, 0], footL: [0.6, 0, 0], footR: [0.6, 0, 0],
+  },
+  idle_float_b: {
+    spine: [0.05, 0, 0], chest: [0.02, 0, 0], head: [0.15, 0.1, 0], armL: [-0.45, 0, 0.7], foreL: [-0.6, 0, 0], armR: [-0.45, 0, -0.7], foreR: [-0.6, 0, 0],
+    thighL: [-0.2, 0, 0.05], shinL: [0.55, 0, 0], thighR: [-0.12, 0, -0.05], shinR: [0.45, 0, 0], footL: [0.6, 0, 0], footR: [0.6, 0, 0], _off: [0, 0.03, 0],
+  },
+  idle_boss: mix(LEGS_READY, { chest: [-0.12, 0.15, 0], head: [-0.12, -0.1, 0], armR: [-0.2, 0, -0.3], foreR: [-0.6, 0, 0], armL: [0.2, 0, 0.6], foreL: [-1.6, 0, 0], handL: [0, 0, 0.4], _off: [0, -0.04, 0] }),
+  idle_boss_b: mix(LEGS_READY, { chest: [-0.16, 0.1, 0], head: [-0.15, 0.1, 0], armR: [-0.25, 0, -0.32], foreR: [-0.7, 0, 0], armL: [0.2, 0, 0.62], foreL: [-1.6, 0, 0], handL: [0, 0, 0.4], _off: [0, -0.03, 0] }),
+  // boss intros: Durn raises the mace, Iskra crosses then throws her sabres wide, Vorrhal opens his arms and lifts
+  roar_durn: mix(LEGS_READY, { _off: [0, -0.12, 0], chest: [-0.3, 0.3, 0], head: [-0.35, -0.2, 0], armR: [-2.9, 0, -0.35], foreR: [-0.5, 0, 0], armL: [0.3, 0, 0.9], foreL: [-1.0, 0, 0], thighL: [-0.5, 0, 0.3], shinL: [0.7, 0, 0] }),
+  cross_iskra: mix(LEGS_READY, { _off: [0, -0.2, 0], chest: [0.3, 0, 0], head: [0.2, 0, 0], armL: [-1.3, 0, -0.5], foreL: [-1.0, 0, 0], armR: [-1.3, 0, 0.5], foreR: [-1.0, 0, 0] }),
+  roar_iskra: mix(LEGS_READY, { _off: [0, -0.08, 0], chest: [-0.3, 0, 0], head: [-0.3, 0, 0], armL: [-0.4, 0, 1.35], foreL: [-0.15, 0, 0], armR: [-0.4, 0, -1.35], foreR: [-0.15, 0, 0], thighL: [-0.35, 0, 0.35], thighR: [-0.35, 0, -0.35], shinL: [0.5, 0, 0], shinR: [0.5, 0, 0] }),
+  roar_vorrhal: { _off: [0, 0.12, 0], spine: [-0.15, 0, 0], chest: [-0.3, 0, 0], head: [-0.6, 0, 0], armL: [-0.6, 0, 1.6], foreL: [-0.3, 0, 0], armR: [-0.6, 0, -1.6], foreR: [-0.3, 0, 0], footL: [0.7, 0, 0], footR: [0.7, 0, 0], shinL: [0.3, 0, 0], shinR: [0.3, 0, 0] },
 };
 
 // ---------------------------------------------------------------- quadruped
@@ -321,6 +394,13 @@ const QUADRUPED = {
   spit: { neck: [-0.3, 0, 0], head: [-0.25, 0, 0], jaw: [0.6, 0, 0], legFL: [-0.2, 0, 0], legFR: [-0.2, 0, 0], _off: [0, 0.03, 0], spine: [-0.08, 0, 0] },
   roar: { neck: [-0.55, 0, 0], head: [-0.5, 0, 0], jaw: [0.75, 0, 0], spine: [-0.15, 0, 0], legFL: [-0.25, 0, 0.12], legFR: [-0.25, 0, -0.12], tail1: [-0.7, 0, 0], clawL: [-0.6, 0, 0.5], clawR: [-0.6, 0, -0.5] },
   guard: { clawL: [-0.8, 0.6, 0], clawR: [-0.8, -0.6, 0], head: [0.3, 0, 0], _off: [0, -0.1, 0], legFL: [0.2, 0, 0.2], legFR: [0.2, 0, -0.2] },
+  // a snort and head toss, a paw at the ground
+  idle_c: { head: [-0.25, 0.25, 0.15], neck: [-0.12, 0, 0], jaw: [0.25, 0, 0], tail1: [0.2, 0, 0.25], legFR: [-0.35, 0, 0], footFR: [0.5, 0, 0], _off: [0, 0.01, 0] },
+  bite_wind2: { neck: [-0.45, 0, 0], head: [-0.55, 0, 0], jaw: [0.7, 0, 0], spine: [-0.15, 0, 0], legFL: [0.3, 0, 0], legFR: [0.3, 0, 0], legBL: [-0.2, 0, 0], legBR: [-0.2, 0, 0], _off: [0, -0.04, -0.12] },
+  rear2: { hips: [-0.8, 0, 0], legFL: [-1.2, 0, 0.15], footFL: [1.2, 0, 0], legFR: [-1.0, 0, -0.15], footFR: [1.25, 0, 0], legBL: [0.7, 0, 0], legBR: [0.7, 0, 0], head: [0.15, 0, 0], neck: [0.2, 0, 0], jaw: [0.6, 0, 0], clawL: [-1.4, 0, 0.45], clawR: [-1.4, 0, -0.45] },
+  spit_wind: { neck: [-0.5, 0, 0], head: [-0.4, 0, 0], jaw: [0.2, 0, 0], spine: [-0.12, 0, 0], legFL: [0.15, 0, 0], legFR: [0.15, 0, 0], _off: [0, 0.04, -0.05] },
+  idle_crab: { clawL: [-0.35, 0.25, 0], clawR: [-0.2, -0.35, 0], head: [0.1, 0, 0], _off: [0, -0.01, 0] },
+  idle_crab_b: { clawL: [-0.15, 0.4, 0], clawR: [-0.4, -0.2, 0], head: [0.0, 0, 0], _off: [0, 0.01, 0], spine: [0, 0.05, 0] },
 };
 
 // ---------------------------------------------------------------- flyer
@@ -345,6 +425,8 @@ const FLYER = {
   stagger: { wingL: [0.4, 0, -0.3], wingR: [-0.3, 0, 0.7], hips: [-0.3, 0.3, 0.4], head: [-0.4, 0.5, 0], jaw: [0.4, 0, 0] },
   down: { hips: [0, 0, 1.4], _off: [0, -0.45, 0], wingL: [0, 0, -0.4], wingR: [0, 0, 0.2], neck: [0.3, 0.4, 0], head: [0.2, 0.3, 0], legL: [0.6, 0, 0.3] },
   tumble: { wingL: [0.6, 0.4, 0.3], wingR: [0.6, -0.4, -0.3], hips: [0.7, 0, 0.4], head: [0.4, 0, 0] },
+  peck_wind2: mix(FLAP_UP, { neck: [-0.7, 0, 0], head: [-0.5, 0, 0], jaw: [0.6, 0, 0], hips: [-0.2, 0, 0], _off: [0, 0.04, -0.06] }),
+  beat_wind2: { wingL: [0, 0.35, 1.35], wingL2: [0, 0, -0.35], wingR: [0, -0.35, -1.35], wingR2: [0, 0, 0.35], hips: [-0.45, 0, 0], head: [0.25, 0, 0], legL: [-0.9, 0, 0], legR: [-0.9, 0, 0], _off: [0, 0.05, 0] },
 };
 
 // ---------------------------------------------------------------- blob

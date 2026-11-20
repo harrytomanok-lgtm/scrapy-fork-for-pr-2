@@ -13,8 +13,9 @@ import { Bone, Skeleton, SkinnedMesh, Mesh, BufferGeometry, BufferAttribute, Vec
 import { PALETTE } from '../core/palette.js';
 import { clamp, angleDelta } from '../core/math.js';
 import { buildRig, geometryFor, SOCKET_NAMES } from './builder.js';
-import { resolveClip, sampleClip, rigPoseSize } from './logic/clips.js';
+import { resolveClip, sampleClip, rigPoseSize, clipById } from './logic/clips.js';
 import { blendPose, POSE_EXTRA } from './logic/poses.js';
+import { villagerLook } from './data/specs.js';
 
 const OWNER = 'actors';
 const TWO_PI = Math.PI * 2;
@@ -50,10 +51,26 @@ const EXPR = {
   hurt: [-0.1, 0, -0.38, -0.1, 0, 0.38, 0.14, 0, 0],
   happy: [-0.25, 0, -0.1, -0.25, 0, 0.1, 0.12, 0, 0],
   ko: [0.2, 0, -0.2, 0.2, 0, 0.2, 0.22, 0, 0],
+  // moods picked by the animator from the combat state when no expression is set
+  determined: [0.07, 0, 0.2, 0.07, 0, -0.2, 0, 0, 0],
+  strain: [0.04, 0, 0.32, 0.04, 0, -0.32, 0.1, 0, 0],
 };
+/** Clips that shout (jaw open) while they play; other attacks clench into 'angry'. */
+const SHOUT = new Set(['attack5', 'attack6', 'heavy', 'heavy_air', 'burst', 'ult_rise', 'ult_dive', 'roar', 'slam', 'victory']);
 
 const FORM_COLOUR = { ember: PALETTE.ember, tempest: PALETTE.tempest, zenith: PALETTE.zenith };
 const PRISM = [PALETTE.ora, PALETTE.tempest, PALETTE.ember];
+
+// Spring chain tuning by kind (builder CHAIN_KINDS: cloth, hair, tail, ear, ribbon, hem)
+const HANG = [1, 0.9, 0, 0, 0.35, 0.85];
+const DRAG = [0.7, 0.45, 0, 0, 0.5, 0.35];
+const INERTIA = [0.85, 0.75, 0.6, 0.5, 0.8, 0.6];
+const KICK = [-5, -3, 2, 3, -3, -4];
+const FLUTTER = [0.09, 0.04, 0.22, 0.05, 0.3, 0.03];
+const FLUTTER_HZ = [7.5, 5, 1.6, 2.2, 3.1, 6];
+const LIM_X0 = [-0.7, -0.5, -0.9, -0.6, -1.4, -0.12];
+const LIM_X1 = [1.7, 1.6, 0.9, 0.6, 1.4, 1.3];
+const LIM_Z = [1.2, 0.9, 0.9, 0.5, 1.2, 0.45];
 
 /**
  * @typedef {{ clip:any, t:number, speed:number, loop:boolean, hold:boolean, w:number, fadeIn:number, fadeOut:number, xf:number,
@@ -84,6 +101,8 @@ export function createActors(ctx) {
   /** @type {{ mesh:any, geo:any, cap:number, used:boolean }[]} */
   const snapPool = [];
   let lastNow = -1;
+  /** The player is in a fight (combat:state): the hero's face sets into a determined look. */
+  let inCombat = false;
   let frameNo = 0;
   const stats = { posed: 0, reduced: 0 };
 
@@ -182,10 +201,33 @@ export function createActors(ctx) {
   /** @param {any} r @param {string} clipId @param {any} [o] */
   function playInternal(r, clipId, o) {
     const res = resolveClip(r.rig.rig, clipId, r.rig.spec.clips || null);
-    if (!res.clip) return;
-    if (res.fallback) warnOnce('clip ' + clipId + ' missing for ' + r.rig.id + ', using ' + res.clip.id);
-    const upper = o && o.layer ? o.layer === 'upper' : res.clip.upper;
-    startSlot(r, upper ? r.upper : r.full, res.clip, clipId, o);
+    let clip = res.clip;
+    if (!clip) return;
+    // a generic wind-up becomes the coiled pose of the attack that follows; that attack then starts from its
+    // anticipation key (the wind-up already held it), so the strike pose lands with the hit; a string of three or
+    // more hits plays as a flurry
+    let lead = 0;
+    if (clipId === 'charge_windup' && r.nextActive) {
+      clip = clipById(r.rig.fam + '.windup_' + r.nextActive) || clip;
+      r.fromWindup = r.nextActive;
+    } else if (r.fromWindup && clipId === r.fromWindup) {
+      if (r.nextHits >= 3 && r.rig.fam === 'humanoid') clip = clipById('humanoid.flurry') || clip;
+      else lead = clip.lead;
+      r.fromWindup = '';
+    } else if (clipId !== 'charge_windup') {
+      r.fromWindup = '';
+    }
+    if (res.fallback) warnOnce('clip ' + clipId + ' missing for ' + r.rig.id + ', using ' + clip.id);
+    const upper = o && o.layer ? o.layer === 'upper' : clip.upper;
+    const s = upper ? r.upper : r.full;
+    // the same one-shot asked again early (a technique's windup and active phases share a strike clip): keep its
+    // timing instead of restarting the anticipation
+    if (s.clip === clip && s.id === clipId && !s.stopping && !s.loop && s.t < clip.seconds * 0.6) {
+      if (o && o.hold) s.hold = true;
+      return;
+    }
+    startSlot(r, s, clip, clipId, o);
+    if (lead > 0) { s.t = lead; s.fadeIn = Math.min(s.fadeIn, 0.05); }
   }
 
   const actors = {
@@ -209,7 +251,14 @@ export function createActors(ctx) {
         if (rig.parent[b] >= 0) bones[rig.parent[b]].add(bone);
         bones.push(bone);
       }
-      const o = opts || {};
+      let o = opts || {};
+      // generic villagers: a look of their own per person (colours and height)
+      let vScale = 1;
+      if (!o.palette && rig.id.indexOf('npc_villager_') === 0) {
+        const look = villagerLook(ent.id);
+        o = { formKey: o.formKey, palette: look.palette };
+        vScale = look.scale;
+      }
       const formKey = o.formKey && rig.spec.forms && rig.spec.forms[o.formKey] ? o.formKey : null;
       const mat = render.materials.toonSkinned({ palette: true });
       // character rim and shadow floor (render toon): readable at dusk and night
@@ -221,6 +270,7 @@ export function createActors(ctx) {
       mesh.bind(skeleton);
       mesh.boundingSphere = rig.sphere;
       mesh.rotation.order = 'YXZ';
+      if (vScale !== 1) mesh.scale.setScalar(vScale);
       mesh.name = 'actor:' + specId;
       render.layers.actors.add(mesh);
       const n = rigPoseSize(rig.rig);
@@ -232,11 +282,15 @@ export function createActors(ctx) {
         phase: 0, time: 0, locoMode: '', modeXf: 1, speed: 0, airT: 0, lastY: ent.pos.y,
         yaw: ent.yaw, yawRate: 0, bank: 0, lean: 0, spin: 0,
         springA: new Float32Array(rig.springN * 2), springV: new Float32Array(rig.springN * 2),
+        chainPrev: new Float32Array(rig.chains.length * 2), chainInit: false, landKick: 0,
         look: false, lockLook: false, lookX: 0, lookY: 0, lookZ: 0, lookW: 0, lookYaw: 0, lookPitch: 0,
         flinchT: 10, flinchX: 0, flinchZ: 0,
         flashStart: -10, flashDur: 0.06, dissolveStart: -1, dissolveDur: 1, ghost: 1,
         expr: 'neutral', exprUntil: 0, exprCur: new Float32Array(9), dead: false, talkUntil: 0,
+        eyeOpen: 1, blinkAt: 1 + (ent.id % 7) * 0.37, blinkStart: -1, blinkSeed: (ent.id * 2654435761) & 0x7fffffff,
         accum: 0, visible: true, sashScale: 1, lift: 0,
+        nextActive: '', nextHits: 0, fromWindup: '',
+        prevFwd: 0, prevSide: 0, leanV: 0, leanS: 0, squash: 0, squashT: 0, stretch: 0,
       };
       ent.visual = r;
       records.push(r);
@@ -689,6 +743,46 @@ export function createActors(ctx) {
         r.spin = 0;
       }
     }
+    // weight: the torso leans into acceleration on a damped spring (a hard stop throws it forward past upright and
+    // it settles back), leans with running speed, and the hips squash on landing and stretch on take-off
+    if (dt > 0 && hips >= 0) {
+      const syw = Math.sin(r.yaw);
+      const cyw = Math.cos(r.yaw);
+      const fv = ent.vel.x * syw + ent.vel.z * cyw;
+      const sv = ent.vel.x * cyw - ent.vel.z * syw;
+      const ground = lm === 'ground';
+      const acc = clamp((fv - r.prevFwd) / dt, -60, 60);
+      const accS = clamp((sv - r.prevSide) / dt, -60, 60);
+      r.prevFwd = fv;
+      r.prevSide = sv;
+      const busy = r.full.w > 0.5 && !r.full.loop;
+      // both a start (drive) and a stop (follow-through) pitch the torso forward; the spring settles it back
+      const lt = ground && !busy && !r.dead ? clamp(Math.abs(acc) * (acc < 0 ? 0.014 : 0.009), 0, 0.34) : 0;
+      const ls = ground && !busy && !r.dead ? clamp(-accS * 0.006, -0.15, 0.15) : 0;
+      const kL = rig.fam === 'humanoid' ? 1 : 0.5;
+      r.leanV += (90 * (lt - r.lean) - 11 * r.leanV) * dt;
+      r.lean = clamp(r.lean + r.leanV * dt, -0.45, 0.45);
+      r.leanS += (ls - r.leanS) * (1 - Math.exp(-8 * dt));
+      const lean = r.lean * kL;
+      if (rig.spine >= 0) { F[rig.spine * 3] += lean * 0.45; F[rig.spine * 3 + 2] += r.leanS * 0.5; }
+      if (rig.chest >= 0) { F[rig.chest * 3] += lean * 0.55; F[rig.chest * 3 + 2] += r.leanS * 0.5; }
+      if (rig.head >= 0) F[rig.head * 3] -= lean * 0.5;
+      if (rig.fam === 'humanoid' && ground && rig.spine >= 0) {
+        const run = clamp((r.speed - 2.5) / 6, 0, 1);
+        F[rig.spine * 3] += run * 0.1;
+        F[rig.chest * 3] += run * 0.08;
+        if (rig.head >= 0) F[rig.head * 3] -= run * 0.12;
+      }
+      r.squash *= Math.exp(-9 * dt);
+      const up = !grounded && ent.vel.y > 2 ? Math.min(1, ent.vel.y / 10) : 0;
+      r.stretch += (up - r.stretch) * (1 - Math.exp(-12 * dt));
+      const o = nb * 3;
+      const sq = r.squash * (Math.sin(Math.min(1, (r.time - r.squashT) * 7) * Math.PI) * 0.4 + 0.6);
+      F[o + 1] -= sq * 0.06;
+      F[o + 4] *= 1 - sq * 0.12 + r.stretch * 0.06;
+      F[o + 3] *= 1 + sq * 0.07 - r.stretch * 0.03;
+      F[o + 5] *= 1 + sq * 0.07 - r.stretch * 0.03;
+    }
     // flinch: quick rise, fast decay
     if (r.flinchT < 1 && rig.chest >= 0) {
       r.flinchT += dt;
@@ -729,16 +823,43 @@ export function createActors(ctx) {
       F[rig.head * 3] += r.lookPitch * 0.7 * r.lookW;
       if (rig.chest >= 0) F[rig.chest * 3 + 1] += r.lookYaw * 0.35 * r.lookW;
     }
-    // face
+    // face: an explicit or timed expression wins; otherwise the mood follows the combat state (calm, determined,
+    // strained, shouting on a big strike); eyes blink every few seconds (squint when hurt, shut when KO)
     if (rig.face && rig.browL >= 0) {
       if (r.exprUntil > 0 && r.time > r.exprUntil) { r.expr = 'neutral'; r.exprUntil = 0; }
-      const E = EXPR[r.expr] || EXPR.neutral;
+      let ex = r.expr;
+      if (ex === 'neutral' && !r.dead) {
+        const fid = r.full.clip ? r.full.id : '';
+        if (cs === 'gather' || fid === 'beam_charge' || fid === 'heavy_charge' || fid === 'transform') ex = 'strain';
+        else if ((cs === 'active' || cs === 'windup') && SHOUT.has(fid)) ex = 'shout';
+        else if (cs === 'active' || cs === 'windup' || cs === 'recover') ex = 'angry';
+        else if (cs === 'guard' || (ent === ctx.player && inCombat) || ent.team === 2) ex = 'determined';
+        else if (fid === 'victory') ex = 'happy';
+      }
+      const E = EXPR[ex] || EXPR.neutral;
       const ke = dt > 0 ? 1 - Math.exp(-18 * dt) : 1;
       for (let i = 0; i < 9; i++) r.exprCur[i] += (E[i] - r.exprCur[i]) * ke;
       for (let i = 0; i < 3; i++) {
         F[rig.browL * 3 + i] += r.exprCur[i];
         F[rig.browR * 3 + i] += r.exprCur[3 + i];
         if (rig.jaw >= 0) F[rig.jaw * 3 + i] += r.exprCur[6 + i];
+      }
+      // talking: the jaw moves with the words while a dialogue line runs
+      if (rig.jaw >= 0 && r.talkUntil > r.time) F[rig.jaw * 3] += Math.max(0, Math.sin(r.time * 13.5) * Math.sin(r.time * 3.1 + 1)) * 0.3;
+      if (rig.eyes >= 0) {
+        if (r.time >= r.blinkAt) {
+          r.blinkSeed = (r.blinkSeed * 1103515245 + 12345) & 0x7fffffff;
+          const u = r.blinkSeed / 0x7fffffff;
+          r.blinkStart = r.time;
+          // a quick double blink now and then
+          r.blinkAt = r.time + (u < 0.15 ? 0.3 : 2 + u * 3.2);
+        }
+        const bt = (r.time - r.blinkStart) / 0.15;
+        let open = bt >= 0 && bt < 1 ? Math.abs(bt * 2 - 1) : 1;
+        if (ex === 'ko' || r.dead) open = 0.08;
+        else if (ex === 'hurt') open = Math.min(open, 0.45);
+        else if (ex === 'strain' || ex === 'shout') open = Math.min(open, 0.75);
+        r.eyeOpen += (Math.max(0.08, open) - r.eyeOpen) * (dt > 0 ? 1 - Math.exp(-40 * dt) : 1);
       }
     }
     // spring chains
@@ -752,6 +873,7 @@ export function createActors(ctx) {
 
     // apply to bones
     for (let b = 0; b < nb; b++) bones[b].rotation.set(F[b * 3], F[b * 3 + 1], F[b * 3 + 2]);
+    if (rig.eyes >= 0) bones[rig.eyes].scale.set(1, r.eyeOpen, 1);
     if (hips >= 0) {
       const o = nb * 3;
       const k = rig.offScale;
@@ -804,59 +926,128 @@ export function createActors(ctx) {
   }
 
   /**
-   * Damped angular springs on each chain bone, driven by the actor's velocity in its own frame.
+   * Spring chains (sash, hair tail, hem flaps, capes, creature tails, ears, ribbons). Each chain bone is a damped
+   * angular spring (pitch x, roll z) toward a target: hanging parts point along gravity plus air drag from the
+   * actor's velocity relative to the wind, seen from the chain's parent frame (so they keep hanging when the body
+   * leans, stream back when running and trail when flying); tails and ears add a lazy wag. When the parent turns,
+   * each bone keeps part of its world angle (inertia), and each bone's swing feeds the next one (overlap).
+   * Small fixed substeps keep it stable at any frame rate; no allocation.
    * @param {any} r @param {Float32Array} F @param {number} dt @param {string} lm
    */
   function springs(r, F, dt, lm) {
     const rig = r.rig;
+    if (dt <= 0) return;
     const sy = Math.sin(r.yaw);
     const cy = Math.cos(r.yaw);
     const vx = r.ent.vel.x;
     const vz = r.ent.vel.z;
-    const fwd = vx * sy + vz * cy;
-    const side = vx * cy - vz * sy;
-    const vy = r.ent.vel.y;
-    const flying = lm === 'fly' || lm === 'hurtle';
-    const steps = dt > 0 ? Math.min(4, Math.ceil(dt / (1 / 60))) : 0;
-    const h = steps > 0 ? dt / steps : 0;
+    let fwd = vx * sy + vz * cy;
+    let side = vx * cy - vz * sy;
+    let vy = r.ent.vel.y;
+    if (lm === 'hurtle' || r.dead) { fwd *= 0.3; side *= 0.3; vy *= 0.3; }
+    // wind (render globals: xz direction, y gust amplitude), in the actor's frame
+    const gl = ctx.render && ctx.render.globals ? ctx.render.globals.uWind : null;
+    const ws = gl ? gl.value.y * 22 : 2.5;
+    const wx = gl ? gl.value.x * ws : 0;
+    const wz = gl ? gl.value.z * ws : 0;
+    const wFwd = wx * sy + wz * cy;
+    const wSide = wx * cy - wz * sy;
+    const gust = Math.sin(r.time * 1.7 + r.entId) * Math.sin(r.time * 0.63 + r.entId * 0.7);
+    const steps = Math.min(8, Math.max(1, Math.ceil(dt * 120)));
+    const h = dt / steps;
     const A = r.springA;
     const Vv = r.springV;
+    const prev = r.chainPrev;
+    const kick = r.landKick;
+    r.landKick = 0;
     for (let c = 0; c < rig.chains.length; c++) {
       const ch = rig.chains[c];
+      const kind = ch.kind;
+      const hang = HANG[kind];
+      const drag = DRAG[kind];
+      // the parent frame's pitch and roll from the pose (sum of the ancestors' x and z)
+      let P = 0;
+      let R = 0;
+      for (let k = 0; k < ch.anc.length; k++) { P += F[ch.anc[k] * 3]; R += F[ch.anc[k] * 3 + 2]; }
+      let dP = 0;
+      let dR = 0;
+      if (r.chainInit) {
+        dP = clamp(angleDelta(prev[c * 2], P), -0.8, 0.8);
+        dR = clamp(angleDelta(prev[c * 2 + 1], R), -0.8, 0.8);
+      }
+      prev[c * 2] = P;
+      prev[c * 2 + 1] = R;
+      // hanging direction: gravity plus drag against the air speed at the attachment (a turn swings the back)
+      const sAtt = side - r.yawRate * ch.back;
+      let dx = -drag * (sAtt - wSide);
+      let dyv = -9.8 - drag * vy;
+      let dz = -drag * (fwd - wFwd);
+      // into the parent frame: undo pitch (about x), then roll (about z)
+      const cp = Math.cos(P);
+      const sp = Math.sin(P);
+      const y1 = dyv * cp + dz * sp;
+      const z1 = -dyv * sp + dz * cp;
+      const cr = Math.cos(R);
+      const sr = Math.sin(R);
+      const x2 = dx * cr + y1 * sr;
+      const y2 = -dx * sr + y1 * cr;
+      dx = x2; dyv = y2; dz = z1;
+      const len = Math.sqrt(dx * dx + dyv * dyv + dz * dz) || 1;
+      const hx = Math.atan2(-dz, -dyv);
+      const hz = Math.asin(clamp(dx / len, -1, 1));
+      const sp2 = Math.min(1, Math.sqrt(fwd * fwd + side * side) / 12);
+      let carry = 0;
+      let carryZ = 0;
       for (let j = 0; j < ch.idx.length; j++) {
         const i = (ch.start + j) * 2;
+        const b = ch.idx[j] * 3;
+        const ph = r.time * FLUTTER_HZ[kind] + j * 0.9 + c * 1.7;
+        const flutter = Math.sin(ph) * FLUTTER[kind] * (0.25 + sp2 + Math.abs(gust) * 0.5) * (1 + j * 0.4);
         let tx;
         let tz;
-        const flutter = Math.sin(r.time * (9 + j * 1.7) + j * 1.3 + c) * Math.min(0.3, r.speed * 0.02 + (flying ? 0.12 : 0));
-        if (ch.trail) {
-          tx = clamp(-0.25 + fwd * 0.03, -0.4, 0.3) * (j + 1) * 0.5 + flutter * 0.6;
-          tz = Math.sin(r.time * 3 + c * 2.1 + j) * 0.25 - side * 0.03;
-        } else if (flying) {
-          tx = 0.15 + flutter * 1.4 + j * 0.05;
-          tz = clamp(-side * 0.02, -0.3, 0.3) + flutter * 0.4;
+        if (hang > 0) {
+          // only the first bone aims along the hanging direction; the rest follow it (children are relative)
+          tx = j === 0 ? hx * hang : sp2 * 0.08 * hang;
+          tz = j === 0 ? hz * hang : 0;
+          tx += flutter;
+          tz += Math.cos(ph * 0.7) * FLUTTER[kind] * 0.5 * (0.3 + sp2);
+          if (ch.leg >= 0) tx += Math.max(0, F[ch.leg * 3]) * 0.7 + Math.max(0, -F[ch.leg * 3]) * 0.15;
         } else {
-          tx = clamp(fwd * 0.07 - vy * 0.04, -0.35, 1.25) * (0.6 + j * 0.35) + flutter;
-          tz = clamp(-side * 0.05, -0.5, 0.5) * (0.6 + j * 0.3) + 0.06;
+          // tails and ears: carried by muscle, lag the motion, lazy wag at rest and a twitch now and then
+          const wag = Math.sin(r.time * FLUTTER_HZ[kind] + c) * FLUTTER[kind] * (1 - sp2 * 0.6);
+          tx = clamp(fwd * 0.02 - vy * 0.02, -0.4, 0.5) * (j + 1) * 0.6 + (kind === 3 ? -0.15 * sp2 : 0);
+          tz = clamp(-sAtt * 0.05, -0.5, 0.5) * (0.6 + j * 0.4) + wag * (j + 1) * 0.6;
+          if (kind === 3 && Math.sin(r.time * 0.37 + c * 2.3) > 0.985) tz += Math.sin(r.time * 40) * 0.3;
         }
+        // inertia: keep part of the old world angle when the parent turns, and feel the previous bone's swing
+        A[i] -= (j === 0 ? dP : carry) * INERTIA[kind];
+        A[i + 1] -= (j === 0 ? dR : carryZ) * INERTIA[kind];
+        if (j === 0 && kick !== 0) Vv[i] += kick * KICK[kind];
+        const a0 = A[i];
+        const a1 = A[i + 1];
+        const k = ch.stiffness * (1 + j * 0.15);
         for (let n = 0; n < steps; n++) {
-          Vv[i] += (ch.stiffness * (tx - A[i]) - ch.damping * Vv[i]) * h;
-          Vv[i + 1] += (ch.stiffness * (tz - A[i + 1]) - ch.damping * Vv[i + 1]) * h;
+          Vv[i] += (k * (tx - A[i]) - ch.damping * Vv[i]) * h;
+          Vv[i + 1] += (k * (tz - A[i + 1]) - ch.damping * Vv[i + 1]) * h;
           A[i] += Vv[i] * h;
           A[i + 1] += Vv[i + 1] * h;
         }
         if (!Number.isFinite(A[i]) || !Number.isFinite(A[i + 1])) { A[i] = 0; A[i + 1] = 0; Vv[i] = 0; Vv[i + 1] = 0; }
-        const b = ch.idx[j] * 3;
+        A[i] = clamp(A[i], LIM_X0[kind], LIM_X1[kind]);
+        A[i + 1] = clamp(A[i + 1], -LIM_Z[kind], LIM_Z[kind]);
+        carry = A[i] - a0;
+        carryZ = A[i + 1] - a1;
         F[b] += A[i];
         F[b + 2] += A[i + 1];
       }
+      // the sash streams out to about twice the body length in flight
+      if (ch.stretch) {
+        const target = lm === 'fly' || lm === 'hurtle' ? 1.55 : 1;
+        r.sashScale += (target - r.sashScale) * (1 - Math.exp(-4 * dt));
+        for (let j = 1; j < ch.idx.length; j++) r.bones[ch.idx[j]].position.y = rig.rest[ch.idx[j] * 3 + 1] * r.sashScale;
+      }
     }
-    // the sash streams out to about twice the body length in flight
-    if (rig.fam === 'humanoid' && rig.springN > 0 && rig.chains[0].idx.length === 3) {
-      const target = flying ? 1.55 : 1;
-      r.sashScale += (target - r.sashScale) * (dt > 0 ? 1 - Math.exp(-4 * dt) : 1);
-      const ch = rig.chains[0];
-      for (let j = 1; j < ch.idx.length; j++) r.bones[ch.idx[j]].position.y = rig.rest[ch.idx[j] * 3 + 1] * r.sashScale;
-    }
+    r.chainInit = true;
   }
 
   /** Rank of a record by camera distance (no allocation; n <= 64). @param {number} i @param {Float32Array} d2 */
@@ -943,7 +1134,42 @@ export function createActors(ctx) {
     /** @param {any} e */
     form(e) {
       const ent = ctx.ents.get(e.entId);
-      if (rec(ent)) actors.setForm(ent, e.formId);
+      const r = rec(ent);
+      if (!r) return;
+      actors.setForm(ent, e.formId);
+      // the transformation ends in that Form's own pose
+      if (e.formId && r.full.clip && r.full.id === 'transform') {
+        const v = clipById(r.rig.fam + '.transform_' + e.formId);
+        if (v) r.full.clip = v;
+      }
+    },
+    /** Remember which attack a technique ends in (its wind-up pose and string length depend on it). @param {any} e */
+    techStart(e) {
+      const r = rec(ctx.ents.get(e.entId));
+      if (!r) return;
+      const d = ctx.defs ? ctx.defs.find('technique', e.techId) : null;
+      r.nextActive = d && d.anim && typeof d.anim.active === 'string' ? d.anim.active : '';
+      r.nextHits = d && d.hits ? d.hits.length : 0;
+    },
+    /** A short flourish on level-up when the player is standing free. */
+    levelUp() {
+      const r = rec(ctx.player);
+      if (!r || r.dead || r.full.clip || r.locoMode !== 'ground' || r.speed > 1) return;
+      const c = r.ent.combat;
+      if (c && c.state !== 'idle') return;
+      playInternal(r, 'victory', null);
+    },
+    /** @param {any} e */
+    combatState(e) {
+      inCombat = !!e.inCombat;
+    },
+    /** @param {any} e */
+    landed(e) {
+      const r = rec(ctx.ents.get(e.entId));
+      if (!r) return;
+      r.landKick = clamp(e.speed / 12, 0, 1.6);
+      r.squash = clamp(e.speed / 14, 0.25, 1);
+      r.squashT = r.time;
     },
     /** @param {any} e */
     line(e) {

@@ -11,6 +11,7 @@ export const HUMANOID_BONES = Object.freeze([
   'root', 'hips', 'spine', 'chest', 'neck', 'head', 'browL', 'browR', 'jaw',
   'shoulderL', 'armL', 'foreL', 'handL', 'shoulderR', 'armR', 'foreR', 'handR',
   'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR', 'tail1', 'sash1', 'sash2', 'sash3', 'extra1',
+  'eyes', 'tail2', 'tail3', 'hemL', 'hemR',
 ]);
 
 /** [name, parent, x, y, z] canonical rest offsets (metres for a 1.8 m, 0.44 m-shoulder humanoid). */
@@ -22,8 +23,12 @@ const HUMANOID_LAYOUT = [
   ['shoulderR', 'chest', -0.05, 0.19, 0], ['armR', 'shoulderR', -0.15, 0, 0], ['foreR', 'armR', 0, -0.29, 0], ['handR', 'foreR', 0, -0.26, 0],
   ['thighL', 'hips', 0.1, -0.04, 0], ['shinL', 'thighL', 0, -0.4, 0], ['footL', 'shinL', 0, -0.4, 0],
   ['thighR', 'hips', -0.1, -0.04, 0], ['shinR', 'thighR', 0, -0.4, 0], ['footR', 'shinR', 0, -0.4, 0],
-  ['tail1', 'head', 0, 0.1, -0.11], ['sash1', 'chest', 0.13, 0.17, -0.11], ['sash2', 'sash1', 0, -0.17, 0], ['sash3', 'sash2', 0, -0.17, 0],
+  ['tail1', 'head', 0, 0.045, -0.115], ['sash1', 'chest', 0.13, 0.17, -0.11], ['sash2', 'sash1', 0, -0.17, 0], ['sash3', 'sash2', 0, -0.17, 0],
   ['extra1', 'chest', 0, 0.12, -0.15],
+  // eyes: the eye shapes of a face (scaled flat for a blink); a three-bone hair tail tied at the nape; the two
+  // flaps of a split back hem (coats, capes, robe strips)
+  ['eyes', 'head', 0, 0.11, 0.1], ['tail2', 'tail1', 0, -0.13, -0.01], ['tail3', 'tail2', 0, -0.13, 0],
+  ['hemL', 'hips', 0.08, -0.06, -0.12], ['hemR', 'hips', -0.08, -0.06, -0.12],
 ];
 
 /** Quadruped (boars, crab, Bramblehorn, Gorrumaw): canonical 1.2 m at the back, body along +Z. */
@@ -34,6 +39,7 @@ const QUAD_LAYOUT = [
   ['legBL', 'hips', 0.2, -0.08, -0.02], ['footBL', 'legBL', 0, -0.36, 0], ['legBR', 'hips', -0.2, -0.08, -0.02], ['footBR', 'legBR', 0, -0.36, 0],
   ['tail1', 'hips', 0, 0.06, -0.24], ['tail2', 'tail1', 0, 0, -0.2], ['clawL', 'chest', 0.3, -0.05, 0.3], ['clawR', 'chest', -0.3, -0.05, 0.3],
   ['extra1', 'chest', 0, 0.3, -0.1], ['extra2', 'head', 0, 0.2, 0],
+  ['earL', 'head', 0.12, 0.15, -0.02], ['earR', 'head', -0.12, 0.15, -0.02], ['tail3', 'tail2', 0, 0, -0.18],
 ];
 
 /** Flyer (Frost Harrier): canonical body 1.2 m above the feet, wings along +-X. */
@@ -60,15 +66,26 @@ const LAYOUTS = { humanoid: HUMANOID_LAYOUT, giant: HUMANOID_LAYOUT, quadruped: 
 const CANON = { humanoid: [1.8, 0.44], giant: [1.8, 0.44], quadruped: [1.2, 0.4], flyer: [1.2, 0.3], blob: [1, 0.5] };
 
 export const RIG_KINDS = Object.freeze(['humanoid', 'quadruped', 'flyer', 'blob', 'giant']);
-export const MAX_BONES = 28;
+/** Bones per rig (5.11 said 28; the spring chains and the blink added a few, the bone texture has room). */
+export const MAX_BONES = 34;
 
 /** Spring chains per rig (bone names), used when a spec has no `chains`. */
 export const DEFAULT_CHAINS = Object.freeze({
-  humanoid: [{ bones: ['sash1', 'sash2', 'sash3'], stiffness: 40, damping: 7 }, { bones: ['tail1'], stiffness: 60, damping: 8 }],
+  humanoid: [
+    { bones: ['sash1', 'sash2', 'sash3'], kind: 'cloth', stiffness: 38, damping: 6 },
+    { bones: ['tail1', 'tail2', 'tail3'], kind: 'hair', stiffness: 60, damping: 7 },
+    { bones: ['hemL'], kind: 'hem', stiffness: 70, damping: 8 }, { bones: ['hemR'], kind: 'hem', stiffness: 74, damping: 8 },
+  ],
   giant: [],
-  quadruped: [{ bones: ['tail1', 'tail2'], stiffness: 50, damping: 6 }],
-  flyer: [{ bones: ['tail1', 'tail2'], stiffness: 60, damping: 7 }],
-  blob: [{ bones: ['tailA1', 'tailA2'], stiffness: 25, damping: 4 }, { bones: ['tailB1', 'tailB2'], stiffness: 28, damping: 4 }, { bones: ['tailC1', 'tailC2'], stiffness: 31, damping: 4 }],
+  quadruped: [
+    { bones: ['tail1', 'tail2', 'tail3'], kind: 'tail', stiffness: 55, damping: 6 },
+    { bones: ['earL'], kind: 'ear', stiffness: 120, damping: 9 }, { bones: ['earR'], kind: 'ear', stiffness: 125, damping: 9 },
+  ],
+  flyer: [{ bones: ['tail1', 'tail2'], kind: 'tail', stiffness: 60, damping: 7 }],
+  blob: [
+    { bones: ['tailA1', 'tailA2'], kind: 'ribbon', stiffness: 25, damping: 4 }, { bones: ['tailB1', 'tailB2'], kind: 'ribbon', stiffness: 28, damping: 4 },
+    { bones: ['tailC1', 'tailC2'], kind: 'ribbon', stiffness: 31, damping: 4 },
+  ],
 });
 
 /** @param {string} rig @returns {string[]} bone names of a rig */

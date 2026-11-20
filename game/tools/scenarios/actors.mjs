@@ -90,7 +90,7 @@ export const scenarios = [
       assert.notEqual(res[2].eye, res[0].eye, 'Tempest irises take the Form colour');
       const tris = await game((g) => window.__formIds.map((id) => g.cmd.actorsInfo().actors.find((a) => a.id === id).tris));
       assert.ok(tris[2] > tris[0] && tris[3] > tris[0], 'Tempest and Zenith add parts (mantle and vanes, blades)');
-      assert.ok(Math.max(...tris) <= 1800, `hero Forms stay within 1,800 triangles (max ${Math.max(...tris)})`);
+      assert.ok(Math.max(...tris) <= 3500, `hero Forms stay within 3,500 triangles (max ${Math.max(...tris)})`);
       await shot('actors-forms');
       const nan = await game((g) => g.cmd.actorsNaN());
       assert.equal(nan, 0, 'no NaN bone matrices');
