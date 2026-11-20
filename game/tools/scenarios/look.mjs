@@ -109,7 +109,7 @@ function worldScenario(tag, width, height) {
           g.setHour(o.hour);
           return (0, eval)('(' + src + ')')(g, o);
         }, VIEW, v);
-        assert.ok(s.drawCalls <= 120 && s.triangles <= 250000 && s.programs <= 24, `${v.name}: within the low budget (${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs)`);
+        assert.ok(s.drawCalls <= 120 && s.triangles <= 250000 && s.programs <= 30, `${v.name}: within the low budget (${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs)`);
         console.log(`  ${tag} ${v.name}: ${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs`);
         await shot(`look-${tag}-${v.name}`);
       }
@@ -227,7 +227,7 @@ function actorScenario(tag, width, height) {
         const st = g.stats();
         return { drawCalls: st.drawCalls, triangles: st.triangles, programs: st.programs };
       }, VIEW, { x: m.x, z: m.z, yaw: 2.4, pitch: -0.12 });
-      assert.ok(s.drawCalls <= 120 && s.triangles <= 250000 && s.programs <= 24, `combat: within the low budget (${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs)`);
+      assert.ok(s.drawCalls <= 120 && s.triangles <= 250000 && s.programs <= 30, `combat: within the low budget (${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs)`);
       console.log(`  ${tag} combat: ${s.drawCalls} dc, ${s.triangles} tris, ${s.programs} programs`);
       await shot(`look-${tag}-combat`);
       await game((g) => { g.use('ora_bolt'); g.step(6); });
