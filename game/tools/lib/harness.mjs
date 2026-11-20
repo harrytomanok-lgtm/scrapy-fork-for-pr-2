@@ -176,7 +176,8 @@ export async function launch(opts = {}) {
     },
     errors: () => errs.slice(),
     async reload() {
-      await page.reload({ waitUntil: 'load' });
+      // a busy machine can take longer than the default 30 s to tear down the WebGL page and load again
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: READY_TIMEOUT });
       await waitReady();
     },
     async close() {
