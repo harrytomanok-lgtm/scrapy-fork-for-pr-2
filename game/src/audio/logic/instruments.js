@@ -47,7 +47,8 @@ export const INSTRUMENTS = {
         prev = cur;
         line[idx] = v;
         idx = idx + 1 === period ? 0 : idx + 1;
-        out[i] += cur * 0.8;
+        // a 1.5 ms fade-in: the excitation burst would otherwise start at full level (a click)
+        out[i] += cur * 0.8 * (i < 48 ? i / 48 : 1);
       }
       s.osc('sine', f, f, { a: 2, d: 600, gain: 0.15 });
     },
@@ -57,7 +58,7 @@ export const INSTRUMENTS = {
     bases: [50, 62], len: 7, sr: 22050, gain: 0.22, release: 1.2,
     render(s, f) {
       s.saws([f], 0.005, 1, { a: 1300, hold: 3800, d: 2200, gain: 1, filter: { type: 'lp', f: 900, q: 0.6 } });
-      s.osc('sine', f / 2, f / 2, { a: 1500, hold: 3600, d: 2000, gain: 0.25 });
+      s.osc('sine', f / 2, f / 2, { a: 1500, hold: 3600, d: 2000, gain: 0.12 });
     },
   },
   // bell: FM sine, ratio 3.5
@@ -72,8 +73,10 @@ export const INSTRUMENTS = {
   bass: {
     bases: [38, 50], len: 1.4, sr: 22050, gain: 0.42, release: 0.08,
     render(s, f) {
-      s.osc('tri', f, f, { a: 6, hold: 250, d: 1000, gain: 0.8, filter: { type: 'lp', f: 900, q: 0.7 } });
-      s.osc('sine', f / 2, f / 2, { a: 6, hold: 250, d: 1000, gain: 0.5 });
+      s.osc('tri', f, f, { a: 6, hold: 250, d: 1000, gain: 0.55, filter: { type: 'lp', f: 900, q: 0.7 } });
+      s.osc('sine', f / 2, f / 2, { a: 6, hold: 250, d: 1000, gain: 0.22 });
+      // upper harmonics a phone speaker can reproduce, so the bass line is heard without a woofer
+      s.osc('saw', f, f, { a: 6, hold: 120, d: 600, gain: 2.5, filter: { type: 'bp', f: Math.min(1400, f * 8), q: 0.9 } });
     },
   },
   // brass stab: two saws through a fast filter envelope
@@ -89,6 +92,7 @@ export const INSTRUMENTS = {
     bases: [37], len: 6, sr: 16000, gain: 0.3, release: 1.5,
     render(s, f) {
       s.saws([f, f * 1.5], 0.003, 0.985, { a: 1500, hold: 2500, d: 2000, gain: 1, filter: { type: 'lp', f: 420, q: 1.5 } });
+      s.saws([f * 2], 0.004, 0.985, { a: 1800, hold: 2200, d: 2000, gain: 3, filter: { type: 'bp', f: 900, q: 2.5 } });
     },
   },
   swell: {
@@ -96,14 +100,19 @@ export const INSTRUMENTS = {
     render(s, f) {
       s.saws([f, f * 1.189, f * 1.498], 0.006, 1, { a: 2, d: 2200, gain: 1, filter: { type: 'lp', f: 2200, f1: 500, q: 0.8 } });
       s.reverse();
+      // the swell peaks and releases over 60 ms instead of stopping dead at its loudest
+      s.fadeOut(0.2);
     },
   },
   // frame drum: sine 110->50 and noise; rim and shaker
   drum: {
     bases: [45], len: 0.6, sr: 22050, gain: 0.6, release: 0.05,
     render(s) {
-      s.osc('sine', 110, 50, { a: 1, d: 380, gain: 1.2, sweep: 0.12 });
+      s.osc('sine', 110, 50, { a: 1, d: 320, gain: 0.4, sweep: 0.12 });
       s.noise('brown', { a: 1, d: 140, gain: 0.5, filter: { type: 'lp', f: 900 } });
+      // the skin: a short midrange knock that carries the pulse on small speakers
+      s.noise('pink', { a: 0.5, d: 90, gain: 22, filter: { type: 'bp', f: 1100, q: 1.2 } });
+      s.osc('tri', 240, 180, { a: 0.5, d: 80, gain: 0.7 });
       s.clip(1.4);
     },
   },

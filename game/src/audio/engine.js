@@ -11,7 +11,7 @@ import { RECIPES, PRIORITY, CAPS, renderRecipe, recipeRate } from './logic/recip
 import { INSTRUMENTS, INSTRUMENT_IDS, renderInstrument } from './logic/instruments.js';
 import { TIER_VOICES, TIER_VARIANTS, createSlot, findMerge, pickSlot, busyCount, distanceGain } from './logic/voices.js';
 import { createLoopSlot, buildLoop, applyLevel, LOOP_COST, LOOP_GAIN } from './loops.js';
-import { softClip } from './logic/dsp.js';
+import { softClip, loopNoise } from './logic/dsp.js';
 
 /** Hard cap of live AudioNodes owned by the engine (ARCHITECTURE 7.1). */
 export const NODE_BUDGET = 120;
@@ -26,6 +26,28 @@ const SLICE_MS = 6;
 const SLICE_GAP = 4;
 /** Ids that never get a pre-rendered buffer (rendered live). */
 const LIVE = new Set(['wind_loop', 'gather_loop', 'beam_loop', 'siphon_loop', 'ambience']);
+
+/** Master limiter (dB threshold) and the input span of the safety saturator after the master volume. */
+export const LIMITER = Object.freeze({ threshold: -4, span: 2 });
+
+/**
+ * Transfer curve of the safety saturator for a WaveShaper whose input range [-1, 1] stands for +-LIMITER.span
+ * (the master gain is scaled by 1 / span): linear (unity overall) up to 0.8 of full scale, then a smooth knee
+ * that never reaches 1.
+ * @param {number} [n] @returns {Float32Array}
+ */
+export function safetyCurve(n = 2049) {
+  const c = new Float32Array(n);
+  const knee = 0.8;
+  const room = 0.99 - knee;
+  for (let i = 0; i < n; i++) {
+    const x = ((i / (n - 1)) * 2 - 1) * LIMITER.span;
+    const a = Math.abs(x);
+    const y = a <= knee ? a : knee + room * Math.tanh((a - knee) / room);
+    c[i] = x < 0 ? -y : y;
+  }
+  return c;
+}
 
 /** @param {number} db */
 export function dbToGain(db) {
@@ -57,7 +79,7 @@ export function createEngine(ctx, opts = {}) {
   let variantsWanted = TIER_VARIANTS.low;
   const volume = { master: 0.8, music: 0.7, sfx: 0.9, ui: 1 };
   /** @type {Record<string, any>} buses and shared resources */
-  const bus = { master: null, comp: null, sfx: null, ui: null, far: null, musicVol: null, musicLP: null, duck: null, explore: null, combat: null, send: null, verb: null, fb: null, wet: null };
+  const bus = { master: null, comp: null, limiter: null, safety: null, sfx: null, ui: null, far: null, musicVol: null, musicLP: null, duck: null, explore: null, combat: null, send: null, verb: null, fb: null, wet: null };
   const shared = { pink: null, white: null, clipCurve: /** @type {any} */ (null) };
   /** @type {Record<string, any[]>} rendered variants per sfx id */
   const buffers = Object.create(null);
@@ -97,29 +119,10 @@ export function createEngine(ctx, opts = {}) {
   // ------------------------------------------------------------------ graph
 
   function makeNoise(seconds, colour) {
-    const sr = 22050;
-    const n = Math.floor(seconds * sr);
-    const b = ac.createBuffer(1, n, sr);
-    const d = b.getChannelData(0);
-    let s = 0x2545f491;
-    const p = [0, 0, 0, 0, 0, 0, 0];
-    for (let i = 0; i < n; i++) {
-      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
-      const w = ((s >>> 0) / 4294967296) * 2 - 1;
-      if (colour === 'white') d[i] = w * 0.5;
-      else {
-        p[0] = 0.99886 * p[0] + w * 0.0555179; p[1] = 0.99332 * p[1] + w * 0.0750759; p[2] = 0.969 * p[2] + w * 0.153852;
-        p[3] = 0.8665 * p[3] + w * 0.3104856; p[4] = 0.55 * p[4] + w * 0.5329522; p[5] = -0.7616 * p[5] - w * 0.016898;
-        d[i] = (p[0] + p[1] + p[2] + p[3] + p[4] + p[5] + p[6] + w * 0.5362) * 0.11;
-        p[6] = w * 0.115926;
-      }
-    }
-    // crossfade the loop point
-    const xf = 1024;
-    for (let i = 0; i < xf; i++) {
-      const t = i / xf;
-      d[n - xf + i] = d[n - xf + i] * (1 - t) + d[i] * t;
-    }
+    const data = loopNoise(seconds, 22050, colour);
+    const b = ac.createBuffer(1, data.length, 22050);
+    if (b.copyToChannel) b.copyToChannel(data, 0);
+    else b.getChannelData(0).set(data);
     return b;
   }
 
@@ -132,7 +135,7 @@ export function createEngine(ctx, opts = {}) {
 
   function buildGraph() {
     const c = ac;
-    bus.master = gainNode(volume.master);
+    bus.master = gainNode(volume.master / LIMITER.span);
     bus.comp = c.createDynamicsCompressor();
     nodeCount++;
     bus.comp.threshold.value = -18;
@@ -140,8 +143,23 @@ export function createEngine(ctx, opts = {}) {
     bus.comp.attack.value = 0.005;
     bus.comp.release.value = 0.12;
     bus.comp.knee.value = 6;
-    bus.comp.connect(bus.master);
-    bus.master.connect(c.destination);
+    // Brick-wall stage: a fast limiter after the glue compressor, then the master volume into a soft
+    // saturator whose curve spans +-2 (the master gain carries a factor 0.5), so no sum of voices can clip
+    // at any volume setting.
+    bus.limiter = c.createDynamicsCompressor();
+    nodeCount++;
+    bus.limiter.threshold.value = LIMITER.threshold;
+    bus.limiter.knee.value = 0;
+    bus.limiter.ratio.value = 20;
+    bus.limiter.attack.value = 0.001;
+    bus.limiter.release.value = 0.1;
+    bus.comp.connect(bus.limiter);
+    bus.limiter.connect(bus.master);
+    bus.safety = c.createWaveShaper();
+    nodeCount++;
+    bus.safety.curve = safetyCurve();
+    bus.master.connect(bus.safety);
+    bus.safety.connect(c.destination);
     bus.sfx = gainNode(volume.sfx);
     bus.sfx.connect(bus.comp);
     bus.ui = gainNode(volume.sfx * volume.ui);
@@ -162,7 +180,7 @@ export function createEngine(ctx, opts = {}) {
     bus.musicLP.connect(bus.musicVol);
     bus.duck = gainNode(1);
     bus.duck.connect(bus.musicLP);
-    bus.explore = gainNode(1);
+    bus.explore = gainNode(0);
     bus.explore.connect(bus.duck);
     bus.combat = gainNode(0);
     bus.combat.connect(bus.duck);
@@ -215,7 +233,7 @@ export function createEngine(ctx, opts = {}) {
   function applyVolumes() {
     if (!ac) return;
     const t = ac.currentTime;
-    bus.master.gain.setTargetAtTime(volume.master, t, 0.02);
+    bus.master.gain.setTargetAtTime(volume.master / LIMITER.span, t, 0.02);
     bus.sfx.gain.setTargetAtTime(volume.sfx * (paused ? 0.4 : 1), t, 0.05);
     bus.ui.gain.setTargetAtTime(volume.sfx * volume.ui, t, 0.05);
     // menu filter: music lowpassed to 800 Hz at -6 dB

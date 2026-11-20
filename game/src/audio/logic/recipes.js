@@ -33,17 +33,20 @@ const D6 = mtof(86);
 
 /** @param {Synth} s @param {number} k @param {number} gain */
 function heavyHit(s, k, gain) {
-  s.noise('pink', { a: 1, d: 120, gain: 0.9 * gain, filter: { type: 'bp', f: 900 * k, q: 0.8 } });
-  s.osc('sine', 120 * k, 45 * k, { a: 1, d: 220, gain: 1.3 * gain, sweep: 0.16 });
-  s.osc('square', 2000, 2000, { a: 0, d: 5, len: 0.006, gain: 0.35 * gain });
-  s.noise('white', { a: 0, d: 18, gain: 0.5 * gain, filter: { type: 'hp', f: 2500 } });
+  s.noise('pink', { a: 1, d: 120, gain: 6 * gain, filter: { type: 'bp', f: 900 * k, q: 0.8 } });
+  s.noise('pink', { a: 0.5, d: 45, gain: 3 * gain, filter: { type: 'bp', f: 1800 * k, q: 1 } });
+  s.osc('sine', 120 * k, 45 * k, { a: 1, d: 220, gain: 0.45 * gain, sweep: 0.16 });
+  s.osc('square', 2000, 2000, { a: 0.3, d: 5, len: 0.006, gain: 0.35 * gain });
+  s.noise('white', { a: 0.3, d: 18, gain: 0.4 * gain, filter: { type: 'bp', f: 3000, q: 0.9 } });
 }
 
 /** @param {Synth} s @param {number} k @param {number} lp @param {number} dec @param {number} sub @param {number} gain */
 function explosion(s, k, lp, dec, sub, gain) {
-  s.noise('brown', { a: 2, d: dec, gain: 1.1 * gain, filter: { type: 'lp', f: lp * 2 * k, f1: lp * 0.6 * k, q: 0.8 } });
+  s.noise('brown', { a: 2, d: dec, gain: 0.8 * gain, filter: { type: 'lp', f: lp * 2 * k, f1: lp * 0.6 * k, q: 0.8 } });
   s.noise('white', { a: 1, d: dec * 0.25, gain: 0.35 * gain, filter: { type: 'lp', f: lp * 2.5, q: 0.7 } });
-  s.osc('sine', sub * 1.6 * k, sub * k, { a: 2, d: dec * 0.8, gain: 1.2 * gain, sweep: 0.12 });
+  // the body a phone speaker can play: a debris roar in the midrange that closes with the blast
+  s.noise('pink', { a: 2, d: dec * 0.55, gain: 7 * gain, filter: { type: 'bp', f: 1400 * k, f1: 600 * k, q: 0.7 } });
+  s.osc('sine', sub * 1.6 * k, sub * k, { a: 2, d: dec * 0.8, gain: 0.5 * gain, sweep: 0.12 });
 }
 
 /** @param {Synth} s @param {number} f @param {number} at @param {number} dur s @param {number} gain */
@@ -78,29 +81,29 @@ function swish(s, k, f0, f1) {
 /** @type {Record<string, Recipe>} */
 export const RECIPES = {
   // foley
-  step_grass: { len: 0.12, mix: -10, cap: 'step', render(s, v, k) { s.noise('brown', { a: 2, d: 60, filter: { type: 'lp', f: 900 * k, q: 0.7 } }); s.noise('white', { a: 1, d: 25, gain: 0.15, filter: { type: 'hp', f: 4000 * k } }); } },
+  step_grass: { len: 0.12, mix: -10, cap: 'step', render(s, v, k) { s.noise('pink', { a: 2, d: 45, gain: 1.3, filter: { type: 'bp', f: 1300 * k, q: 0.9 } }); s.noise('brown', { a: 2, d: 50, gain: 0.25, filter: { type: 'lp', f: 600 * k, q: 0.7 } }); s.noise('white', { a: 1, d: 20, gain: 0.1, filter: { type: 'bp', f: 3500 * k, q: 1 } }); } },
   step_stone: { len: 0.1, mix: -10, cap: 'step', render(s, v, k) { s.noise('brown', { a: 1, d: 50, gain: 1.4, filter: { type: 'bp', f: 1800 * k, q: 2 } }); s.osc('sine', 260 * k, 180 * k, { a: 1, d: 25, gain: 0.25 }); } },
-  step_snow: { len: 0.16, mix: -10, cap: 'step', render(s, v, k) { s.noise('white', { a: 10, d: 120, gain: 0.6, filter: { type: 'hp', f: 3000 * k } }); s.noise('brown', { a: 6, d: 80, gain: 0.6, filter: { type: 'lp', f: 500, q: 0.7 } }); } },
+  step_snow: { len: 0.18, mix: -10, cap: 'step', render(s, v, k) { s.noise('pink', { a: 10, d: 110, gain: 1, filter: { type: 'bp', f: 2000 * k, q: 0.8 }, trem: 55, tremDepth: 0.6 }); s.noise('brown', { a: 6, d: 70, gain: 0.45, filter: { type: 'lp', f: 600, q: 0.7 } }); } },
   step_water: { len: 0.16, mix: -10, cap: 'step', render(s, v, k) { s.noise('pink', { a: 2, d: 90, filter: { type: 'bp', f: 1200 * k, q: 1.2 } }); s.osc('sine', 500 * k, 1100 * k, { at: 0.015, a: 2, d: 45, gain: 0.25 }); } },
-  jump: { len: 0.14, mix: -10, cap: null, render(s, v, k) { s.osc('sine', 220 * k, 330 * k, { a: 3, d: 80, gain: 0.8 }); s.noise('white', { a: 2, d: 40, gain: 0.5, filter: { type: 'hp', f: 2000 } }); } },
-  land: { len: 0.32, mix: -8, cap: null, render(s, v, k) { s.osc('sine', 90 * k, 40 * k, { a: 2, d: 180, sweep: 0.12 }); s.noise('brown', { a: 2, d: 250, gain: 0.9, filter: { type: 'lp', f: 400 * k, q: 0.7 } }); } },
-  land_heavy: { len: 0.5, mix: -3, cap: null, duck: true, render(s, v, k) { s.osc('sine', 90 * k, 40 * k, { a: 2, d: 180, sweep: 0.12 }); s.noise('brown', { a: 2, d: 300, gain: 1.1, filter: { type: 'lp', f: 400 * k, q: 0.7 } }); s.osc('sine', 55 * k, 50 * k, { a: 2, d: 320, gain: 1.4 }); s.clip(1.6); } },
-  takeoff: { len: 0.55, mix: -6, cap: null, render(s, v, k) { s.noise('pink', { a: 120, d: 380, filter: { type: 'bp', f: 600 * k, f1: 2400 * k, q: 1, sweep: 0.4 } }); s.osc('sine', 180 * k, 360 * k, { a: 20, d: 300, gain: 0.35, sweep: 0.35 }); } },
+  jump: { len: 0.14, mix: -10, cap: null, render(s, v, k) { s.osc('tri', 440 * k, 700 * k, { a: 3, d: 70, gain: 0.45 }); s.noise('pink', { a: 2, d: 45, gain: 1.2, filter: { type: 'bp', f: 1600, q: 1 } }); } },
+  land: { len: 0.32, mix: -8, cap: null, render(s, v, k) { s.osc('sine', 90 * k, 40 * k, { a: 2, d: 180, gain: 0.35, sweep: 0.12 }); s.noise('brown', { a: 2, d: 220, gain: 0.4, filter: { type: 'lp', f: 400 * k, q: 0.7 } }); s.noise('pink', { a: 1, d: 90, gain: 7, filter: { type: 'bp', f: 850 * k, q: 0.9 } }); } },
+  land_heavy: { len: 0.5, mix: -3, cap: null, duck: true, render(s, v, k) { s.osc('sine', 90 * k, 40 * k, { a: 2, d: 180, gain: 0.35, sweep: 0.12 }); s.noise('brown', { a: 2, d: 300, gain: 0.5, filter: { type: 'lp', f: 400 * k, q: 0.7 } }); s.osc('sine', 55 * k, 50 * k, { a: 2, d: 320, gain: 0.45 }); s.noise('pink', { a: 1, d: 160, gain: 8, filter: { type: 'bp', f: 750 * k, q: 0.8 } }); s.noise('pink', { a: 0.5, d: 40, gain: 3, filter: { type: 'bp', f: 1900 * k, q: 1 } }); s.clip(1.6); } },
+  takeoff: { len: 0.55, mix: -6, cap: null, render(s, v, k) { s.noise('pink', { a: 120, d: 380, filter: { type: 'bp', f: 600 * k, f1: 2400 * k, q: 1, sweep: 0.4 } }); s.osc('sine', 180 * k, 360 * k, { a: 20, d: 300, gain: 0.15, sweep: 0.35 }); } },
   wind_loop: { len: 0, mix: -8, cap: null, live: true },
   // movement techniques
-  flicker_out: { len: 0.22, mix: -3, cap: null, render(s, v, k) { s.osc('saw', 1200 * k, 2400 * k, { a: 1, d: 40, len: 0.045, gain: 0.5 }); s.osc('saw', 1200 * k, 2400 * k, { at: 0.07, a: 1, d: 40, len: 0.045, gain: 0.45 }); s.noise('white', { a: 5, d: 160, gain: 0.35, filter: { type: 'hp', f: 6000 }, trem: 40, tremDepth: 0.7 }); } },
+  flicker_out: { len: 0.22, mix: -3, cap: null, render(s, v, k) { s.osc('saw', 1200 * k, 2400 * k, { a: 1, d: 40, len: 0.045, gain: 0.5 }); s.osc('saw', 1200 * k, 2400 * k, { at: 0.07, a: 1, d: 40, len: 0.045, gain: 0.45 }); s.noise('white', { a: 5, d: 160, gain: 0.2, filter: { type: 'hp', f: 6000 }, trem: 40, tremDepth: 0.7 }); } },
   flicker_in: { len: 0.2, mix: -3, cap: null, render(s, v, k) { s.osc('sine', 1600 * k, 800 * k, { a: 1, d: 50, gain: 0.8 }); s.noise('white', { a: 2, d: 140, gain: 0.3, filter: { type: 'hp', f: 6000 }, trem: 35, tremDepth: 0.7 }); } },
-  boost_start: { len: 0.4, mix: -3, cap: null, render(s, v, k) { s.noise('pink', { a: 8, d: 260, gain: 1.2, filter: { type: 'bp', f: 3000 * k, f1: 800 * k, q: 1.4, sweep: 0.18 } }); s.osc('sine', 400 * k, 120 * k, { a: 3, d: 220, gain: 0.7, sweep: 0.18 }); } },
-  sonic_boom: { len: 1.0, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { s.osc('sine', 60 * k, 52 * k, { a: 1, d: 400, gain: 1.6 }); s.noise('pink', { a: 1, d: 300, gain: 1.1, filter: { type: 'lp', f: 2500 * k, q: 0.7 } }); s.clip(2.2); s.echo(0.17, 0.35, 0.6); } },
+  boost_start: { len: 0.4, mix: -3, cap: null, render(s, v, k) { s.noise('pink', { a: 8, d: 260, gain: 1.2, filter: { type: 'bp', f: 3000 * k, f1: 800 * k, q: 1.4, sweep: 0.18 } }); s.osc('sine', 400 * k, 160 * k, { a: 3, d: 220, gain: 0.15, sweep: 0.18 }); } },
+  sonic_boom: { len: 1.0, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { s.osc('sine', 60 * k, 52 * k, { a: 1, d: 400, gain: 0.6 }); s.noise('pink', { a: 1, d: 300, gain: 1.1, filter: { type: 'lp', f: 2500 * k, q: 0.7 } }); s.noise('pink', { a: 1, d: 160, gain: 8, filter: { type: 'bp', f: 1300 * k, q: 0.7 } }); s.noise('white', { a: 0.5, d: 25, gain: 0.4, filter: { type: 'bp', f: 2800, q: 1 } }); s.clip(2.2); s.echo(0.17, 0.35, 0.6); } },
   whoosh: { len: 0.18, mix: -6, cap: null, render(s, v, k) { s.noise('pink', { a: 30, d: 90, gain: 1, filter: { type: 'bp', f: 800 * k, f1: 2000 * k, q: 1.3, sweep: 0.09 } }); } },
   // hits
-  hit_light: { len: 0.16, mix: 0, cap: 'hit', render(s, v, k) { s.noise('white', { a: 1, d: 50, gain: 0.9, filter: { type: 'bp', f: 1500 * k, q: 1 } }); s.osc('sine', 180 * k, 90 * k, { a: 1, d: 70, gain: 1.1, sweep: 0.06 }); s.noise('white', { a: 0, d: 8, gain: 0.4, filter: { type: 'hp', f: 3000 } }); s.clip(1.4); } },
+  hit_light: { len: 0.16, mix: 0, cap: 'hit', render(s, v, k) { s.noise('white', { a: 1, d: 50, gain: 1.6, filter: { type: 'bp', f: 1500 * k, q: 1 } }); s.osc('sine', 180 * k, 90 * k, { a: 1, d: 70, gain: 0.35, sweep: 0.06 }); s.noise('white', { a: 0.3, d: 10, gain: 0.45, filter: { type: 'bp', f: 2600, q: 1 } }); s.clip(1.4); } },
   hit_heavy: { len: 0.32, mix: 0, cap: 'hit', render(s, v, k) { heavyHit(s, k, 1); s.clip(1.8); } },
-  hit_finisher: { len: 0.75, mix: 0, cap: 'hit', duck: true, render(s, v, k) { heavyHit(s, k, 1); s.osc('sine', 62 * k, 50 * k, { a: 2, d: 400, gain: 1.5 }); s.clip(2); s.echo(0.11, 0.3, 0.5); } },
+  hit_finisher: { len: 0.75, mix: 0, cap: 'hit', duck: true, render(s, v, k) { heavyHit(s, k, 1); s.osc('sine', 62 * k, 50 * k, { a: 2, d: 400, gain: 0.45 }); s.noise('pink', { at: 0.01, a: 2, d: 260, gain: 6, filter: { type: 'bp', f: 1100 * k, f1: 500 * k, q: 0.8 } }); s.clip(2); s.echo(0.11, 0.3, 0.5); } },
   gather_loop: { len: 0, mix: -6, cap: null, live: true },
   gather_full: { len: 0.8, mix: -4, cap: null, render(s, v, k) { s.osc('sine', 880 * k, 880 * k, { a: 5, d: 600, gain: 0.6 }); s.osc('sine', 1320 * k, 1320 * k, { at: 0.06, a: 5, d: 600, gain: 0.45 }); s.fm(1760 * k, 3.5, 0.8, { at: 0.06, a: 2, d: 400, gain: 0.15 }); } },
-  bolt_fire: { len: 0.16, mix: -3, cap: 'bolt', render(s, v, k) { const p = v === 1 ? 1.12 : 1; s.osc('square', 900 * k * p, 1400 * k * p, { a: 1, d: 60, gain: 0.45, filter: { type: 'lp', f: 5000, q: 0.7 } }); s.noise('white', { a: 0, d: 30, gain: 0.8, filter: { type: 'hp', f: 4000 } }); s.osc('sine', 220 * k, 130 * k, { a: 1, d: 60, gain: 0.6 }); s.clip(1.5); } },
-  bolt_hit: { len: 0.2, mix: -1, cap: 'bolt', render(s, v, k) { s.noise('white', { a: 1, d: 90, gain: 1, filter: { type: 'bp', f: 2000 * k, q: 1.5 } }); s.osc('sine', 300 * k, 100 * k, { a: 1, d: 90, gain: 0.9, sweep: 0.08 }); s.clip(1.3); } },
+  bolt_fire: { len: 0.16, mix: -3, cap: 'bolt', render(s, v, k) { const p = v === 1 ? 1.12 : 1; s.osc('square', 900 * k * p, 1400 * k * p, { a: 1, d: 60, gain: 0.45, filter: { type: 'lp', f: 5000, q: 0.7 } }); s.noise('white', { a: 0.4, d: 30, gain: 0.6, filter: { type: 'bp', f: 4000, q: 0.8 } }); s.osc('sine', 220 * k, 130 * k, { a: 1, d: 60, gain: 0.5 }); s.clip(1.5); } },
+  bolt_hit: { len: 0.2, mix: -1, cap: 'bolt', render(s, v, k) { s.noise('white', { a: 1, d: 90, gain: 1.4, filter: { type: 'bp', f: 2000 * k, q: 1.5 } }); s.osc('sine', 300 * k, 100 * k, { a: 1, d: 90, gain: 0.5, sweep: 0.08 }); s.clip(1.3); } },
   beam_charge: { len: 2.4, mix: -3, cap: null, render(s, v, k) {
     const lpF = { type: /** @type {'lp'} */ ('lp'), f: 200, f1: 3000, q: 1.2, sweep: 2.1 };
     s.saws([110.35 * k, 220.4 * k], 0.0032, 1, { a: 300, hold: 1800, d: 250, gain: 0.9, filter: lpF });
@@ -108,21 +111,21 @@ export const RECIPES = {
     s.clicks(10, 0.4, 1.2, 0.25, 4000); s.clicks(22, 1.2, 2.2, 0.35, 5000);
   } },
   beam_loop: { len: 0, mix: -3, cap: null, live: true },
-  beam_end: { len: 0.4, mix: -3, cap: null, render(s, v, k) { s.osc('saw', 82 * k, 70 * k, { a: 1, d: 260, gain: 0.7, filter: { type: 'lp', f: 2200, f1: 150, q: 1.5, sweep: 0.18 } }); s.osc('square', 164 * k, 140 * k, { a: 1, d: 260, gain: 0.4, filter: { type: 'lp', f: 2200, f1: 150, q: 1.5, sweep: 0.18 } }); s.clip(1.5); } },
-  nova: { len: 0.75, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { s.osc('sine', 70 * k, 30 * k, { a: 2, d: 500, gain: 1.4, sweep: 0.5 }); s.noise('pink', { a: 1, d: 500, gain: 1, filter: { type: 'lp', f: 3000 * k, f1: 400 * k, q: 0.8, sweep: 0.5 } }); s.clip(1.6); } },
+  beam_end: { len: 0.4, mix: -3, cap: null, render(s, v, k) { s.osc('saw', 82 * k, 70 * k, { a: 1, d: 260, gain: 0.45, filter: { type: 'lp', f: 2200, f1: 150, q: 1.5, sweep: 0.18 } }); s.osc('square', 164 * k, 140 * k, { a: 1, d: 260, gain: 0.4, filter: { type: 'lp', f: 2200, f1: 150, q: 1.5, sweep: 0.18 } }); s.noise('pink', { a: 1, d: 200, gain: 5, filter: { type: 'bp', f: 1400 * k, f1: 500 * k, q: 1, sweep: 0.18 } }); s.clip(1.5); } },
+  nova: { len: 0.75, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { s.osc('sine', 70 * k, 30 * k, { a: 2, d: 500, gain: 0.45, sweep: 0.5 }); s.noise('pink', { a: 2, d: 360, gain: 6, filter: { type: 'bp', f: 1300 * k, f1: 500 * k, q: 0.8, sweep: 0.4 } }); s.noise('pink', { a: 1, d: 500, gain: 1, filter: { type: 'lp', f: 3000 * k, f1: 400 * k, q: 0.8, sweep: 0.5 } }); s.clip(1.6); } },
   explosion_s: { len: 0.55, mix: 0, cap: 'explosion', render(s, v, k) { explosion(s, k, 1500, 300, 80, 1); s.clicks(4, 0.08, 0.4, 0.2, 2500); s.clip(1.8); } },
   explosion_m: { len: 0.95, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { explosion(s, k, 1000, 600, 60, 1); s.clicks(7, 0.1, 0.8, 0.18, 2200); s.clip(2); } },
   explosion_l: { len: 1.7, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { explosion(s, k, 700, 1200, 45, 1); s.clicks(12, 0.15, 1.4, 0.15, 1800); s.clip(2.2); s.echo(0.19, 0.25, 0.6); } },
   rock_break: { len: 0.45, mix: -2, cap: 'explosion', render(s, v, k) { s.noise('pink', { a: 1, d: 300, gain: 1.2, filter: { type: 'bp', f: 400 * k, q: 1 } }); s.clicks(6, 0.02, 0.35, 0.45, 2500); } },
-  crater: { len: 1.0, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { s.noise('pink', { a: 1, d: 300, gain: 1.2, filter: { type: 'bp', f: 400 * k, q: 1 } }); s.clicks(6, 0.02, 0.35, 0.45, 2500); explosion(s, k, 1000, 600, 60, 0.5); s.clip(1.5); } },
+  crater: { len: 1.0, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { s.noise('pink', { a: 1, d: 300, gain: 3, filter: { type: 'bp', f: 650 * k, q: 1 } }); s.clicks(6, 0.02, 0.35, 0.45, 2500); explosion(s, k, 1000, 600, 60, 0.5); s.clip(1.5); } },
   ult_rise: { len: 2.6, mix: -2, cap: null, render(s, v, k) {
     const lpF = { type: /** @type {'lp'} */ ('lp'), f: 200, f1: 3000, q: 1.2, sweep: 2.2 };
     s.saws([110.35 * k], 0.0032, 1, { a: 400, hold: 1900, d: 250, gain: 0.5, filter: lpF });
-    const ch = [mtof(50), mtof(57), mtof(62), mtof(66)];
+    const ch = [mtof(62), mtof(69), mtof(74), mtof(78)];
     for (let i = 0; i < 4; i++) s.osc('sine', ch[i] * k, ch[i] * k * 1.06, { a: 800, hold: 1400, d: 300, gain: 0.22, sweep: 2.4 });
     s.clicks(24, 0.6, 2.3, 0.3, 5000);
   } },
-  ult_impact: { len: 2.2, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { explosion(s, k, 700, 1200, 45, 1.5); s.osc('sine', 50 * k, 25 * k, { a: 3, hold: 200, d: 1200, gain: 1.6, sweep: 1.2 }); s.clicks(16, 0.1, 1.6, 0.2, 2000); s.clip(2.4); s.echo(0.23, 0.3, 0.6); } },
+  ult_impact: { len: 2.2, mix: 0, cap: 'explosion', duck: true, render(s, v, k) { explosion(s, k, 700, 1200, 45, 1.5); s.osc('sine', 50 * k, 25 * k, { a: 3, hold: 200, d: 1200, gain: 0.3, sweep: 1.2 }); s.clicks(16, 0.1, 1.6, 0.2, 2000); s.clip(2.4); s.echo(0.23, 0.3, 0.6); } },
   // guard
   guard_on: { len: 0.22, mix: -4, cap: null, render(s, v, k) { s.osc('sine', 500 * k, 500 * k, { a: 5, d: 100, gain: 0.5 }); s.osc('sine', 750 * k, 750 * k, { a: 5, d: 100, gain: 0.4 }); s.noise('white', { a: 5, d: 110, gain: 0.6, filter: { type: 'bp', f: 3000 * k, q: 8 } }); } },
   guard_block: { len: 0.24, mix: -1, cap: 'hit', render(s, v, k) { block(s, k, 1); s.clip(1.3); } },
@@ -142,10 +145,10 @@ export const RECIPES = {
   tele_violet: { len: 0.55, mix: -4, cap: null, render(s, v, k) { s.osc('sine', 400 * k, 400 * k, { a: 20, hold: 120, d: 380, gain: 0.7, vib: 7, vibDepth: 1 }); s.osc('sine', 600 * k, 600 * k, { a: 20, hold: 120, d: 380, gain: 0.3, vib: 7, vibDepth: 1 }); } },
   // creatures
   enemy_growl: { len: 0.6, mix: -4, cap: null, render(s, v, k) { s.osc('saw', 90 * k, 80 * k, { a: 40, d: 450, gain: 0.8, vib: 5, vibDepth: 0.7, filter: { type: 'bp', f: 700 * k, q: 4 } }); s.osc('saw', 90 * k, 80 * k, { a: 40, d: 450, gain: 0.5, vib: 5, vibDepth: 0.7, filter: { type: 'bp', f: 1150 * k, q: 5 } }); s.noise('pink', { a: 30, d: 300, gain: 0.2, filter: { type: 'lp', f: 900 } }); s.clip(1.5); } },
-  enemy_death: { len: 0.9, mix: -3, cap: null, render(s, v, k) { s.osc('saw', 95 * k, 60 * k, { a: 20, d: 700, gain: 0.9, vib: 6, vibDepth: 0.8, filter: { type: 'lp', f: 3000, f1: 200, q: 2, sweep: 0.7 } }); s.osc('saw', 96 * k, 61 * k, { a: 20, d: 700, gain: 0.5, filter: { type: 'bp', f: 800, f1: 300, q: 3, sweep: 0.7 } }); s.noise('pink', { a: 5, d: 500, gain: 0.35, filter: { type: 'lp', f: 1500, f1: 200, sweep: 0.6 } }); s.clip(1.4); } },
-  boss_roar: { len: 2.0, mix: 0, cap: null, duck: true, render(s, v, k) { const f = { type: /** @type {'bp'} */ ('bp'), f: 350, f1: 1100, q: 3, sweep: 1.2 }; s.osc('saw', 60 * k, 52 * k, { a: 100, hold: 200, d: 1500, gain: 0.8, filter: f, vib: 4, vibDepth: 0.6 }); s.osc('saw', 61.3 * k, 53 * k, { a: 100, hold: 200, d: 1500, gain: 0.8, filter: f }); s.osc('square', 30 * k, 27 * k, { a: 100, hold: 200, d: 1500, gain: 0.6, filter: { type: 'lp', f: 400 } }); s.noise('pink', { a: 120, d: 1200, gain: 0.3, filter: { type: 'bp', f: 600, q: 1 } }); s.clip(2); } },
+  enemy_death: { len: 0.9, mix: -3, cap: null, render(s, v, k) { s.osc('saw', 95 * k, 60 * k, { a: 20, d: 700, gain: 0.7, vib: 6, vibDepth: 0.8, filter: { type: 'bp', f: 1400, f1: 500, q: 1.5, sweep: 0.7 } }); s.osc('saw', 96 * k, 61 * k, { a: 20, d: 700, gain: 0.6, filter: { type: 'bp', f: 900, f1: 450, q: 3, sweep: 0.7 } }); s.noise('pink', { a: 5, d: 500, gain: 0.35, filter: { type: 'bp', f: 1200, f1: 400, q: 0.8, sweep: 0.6 } }); s.clip(1.4); } },
+  boss_roar: { len: 2.0, mix: 0, cap: null, duck: true, render(s, v, k) { const f = { type: /** @type {'bp'} */ ('bp'), f: 550, f1: 1300, q: 3, sweep: 1.2 }; s.osc('saw', 60 * k, 52 * k, { a: 100, hold: 200, d: 1500, gain: 0.8, filter: f, vib: 4, vibDepth: 0.6 }); s.osc('saw', 61.3 * k, 53 * k, { a: 100, hold: 200, d: 1500, gain: 0.8, filter: f }); s.osc('square', 30 * k, 27 * k, { a: 100, hold: 200, d: 1500, gain: 0.12, filter: { type: 'lp', f: 300 } }); s.noise('pink', { a: 120, d: 1200, gain: 1.1, filter: { type: 'bp', f: 700, f1: 1300, q: 1.2, sweep: 1.2 } }); s.clip(2); } },
   // player
-  player_hurt: { len: 0.25, mix: -2, cap: null, render(s, v, k) { s.noise('pink', { a: 1, d: 120, gain: 1, filter: { type: 'bp', f: 700 * k, q: 1.2 } }); s.osc('sine', 250 * k, 120 * k, { a: 2, d: 150, gain: 0.8 }); s.clip(1.4); } },
+  player_hurt: { len: 0.25, mix: -2, cap: null, render(s, v, k) { s.noise('pink', { a: 1, d: 120, gain: 1.9, filter: { type: 'bp', f: 900 * k, q: 1.1 } }); s.osc('tri', 440 * k, 220 * k, { a: 2, d: 150, gain: 0.3 }); s.clip(1.4); } },
   player_death: { len: 2.2, mix: 0, cap: null, render(s, v, k) { pad(s, [mtof(50), mtof(57), mtof(62), mtof(65)], { a: 150, hold: 400, d: 1500, gain: 1.6, lp: 1100, drop: Math.pow(2, -6 / 12) }); s.osc('sine', 80, 40, { a: 2, d: 900, gain: 0.8, sweep: 1 }); } },
   heal: { len: 0.6, mix: -6, cap: null, render(s, v, k) { const n = [D5, FS5, A5]; for (let i = 0; i < 3; i++) s.osc('tri', n[i] * k, n[i] * k, { at: i * 0.07, a: 3, d: 300, gain: 0.5 }); } },
   // rewards
@@ -183,7 +186,7 @@ export const RECIPES = {
   ui_move: { len: 0.05, mix: -12, cap: 'ui', render(s, v, k) { s.osc('sine', 1400 * k, 1400 * k, { a: 1, d: 30, gain: 0.8 }); } },
   ui_confirm: { len: 0.12, mix: -12, cap: 'ui', render(s, v, k) { s.osc('sine', 880 * k, 1320 * k, { a: 2, d: 80, gain: 0.8, sweep: 0.04 }); } },
   ui_back: { len: 0.12, mix: -12, cap: 'ui', render(s, v, k) { s.osc('sine', 1100 * k, 700 * k, { a: 2, d: 80, gain: 0.8, sweep: 0.06 }); } },
-  ui_error: { len: 0.2, mix: -12, cap: 'ui', render(s, v, k) { for (let i = 0; i < 2; i++) s.osc('square', 200 * k, 200 * k, { at: i * 0.09, a: 2, d: 60, len: 0.07, gain: 0.5, filter: { type: 'lp', f: 1500 } }); } },
+  ui_error: { len: 0.2, mix: -12, cap: 'ui', render(s, v, k) { for (let i = 0; i < 2; i++) s.osc('square', 440 * k, 440 * k, { at: i * 0.09, a: 2, d: 60, len: 0.07, gain: 0.5, filter: { type: 'lp', f: 3000 } }); } },
   ui_open: { len: 0.18, mix: -12, cap: 'ui', render(s, v, k) { swish(s, k, 1000, 3000); } },
   ui_close: { len: 0.18, mix: -12, cap: 'ui', render(s, v, k) { swish(s, k, 3000, 1000); } },
   dialogue_tick: { len: 0.05, mix: -14, cap: 'ui', render(s, v, k) { s.osc('tri', 900 * k, 900 * k, { a: 1, d: 25, gain: 0.8 }); } },

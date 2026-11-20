@@ -143,7 +143,8 @@ export class Synth {
     const lin = o.curve === 'lin';
     const tail = Math.min(n, Math.floor(sr * 0.006));
     const out = this.out;
-    const aN = Math.floor(a * sr);
+    // at least 0.4 ms of attack: a layer that starts at full level is a click, not a transient
+    const aN = Math.max(Math.ceil(sr * 0.0004), Math.floor(a * sr));
     const hN = aN + Math.floor(hold * sr);
     const df = lin ? 1 / Math.max(1, d * sr) : Math.exp(-4.6 / Math.max(1, d * sr));
     const fq = f && f.q !== undefined ? f.q : 0.707;
@@ -292,9 +293,28 @@ export class Synth {
     this.out.reverse();
   }
 
-  /** Normalise to a peak and fade the last 5 ms. @param {number} peak @returns {Float32Array} */
+  /** Raised-cosine fade over the last `seconds`. @param {number} seconds */
+  fadeOut(seconds) {
+    const o = this.out;
+    const m = Math.min(this.n, Math.max(1, Math.floor(seconds * this.sr)));
+    for (let i = 0; i < m; i++) o[this.n - 1 - i] *= 0.5 - 0.5 * Math.cos(Math.PI * i / m);
+  }
+
+  /**
+   * Remove DC (a 12 Hz one-pole high-pass; brown noise and asymmetric clipping leave an offset), normalise to a
+   * peak and fade the last 5 ms. @param {number} peak @returns {Float32Array}
+   */
   finish(peak) {
     const o = this.out;
+    const R = 1 - TAU * 12 / this.sr;
+    let x1 = 0;
+    let y1 = 0;
+    for (let i = 0; i < this.n; i++) {
+      const y = o[i] - x1 + R * y1;
+      x1 = o[i];
+      y1 = y;
+      o[i] = y;
+    }
     let m = 0;
     for (let i = 0; i < this.n; i++) {
       const v = Math.abs(o[i]);
@@ -311,4 +331,35 @@ export class Synth {
 /** @param {number} midi @returns {number} Hz */
 export function mtof(midi) {
   return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+/**
+ * Looping noise buffer shared by the live loops (white or pink), with its loop point crossfaded.
+ * @param {number} seconds @param {number} sr @param {'white'|'pink'} colour @returns {Float32Array}
+ */
+export function loopNoise(seconds, sr, colour) {
+  const n = Math.floor(seconds * sr);
+  // generate `xf` extra samples: the loop start is crossfaded with the continuation past the end, so the
+  // wrap from the last sample to the first continues the same noise
+  const xf = 1024;
+  const d = new Float32Array(n + xf);
+  let s = 0x2545f491;
+  const p = [0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < n + xf; i++) {
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    const w = ((s >>> 0) / 4294967296) * 2 - 1;
+    if (colour === 'white') d[i] = w * 0.5;
+    else {
+      p[0] = 0.99886 * p[0] + w * 0.0555179; p[1] = 0.99332 * p[1] + w * 0.0750759; p[2] = 0.969 * p[2] + w * 0.153852;
+      p[3] = 0.8665 * p[3] + w * 0.3104856; p[4] = 0.55 * p[4] + w * 0.5329522; p[5] = -0.7616 * p[5] - w * 0.016898;
+      d[i] = (p[0] + p[1] + p[2] + p[3] + p[4] + p[5] + p[6] + w * 0.5362) * 0.11;
+      p[6] = w * 0.115926;
+    }
+  }
+  // equal-power crossfade of the loop start with the continuation (uncorrelated noise)
+  for (let i = 0; i < xf; i++) {
+    const t = (i + 0.5) / xf;
+    d[i] = d[i] * Math.sin(t * Math.PI / 2) + d[n + i] * Math.cos(t * Math.PI / 2);
+  }
+  return d.subarray(0, n);
 }
