@@ -271,14 +271,38 @@ export const RECIPES = {
   ] },
   // ---------------------------------------------------------------- small ambient puffs
   spray: { body: 'foam', layers: [
-    { m: 2, cell: smoke, n: 8, lo: 0, sp: [2, 5], life: [0.4, 0.7], sz: [0.4, 1.0], col: 'body', a: 0.7, sh: 'up', fb: 4, g: 9, dr: 1.5 },
-    { m: 2, cell: pebble, n: 10, lo: 0, sp: [3, 6], life: [0.4, 0.6], sz: [0.1, 0.06], col: 'body', sh: 'up', g: 14 },
+    { m: 2, cell: smoke, n: 8, lo: 4, sp: [2, 5], life: [0.4, 0.7], sz: [0.4, 1.0], col: 'body', a: 0.7, sh: 'up', fb: 4, g: 9, dr: 1.5 },
+    { m: 2, cell: pebble, n: 10, lo: 5, sp: [3, 6], life: [0.4, 0.6], sz: [0.1, 0.06], col: 'body', sh: 'up', g: 14 },
   ] },
+  // footstep dust: only the player's strides at a run or faster use it on the low tier (scaled by speed)
   step_dust: { body: 'path', layers: [
-    { m: 2, cell: smoke, n: 3, lo: 0, sp: [0.5, 1.5], life: [0.35, 0.55], sz: [0.25, 0.6], col: 'body', a: 0.45, sh: 'disc', fb: 4, dr: 3 },
+    { m: 2, cell: smoke, n: 3, lo: 3, sp: [0.6, 1.6], life: [0.4, 0.6], sz: [0.45, 1.15], col: 'paper', a: 0.6, sh: 'disc', fb: 4, dr: 3 },
   ] },
   land_ring: { body: 'paper', shock: { r: 3, t: 0.3, ground: true, col: 'paper' }, layers: [
-    { m: 2, cell: smoke, n: 10, lo: 6, sp: [3, 5], life: [0.4, 0.6], sz: [0.4, 1.1], col: 'body', a: 0.55, sh: 'ring', fb: 4, dr: 4 },
+    { m: 2, cell: smoke, n: 12, lo: 8, sp: [3, 5.5], life: [0.4, 0.65], sz: [0.5, 1.3], col: 'body', a: 0.6, sh: 'ring', r: 0.3, fb: 4, dr: 4 },
+    { m: 2, cell: pebble, n: 8, lo: 6, sp: [3, 6], life: [0.4, 0.6], sz: [0.12, 0.08], col: 'path', sh: 'hemi', r: 0.4, g: 16 },
+  ] },
+  // ---------------------------------------------------------------- movement (internal ids)
+  /** Leaving the ground into flight: a horizontal ring of light under the feet and streaks thrown downward. */
+  takeoff: { body: 'ora', layers: [
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.24, 0.24], sz: [0.6, 3.6], col: 'body', sh: 'still', hdr: 1.8 },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [1.6, 0.8], col: 'core', sh: 'still', hdr: 2, k: 1 },
+    { m: 1, cell: streak, n: 14, lo: 10, sp: [7, 12], life: [0.14, 0.24], sz: [0.1, 0.03], col: 'body', sh: 'ring', r: 0.3, st: 0.05, dr: 5, hdr: 1.8, k: 0.5 },
+    { m: 1, cell: streak, n: 6, lo: 4, sp: [8, 12], life: [0.14, 0.22], sz: [0.08, 0.03], col: 'core', sh: 'dir', dir: 1, st: 0.06, dr: 4, hdr: 2, k: 1 },
+  ] },
+  /** A boost stage change: a burst ring facing the direction of travel and streaks thrown back. */
+  boost_start: { body: 'ora', layers: [
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.2, 0.2], sz: [0.5, 5], col: 'core', sh: 'still', hdr: 2 },
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.26, 0.26], sz: [0.4, 3.6], col: 'body', sh: 'still', hdr: 1.8 },
+    { m: 1, cell: streak, n: 16, lo: 10, sp: [10, 18], life: [0.16, 0.26], sz: [0.09, 0.03], col: 'body', sh: 'dir', dir: 1, st: 0.06, dr: 4, hdr: 1.8, k: 0.6 },
+  ] },
+  /** Flight contrail behind the feet; only drawn while moving fast (minSpeed). */
+  contrail: { body: 'ora', minSpeed: 9, layers: [
+    { m: 1, cell: streak, rate: 30, lo: 20, sp: [0, 0.2], life: [0.4, 0.4], sz: [0.16, 0.03], col: 'body', a: 0.7, sh: 'still', hdr: 1.4, k: 0.3, trail: true },
+  ] },
+  /** Foam left on the water behind a low, fast flyer: flat puffs that spread and fade. */
+  wake: { body: 'foam', layers: [
+    { m: 2, cell: smoke, n: 2, lo: 2, sp: [0.6, 1.4], life: [0.9, 1.3], sz: [0.6, 1.8], col: 'body', a: 0.6, sh: 'disc', r: 0.5, fb: 4, dr: 1.5 },
   ] },
   // ---------------------------------------------------------------- internal ids (not in IDS.vfx)
   debris: { body: 'path', layers: [

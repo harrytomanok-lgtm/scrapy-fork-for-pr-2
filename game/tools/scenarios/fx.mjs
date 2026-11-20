@@ -333,6 +333,20 @@ const EFFECTS = [
     while (g.ctx.player.move.boost < 2 && n < 400) { g.step(3); n += 3; }
     fx.run(5);
   } },
+  { name: 'water-skim', label: 'Low flight over water (spray, wake)', fn: (g, P, fx) => {
+    // the nearest open water: walk outward from the island centre through the stage until the sea
+    const w = g.ctx.world;
+    const d = Math.hypot(P.x, P.z) || 1;
+    let x = P.x;
+    let z = P.z;
+    for (let r = 0; r < 4000 && w.waterDepthAt(x, z) < 4; r += 20) { x = P.x + (P.x / d) * r; z = P.z + (P.z / d) * r; }
+    x += (P.x / d) * 40; z += (P.z / d) * 40;
+    const yaw = Math.atan2(-P.z / d, P.x / d);
+    g.teleport(x, z, { alt: 0, y: 1.6, yaw, fly: true });
+    g.cmd.flushBuilds();
+    g.setCamera({ yaw: yaw + 0.5, pitch: -0.12, dist: 7 }); g.step(2);
+    g.move(0, 1); g.hold('dash', true); fx.run(48);
+  } },
   // ---------------------------------------------------------------- craters last (each on its own ground)
   { name: 'ringfall-rise', label: 'Ringfall: rise', fn: (g, P0, fx) => {
     const P = fx.stage(P0, 45);

@@ -29,6 +29,9 @@ export const pkg = {
     bus.on('rpg:levelUp', auto.levelUp);
     bus.on('move:boost', auto.boost);
     bus.on('actor:landed', auto.landed);
+    bus.on('actor:step', auto.step);
+    bus.on('move:jump', auto.jump);
+    bus.on('move:mode', auto.mode);
     bus.on('pickup:spawned', auto.pickup);
     bus.on('fx:impact', auto.impact);
     bus.on('quality:changed', auto.quality);

@@ -376,6 +376,7 @@ export function createVfx(ctx) {
   let weatherT = 0;
   const boostEnt = new Int32Array(MAX_BOOST);
   const boostHandle = new Int32Array(MAX_BOOST);
+  const boostStage = new Int32Array(MAX_BOOST);
 
   /** @param {number} x @param {number} y @param {number} z @param {number} color @param {number} intensity @param {number} radius @param {number} seconds */
   function flashLight(x, y, z, color, intensity, radius, seconds) {
@@ -739,7 +740,15 @@ export function createVfx(ctx) {
       for (let i = 0; i < orbs.length; i++) if (orbs[i].on) ob++;
       let pj = 0;
       for (let i = 0; i < projs.length; i++) if (projs[i].entId) pj++;
-      return { particles: pool.live, cap: pool.cap, emitters: em, beams: bm, decals: dc, shells: sh, orbs: ob, projectiles: pj, speed: speedK, weather: weatherK };
+      let au = 0;
+      let auMax = 0;
+      for (let i = 0; i < auras.length; i++) {
+        if (!auras[i].entId) continue;
+        au++;
+        auMax = Math.max(auMax, auras[i].cur);
+      }
+      return { particles: pool.live, cap: pool.cap, emitters: em, beams: bm, decals: dc, shells: sh, orbs: ob, projectiles: pj, speed: speedK, weather: weatherK,
+        auras: au, auraMax: auMax };
     },
 
     /**
@@ -847,7 +856,9 @@ export function createVfx(ctx) {
       const mz = v1.z - e.lz;
       const ml = Math.sqrt(mx * mx + my * my + mz * mz);
       const layers = R.layers;
-      for (let l = 0; l < layers.length && l < 4; l++) {
+      // minSpeed: a trail that only shows while its socket moves fast (flight contrails)
+      const slow = R.minSpeed > 0 && (dt <= 0 || ml < R.minSpeed * dt);
+      for (let l = 0; l < layers.length && l < 4 && !slow; l++) {
         const L = layers[l];
         if (!L.rate || (L.hi && low)) continue;
         const rate = low ? (typeof L.lo === 'number' ? L.lo : L.rate * 0.5) : L.rate;
@@ -1233,8 +1244,11 @@ export function createVfx(ctx) {
     }
   }
 
-  /** @param {any} c @param {number} dt @param {number} alpha @param {boolean} low */
-  function updateAuras(c, dt, alpha, low) {
+  /**
+   * @param {any} c @param {number} dt @param {number} alpha @param {boolean} low
+   * @param {number} rampDt time for the aura level to follow its owner (the owner ramps on rendered frames, also in tests)
+   */
+  function updateAuras(c, dt, alpha, low, rampDt) {
     const hdrMul = low ? 0.8 : 1;
     for (let i = 0; i < auras.length; i++) {
       const a = auras[i];
@@ -1261,7 +1275,7 @@ export function createVfx(ctx) {
           continue;
         }
       } else {
-        a.cur += (a.target - a.cur) * Math.min(1, dt * 10);
+        a.cur += (a.target - a.cur) * Math.min(1, rampDt * 10);
       }
       if (a.flareT > 0) a.flareT -= dt;
       const cur = a.cur;
@@ -1537,6 +1551,50 @@ export function createVfx(ctx) {
       parts.sprite(1, px, py, pz, w, 0, CELL.streak, 1.3, 1.35, 1.4, 0.6 * fade, 0.3, len, dx, dy, dz);
     }
   }
+
+  /**
+   * Flying low and fast over water: spray thrown up and back from the surface under the player and a foam wake.
+   * @param {any} c @param {number} dt @param {number} alpha @param {boolean} low
+   */
+  function updateWater(c, dt, alpha, low) {
+    const p = c.player;
+    if (!p || !p.alive || !p.move || dt <= 0 || !c.world) return;
+    const m = p.move.mode;
+    if (m !== 'fly' && m !== 'air') return;
+    const v = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z);
+    if (v < 8) return;
+    c.ents.renderPos(p, alpha, v1);
+    const sea = typeof c.world.seaLevel === 'number' ? c.world.seaLevel : 0;
+    const alt = v1.y - sea;
+    if (alt > 5 || alt < -0.5 || c.world.waterDepthAt(v1.x, v1.z) < 0.4) return;
+    const k = (1 - Math.max(0, alt) / 5) * Math.min(1, (v - 8) / 14 + 0.4);
+    const dx = p.vel.x / v;
+    const dz = p.vel.z / v;
+    waterAcc += (low ? 46 : 70) * k * dt;
+    let n = Math.floor(waterAcc);
+    waterAcc -= n;
+    if (n > 6) n = 6;
+    for (let q = 0; q < n; q++) {
+      const pi = pool.alloc();
+      if (pi < 0) break;
+      const side = rnd() < 0.5 ? -1 : 1;
+      const sp = 3 + rnd() * 4 + v * 0.12;
+      pool.px[pi] = v1.x - dx * 0.6 + dz * side * 0.3; pool.py[pi] = sea + 0.05; pool.pz[pi] = v1.z - dz * 0.6 - dx * side * 0.3;
+      pool.vx[pi] = -dx * sp * 0.5 + dz * side * sp * 0.6; pool.vy[pi] = 3 + rnd() * 4 * k; pool.vz[pi] = -dz * sp * 0.5 - dx * side * sp * 0.6;
+      pool.life[pi] = 0.45 + rnd() * 0.3; pool.rot[pi] = rnd() * TAU; pool.rotV[pi] = 0; pool.fadeIn[pi] = 0; pool.frames[pi] = 4;
+      pool.s0[pi] = 0.5 + rnd() * 0.3; pool.s1[pi] = 1.3 + rnd() * 0.6; pool.grav[pi] = 9; pool.drag[pi] = 1.2; pool.stretch[pi] = 0;
+      pool.mat[pi] = 2; pool.cell[pi] = CELL.smoke; pool.core[pi] = 0;
+      pool.cr[pi] = 0.92; pool.cg[pi] = 0.97; pool.cb[pi] = 1; pool.ca[pi] = 0.75;
+    }
+    // the wake: flat foam puffs every 0.8 m travelled
+    wakeAcc += v * dt;
+    if (wakeAcc >= 0.8) {
+      wakeAcc = 0;
+      vfx.burst('wake', v1.x - dx * 0.8, sea + 0.08, v1.z - dz * 0.8, bopts(0, 1, 0, 0.6 + 0.6 * k, undefined));
+    }
+  }
+  let waterAcc = 0;
+  let wakeAcc = 0;
 
   /**
    * Weather layer (driven by env.setFog's `snow`): wind-blown snow streaks in a box around the camera.
@@ -1853,8 +1911,9 @@ export function createVfx(ctx) {
       parts.clearSprites();
       applyFlashes(c);
       updateEmitters(c, dt, alpha, low);
-      updateAuras(c, dt, alpha, low);
+      updateAuras(c, dt, alpha, low, manual && frameDt > 0 ? Math.min(0.1, frameDt) : dt);
       updateSpeed(c, dt, alpha, low);
+      updateWater(c, dt, alpha, low);
       updateWeather(c, dt, low);
       updateShells(c, dt);
       updateDecals(dt);
@@ -1886,6 +1945,12 @@ export function createVfx(ctx) {
     return ent.team === 2 ? PALETTE.hostile : PALETTE.ora;
   }
   let strikeN = 0;
+  let contrailH = 0;
+  /** @param {number} h @returns {boolean} */
+  function emitterLive(h) {
+    for (let i = 0; i < emitters.length; i++) if (emitters[i].id === h && !emitters[i].dying) return true;
+    return false;
+  }
   /**
    * A short ribbon of light behind a limb for `seconds`.
    * @param {number} entId @param {string} socket @param {number} color @param {number} seconds @param {number} width multiplier
@@ -2139,17 +2204,74 @@ export function createVfx(ctx) {
           if (boostEnt[i] === 0) {
             slot = i;
             boostEnt[i] = e.entId;
+            boostStage[i] = 0;
             boostHandle[i] = vfx.attach('boost_trail', e.entId, 'back', bopts(0, 0, 0, 1, color));
             break;
           }
         }
       }
+      // every rise in boost stage reads at once: a ring facing the travel and streaks thrown back
+      const prevStage = boostStage[slot >= 0 ? slot : 0];
+      if (slot >= 0) boostStage[slot] = e.stage;
+      if (e.stage > prevStage) {
+        const v = Math.sqrt(ent.vel.x * ent.vel.x + ent.vel.y * ent.vel.y + ent.vel.z * ent.vel.z);
+        const dx = v > 0.5 ? ent.vel.x / v : Math.sin(ent.yaw);
+        const dy = v > 0.5 ? ent.vel.y / v : 0;
+        const dz = v > 0.5 ? ent.vel.z / v : Math.cos(ent.yaw);
+        vfx.burst('boost_start', ent.pos.x + dx * 1.2, ent.pos.y + (ent.height || 1.8) * 0.55 + dy * 1.2, ent.pos.z + dz * 1.2,
+          bopts(-dx, -dy, -dz, e.stage === 2 ? 1.5 : 1, color));
+      }
       if (e.stage === 2) vfx.burst('sonic_ring', ent.pos.x, ent.pos.y + (ent.height || 1.8) * 0.55, ent.pos.z, bopts(ent.vel.x, ent.vel.y, ent.vel.z, 1, undefined));
     },
     /** @param {any} e actor:landed */
     landed(e) {
-      if (e.speed >= 12) vfx.burst('land_ring', e.x, e.y + 0.1, e.z, bopts(0, 1, 0, Math.min(2.2, e.speed / 16), undefined));
-      else if (e.speed >= 6 && !isLow()) vfx.burst('step_dust', e.x, e.y + 0.1, e.z);
+      if (e.speed >= 20) {
+        // a long fall: a wide landing ring, debris and cracks in the ground
+        vfx.burst('land_ring', e.x, e.y + 0.1, e.z, bopts(0, 1, 0, Math.min(2.4, e.speed / 14), undefined));
+        vfx.burst('impact_dust', e.x, e.y + 0.15, e.z, bopts(0, 1, 0, 1.3, undefined));
+        decalOpts.color = undefined; decalOpts.seconds = 6; decalOpts.shape = 'circle';
+        vfx.decal('crack', e.x, e.z, Math.min(3.4, 1.4 + e.speed / 20), decalOpts);
+      } else if (e.speed >= 12) {
+        vfx.burst('land_ring', e.x, e.y + 0.1, e.z, bopts(0, 1, 0, Math.min(2.2, e.speed / 16), undefined));
+      } else if (e.speed >= 6 && (!isLow() || (ctx.player && e.entId === ctx.player.id))) {
+        vfx.burst('step_dust', e.x, e.y + 0.1, e.z, bopts(0, 1, 0, 1.3, undefined));
+      }
+    },
+    /** Running dust: the player's strides kick up dust by speed (water splashes instead). @param {any} e actor:step */
+    step(e) {
+      const p = ctx.player;
+      if (!p || e.entId !== p.id || !p.move || !p.move.grounded) return;
+      const v = Math.sqrt(p.vel.x * p.vel.x + p.vel.z * p.vel.z);
+      if (v < 6.5) return;
+      const k = Math.min(1.8, 0.7 + (v - 6.5) / 8);
+      if (e.surface === 'water' || e.surface === 'shallows') vfx.burst('spray', p.pos.x, p.pos.y + 0.1, p.pos.z, bopts(0, 1, 0, 0.6 * k, undefined));
+      else if (e.surface !== 'snow') vfx.burst('step_dust', p.pos.x, p.pos.y + 0.1, p.pos.z, bopts(-p.vel.x, 0.3, -p.vel.z, k, undefined));
+    },
+    /** @param {any} e move:jump */
+    jump(e) {
+      const ent = ctx.ents.get(e.entId);
+      if (!ent || !ctx.player || ent !== ctx.player || !ent.move) return;
+      vfx.burst('step_dust', ent.pos.x, ent.pos.y + 0.1, ent.pos.z, bopts(0, 1, 0, 1.4, undefined));
+    },
+    /** Take-off into flight (a ring of light and dust under the feet) and the flight contrail. @param {any} e move:mode */
+    mode(e) {
+      const ent = ctx.ents.get(e.entId);
+      if (!ent || !ctx.player || ent !== ctx.player) return;
+      if (e.mode === 'fly' && e.prev !== 'fly') {
+        const color = formColor(ent);
+        vfx.burst('takeoff', ent.pos.x, ent.pos.y + 0.2, ent.pos.z, bopts(0, -1, 0, 1, color));
+        if (ctx.world && ent.pos.y - ctx.world.heightAt(ent.pos.x, ent.pos.z) < 3) {
+          waveOpts.radius = 3.2; waveOpts.seconds = 0.35; waveOpts.color = PALETTE.paper; waveOpts.sphere = false; waveOpts.ground = true;
+          vfx.shockwave(ent.pos.x, ent.pos.y, ent.pos.z, waveOpts);
+        }
+        if (!contrailH || !emitterLive(contrailH)) {
+          tmpOpts.color = color;
+          contrailH = vfx.attach('contrail', ent.id, 'feet', tmpOpts);
+        }
+      } else if (e.mode !== 'fly' && contrailH) {
+        vfx.detach(contrailH, 0.3);
+        contrailH = 0;
+      }
     },
     /** @param {any} e pickup:spawned */
     pickup(e) {
