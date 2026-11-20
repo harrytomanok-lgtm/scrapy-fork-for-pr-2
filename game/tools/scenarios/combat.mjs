@@ -190,7 +190,39 @@ export const scenarios = [
   {
     name: 'combat-nova-ultimate',
     async run({ game, assert, shot }) {
-      const p = await opening(game, assert);
+      const start = await opening(game, assert);
+      // The start is a village square with walls, benches and a tree: move to open, level ground, so a throw is
+      // not stopped by a prop (a wall slam is its own scenario).
+      const p = await game((g, pp) => {
+        const w = g.ctx.world;
+        const o = { hit: false };
+        const free = (x, z) => {
+          const h = w.heightAt(x, z);
+          if (w.waterDepthAt(x, z) > 0) return false;
+          for (let a = 0; a < 8; a++) {
+            const dx = Math.cos(a * 0.785);
+            const dz = Math.sin(a * 0.785);
+            if (Math.abs(w.heightAt(x + dx * 16, z + dz * 16) - h) > 1.5) return false;
+            if (w.sweepSphere(x, h + 0.8, z, x + dx * 18, h + 0.8, z + dz * 18, 0.6, o)) return false;
+          }
+          return true;
+        };
+        for (let r = 60; r < 420; r += 20) {
+          for (let i = 0; i < 12; i++) {
+            const a = (i / 12) * Math.PI * 2;
+            const x = pp.x + Math.cos(a) * r;
+            const z = pp.z + Math.sin(a) * r;
+            if (!free(x, z)) continue;
+            g.teleport(x, z, {});
+            g.step(30);
+            g.cmd.flushBuilds();
+            g.step(4);
+            if (free(x, z)) return g.player();
+          }
+        }
+        return null;
+      }, start);
+      assert.ok(p, 'open ground for the Nova test');
       const ids = await game((g, pp) => {
         g.ai(false);
         const out = [];
