@@ -233,15 +233,17 @@ export function createActors(ctx) {
   const actors = {
     /**
      * Build the visual for `ent` and set `ent.visual`, `ent.radius`, `ent.height`.
-     * @param {any} ent @param {string} specId @param {{ formKey?:string|null, palette?:object|null }} [opts]
+     * `opts.scale` renders the actor larger or smaller (0.5..2) and scales its radius and height with it.
+     * @param {any} ent @param {string} specId @param {{ formKey?:string|null, palette?:object|null, scale?:number }} [opts]
      */
     create(ent, specId, opts) {
       if (!ent || !ent.alive) return;
       if (rec(ent)) destroyRecord(ent.visual);
       const rig = rigFor(specId);
       if (!rig) return;
-      ent.radius = rig.radius;
-      ent.height = rig.height;
+      const want = opts && opts.scale > 0 ? Math.min(2, Math.max(0.5, opts.scale)) : 1;
+      ent.radius = rig.radius * want;
+      ent.height = rig.height * want;
       const render = ctx.render;
       if (!render || !render.layers || !render.materials) return;
       const bones = [];
@@ -253,11 +255,11 @@ export function createActors(ctx) {
       }
       let o = opts || {};
       // generic villagers: a look of their own per person (colours and height)
-      let vScale = 1;
+      let vScale = want;
       if (!o.palette && rig.id.indexOf('npc_villager_') === 0) {
         const look = villagerLook(ent.id);
         o = { formKey: o.formKey, palette: look.palette };
-        vScale = look.scale;
+        vScale = look.scale * want;
       }
       const formKey = o.formKey && rig.spec.forms && rig.spec.forms[o.formKey] ? o.formKey : null;
       const mat = render.materials.toonSkinned({ palette: true });
@@ -297,7 +299,7 @@ export function createActors(ctx) {
       applyPalette(r);
       if (formKey) actors.rimGlow(ent, FORM_COLOUR[formKey] || PALETTE.ora, 0.55);
       addOutline(r);
-      if (render.blob) render.blob.add(ent.id, rig.radius);
+      if (render.blob) render.blob.add(ent.id, rig.radius * want);
       poseRecord(r, 0, 1, true);
       r.final.set(r.loco);
     },

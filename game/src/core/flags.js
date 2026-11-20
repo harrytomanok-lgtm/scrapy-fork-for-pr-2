@@ -16,7 +16,7 @@
  * @property {boolean} test          test mode: no title, no autosave, memory-only storage, step-driven sim
  * @property {boolean} autoplay      with test: run the sim in real time
  * @property {'low'|'high'|null} quality   forced quality tier
- * @property {number|null} res       fixed render scale 0.3..1 (disables dynamic resolution)
+ * @property {number|null} res       fixed render scale 0.3..2 (on the low tier it is the pixel ratio; disables dynamic resolution)
  * @property {number|null} seed      seed of rng.sim and rng.fx (test mode defaults to 1)
  * @property {number|null} worldseed world seed override (default WORLD_SEED)
  * @property {'he'|'en'|null} lang   forced language (null: the saved setting, default 'he')
@@ -84,7 +84,7 @@ export function parseFlags(search = '') {
     test,
     autoplay: test && bool(get('autoplay')),
     quality: quality === 'low' || quality === 'high' ? quality : null,
-    res: resN === null ? null : Math.min(1, Math.max(0.3, resN)),
+    res: resN === null ? null : Math.min(2, Math.max(0.3, resN)),
     seed: int(get('seed')),
     worldseed: int(get('worldseed')),
     lang: lang === 'he' || lang === 'en' ? lang : null,

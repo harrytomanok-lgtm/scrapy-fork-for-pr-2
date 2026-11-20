@@ -61,7 +61,7 @@ test('malformed values fall back', () => {
 
 test('ranges are clamped or wrapped', () => {
   assert.equal(parseFlags('res=0.1').res, 0.3);
-  assert.equal(parseFlags('res=4').res, 1);
+  assert.equal(parseFlags('res=4').res, 2);
   assert.equal(parseFlags('hour=24').hour, 0);
   assert.equal(parseFlags('hour=17.5').hour, 17.5);
   assert.equal(parseFlags('hour=-2').hour, 22);
