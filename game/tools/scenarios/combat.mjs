@@ -493,7 +493,8 @@ export const scenarios = [
         g.hold('attack', true);
         g.step(Math.ceil(0.35 * 60) + 4);
         g.hold('attack', false);
-        g.step(18);
+        // The launch is a finisher-class hit (ART_UX 4): 140 ms hit-stop and 0.5x slow motion before it rises.
+        g.step(34);
         const launched = g.actors().find((a) => a.id === id).y - ground;
         g.press('dash');
         g.step(10);

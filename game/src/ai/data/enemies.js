@@ -162,9 +162,9 @@ export const GROUPS = [
   { id: 'vorrhal_adds', members: [{ enemy: 'choir_vanguard', count: 2 }] },
   { id: 'siphon_wave_1', members: [{ enemy: 'choir_acolyte', count: 3 }, { enemy: 'choir_caster', count: 1 }] },
   { id: 'siphon_wave_2', members: [{ enemy: 'choir_acolyte', count: 2 }, { enemy: 'choir_caster', count: 2 }] },
-  { id: 'camp_choir_small', members: [{ enemy: 'choir_acolyte', count: 3 }] },
+  { id: 'camp_choir_small', members: [{ enemy: 'choir_acolyte', count: 2 }, { enemy: 'choir_caster', count: 1 }] },
   { id: 'camp_choir_large', members: [{ enemy: 'choir_acolyte', count: 4 }, { enemy: 'choir_caster', count: 2 }] },
-  { id: 'camp_beasts', members: [{ enemy: 'tusk_boar', count: 3 }] },
+  { id: 'camp_beasts', members: [{ enemy: 'tusk_boar', count: 2 }, { enemy: 'ember_wisp', count: 2 }] },
   // Region camp groups (additions: the beasts of each region band).
   { id: 'camp_coast', members: [{ enemy: 'scuttlecrab', count: 2 }, { enemy: 'choir_caster', count: 1 }] },
   { id: 'camp_thornwood', members: [{ enemy: 'bramble_boar', count: 2 }, { enemy: 'choir_acolyte', count: 2 }] },
@@ -175,7 +175,7 @@ export const GROUPS = [
 /** Spawn tables per region (GDD 3.2). density = target hostiles within 300 m. */
 export const SPAWN_TABLES = [
   { id: 'meadows', density: 5, night: 1.3,
-    entries: [{ enemy: 'ember_wisp', weight: 4, group: [2, 4] }, { enemy: 'tusk_boar', weight: 3, group: [1, 2] }, { enemy: 'choir_acolyte', weight: 2, group: [2, 3], minLevel: 2 }],
+    entries: [{ enemy: 'ember_wisp', weight: 4, group: [3, 4] }, { enemy: 'tusk_boar', weight: 3, group: [2, 3] }, { enemy: 'choir_acolyte', weight: 2, group: [3, 4], minLevel: 2 }],
     camps: [{ tier: 1, group: 'camp_beasts' }, { tier: 2, group: 'camp_choir_small' }, { tier: 3, group: 'camp_choir_large' }] },
   { id: 'coast', density: 5, night: 1.3,
     entries: [{ enemy: 'scuttlecrab', weight: 3, group: [1, 2] }, { enemy: 'choir_caster', weight: 2, group: [1, 2] }, { enemy: 'ember_wisp', weight: 3, group: [2, 4] }],

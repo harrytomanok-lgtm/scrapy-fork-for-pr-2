@@ -257,17 +257,25 @@ export const BALANCE = deepFreeze({
     targets: { stringsToKillGrunt: [1, 2], gruntHitsSurvived: [9, 18] },
   },
 
-  /** GDD 7.2 roster. levels [min, max]; mult = hp / atk / def / xp / shells. */
+  /**
+   * GDD 7.2 roster. levels [min, max]; mult = hp / atk / def / xp / shells.
+   * Fight pacing pass (tools/balance-sim.mjs stageGruntStrings): with the route's gear and Technique Points three
+   * early enemies fell in 2.7 s. hp and atk multipliers changed (GDD 7.2 values in brackets): wisp 2.8 / 0.45
+   * (0.5 / 0.6), bramble boar 5.0 / 0.8 (1.2 / 1.1), acolyte 3.9 / 0.75 (1 / 1), caster 3.4 / 0.75 (0.8 / 1), crab
+   * 3.2 / 0.7 (1.6 / 0.9), golem 4.5 / 1.1 (3 / 1.5), harrier 3.6 / 0.95 (0.9 / 1.3), vanguard 4 / 1.1 (2.5 / 1.5), so a
+   * grunt takes about 2-3 Strike Strings and a group of 3-4 lasts about 8-15 s on Warrior; ATK is lower so the longer
+   * fights cost about the HP they did. tusk_boar keeps the GDD values (tests/core/formulas.test.mjs pins them).
+   */
   enemies: {
-    ember_wisp: { tier: 'grunt', movement: 'fly', brain: 'ranged', levels: [1, 10], mult: { hp: 0.5, atk: 0.6, def: 0.5, xp: 0.5, shells: 0.5 }, poise: 0 },
+    ember_wisp: { tier: 'grunt', movement: 'fly', brain: 'ranged', levels: [1, 10], mult: { hp: 2.8, atk: 0.45, def: 0.5, xp: 0.5, shells: 0.5 }, poise: 0 },
     tusk_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [1, 8], mult: { hp: 1.0, atk: 1.0, def: 1.0, xp: 1.0, shells: 1.0 }, poise: 20 },
-    bramble_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [8, 14], mult: { hp: 1.2, atk: 1.1, def: 1.0, xp: 1.1, shells: 1.0 }, poise: 25, variantOf: 'tusk_boar' },
-    choir_acolyte: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [2, 28], mult: { hp: 1.0, atk: 1.0, def: 1.0, xp: 1.0, shells: 1.2 }, poise: 25, guardChance: 0.3 },
-    choir_caster: { tier: 'grunt', movement: 'hover', brain: 'ranged', levels: [4, 28], mult: { hp: 0.8, atk: 1.0, def: 0.8, xp: 1.1, shells: 1.2 }, poise: 15, keepRange: 25 },
-    scuttlecrab: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [5, 12], mult: { hp: 1.6, atk: 0.9, def: 1.6, xp: 1.3, shells: 1.3 }, poise: 50, frontGuard: { angleDeg: 120, damageMult: 0.2 } },
-    rust_golem: { tier: 'heavy', movement: 'ground', brain: 'melee', levels: [13, 22], mult: { hp: 3.0, atk: 1.5, def: 2.0, xp: 3.0, shells: 3.0 }, poise: 80 },
-    frost_harrier: { tier: 'grunt', movement: 'fly', brain: 'diver', levels: [19, 28], mult: { hp: 0.9, atk: 1.3, def: 0.8, xp: 1.2, shells: 1.0 }, poise: 15 },
-    choir_vanguard: { tier: 'elite', movement: 'fly', brain: 'melee', levels: [22, 28], mult: { hp: 2.5, atk: 1.5, def: 1.5, xp: 4.0, shells: 4.0 }, poise: 60, boltDodge: 0.25 },
+    bramble_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [8, 14], mult: { hp: 5.0, atk: 0.8, def: 1.0, xp: 1.1, shells: 1.0 }, poise: 25, variantOf: 'tusk_boar' },
+    choir_acolyte: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [2, 28], mult: { hp: 3.9, atk: 0.75, def: 1.0, xp: 1.0, shells: 1.2 }, poise: 25, guardChance: 0.3 },
+    choir_caster: { tier: 'grunt', movement: 'hover', brain: 'ranged', levels: [4, 28], mult: { hp: 3.4, atk: 0.75, def: 0.8, xp: 1.1, shells: 1.2 }, poise: 15, keepRange: 25 },
+    scuttlecrab: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [5, 12], mult: { hp: 3.2, atk: 0.7, def: 1.6, xp: 1.3, shells: 1.3 }, poise: 50, frontGuard: { angleDeg: 120, damageMult: 0.2 } },
+    rust_golem: { tier: 'heavy', movement: 'ground', brain: 'melee', levels: [13, 22], mult: { hp: 4.5, atk: 1.1, def: 2.0, xp: 3.0, shells: 3.0 }, poise: 80 },
+    frost_harrier: { tier: 'grunt', movement: 'fly', brain: 'diver', levels: [19, 28], mult: { hp: 3.6, atk: 0.95, def: 0.8, xp: 1.2, shells: 1.0 }, poise: 15 },
+    choir_vanguard: { tier: 'elite', movement: 'fly', brain: 'melee', levels: [22, 28], mult: { hp: 4.0, atk: 1.1, def: 1.5, xp: 4.0, shells: 4.0 }, poise: 60, boltDodge: 0.25 },
   },
 
   /**

@@ -103,13 +103,15 @@ export const STAGES = [
     fights: [{ id: 'mq1_wisps', members: [['ember_wisp', 4]], level: 1 }, { id: 'mq1_boars', members: [['tusk_boar', 2]], level: 1 }] },
   { id: 'Meadows', minute: 12, region: 'meadows', t: 0.3, unlocks: ['flare_barrage'],
     gear: [['training_wraps', 1], ['apprentice_garb', 1], ['wind_charm', 4]],
-    fights: [{ id: 'wisps', members: [['ember_wisp', 3]] }, { id: 'boars', members: [['tusk_boar', 2]] }, { id: 'camp_choir_small', members: [['choir_acolyte', 3]] }] },
+    fights: [{ id: 'wisps', members: [['ember_wisp', 3]] }, { id: 'boars', members: [['tusk_boar', 2]] }, { id: 'camp_beasts', members: [['tusk_boar', 2], ['ember_wisp', 2]] },
+      { id: 'camp_choir_small', members: [['choir_acolyte', 2], ['choir_caster', 1]] }] },
   { id: 'MQ2', minute: 22, region: 'meadows', t: 0.5, unlocks: ['flare_barrage'],
     gear: [['racers_wraps', 3], ['meadow_garb', 3], ['wind_charm', 4], ['sunfruit_charm', 3]],
     fights: [{ id: 'mq2_raid', members: [['choir_acolyte', 3], ['choir_caster', 1]], level: 'player' }], boss: 'durn' },
   { id: 'MQ4', minute: 50, region: 'coast', t: 0.6, unlocks: ['flare_barrage', 'nova_ring', 'dawn_lance'],
     gear: [['bramble_wraps', 8], ['tidewoven_garb', 8], ['wind_charm', 4], ['sunfruit_charm', 3]],
-    fights: [{ id: 'mq4_wave', members: [['choir_acolyte', 5], ['choir_caster', 3]] }, { id: 'camp_coast', members: [['scuttlecrab', 2], ['choir_caster', 1]] }] },
+    fights: [{ id: 'mq4_wave_1', members: [['choir_acolyte', 3], ['choir_caster', 1]] }, { id: 'mq4_wave_2', members: [['choir_acolyte', 2], ['choir_caster', 2]] },
+       { id: 'camp_coast', members: [['scuttlecrab', 2], ['choir_caster', 1]] }] },
   { id: 'MQ3', minute: 64, region: 'thornwood', t: 0.5, unlocks: ['flare_barrage', 'nova_ring', 'dawn_lance'],
     gear: [['bramble_wraps', 8], ['meadow_garb', 8], ['tide_charm', 8], ['sunfruit_charm', 3]],
     fights: [{ id: 'camp_thornwood', members: [['bramble_boar', 2], ['choir_acolyte', 2]] }], boss: 'bramblehorn' },
@@ -513,14 +515,55 @@ export function run(diff = 'warrior', prof = MODEL.profiles.player) {
   return { diff, rows, levelAt };
 }
 
-/** Same-level grunt checks of GDD 7.1 (Warrior, typical allocation, no gear). */
+/**
+ * Strike Strings to kill each grunt of the roster met along the main path, by the stage's player (level, gear and
+ * Technique Points of the route) against the grunt at its level in that stage's fights. The fight-pacing target:
+ * a single grunt takes 2-3 Strings. GDD 7.1's 1-2 Strings (gruntTargets) is the base curve of a grunt with hpMult 1
+ * and no gear; the roster's hp multipliers lift real grunts onto the pacing target.
+ * @param {string} [diff]
+ * @returns {{ stage:string, id:string, level:number, strings:number }[]}
+ */
+export function stageGruntStrings(diff = 'warrior') {
+  const res = run(diff, MODEL.profiles.player);
+  const out = [];
+  const ss = B.tech.strike_string;
+  STAGES.forEach((stage, i) => {
+    const L = res.rows[i].level;
+    const p = playerAt(stage, L, true);
+    const rS = p.nodes.have.strike_string || 0;
+    let strPower = ss.hits.reduce((s, h) => s + h.power, 0);
+    if (rS >= 1) strPower += ss.ranks[1].extraHit.power;
+    if (rS >= 2) strPower *= ss.ranks[2].powerMult;
+    const seen = new Set();
+    for (const f of stage.fights) {
+      for (const [id] of f.members) {
+        const def = ENEMY[id];
+        if (seen.has(id) || def.tier !== 'grunt') continue;
+        seen.add(id);
+        const lv = stageLevel(stage, f, id, L);
+        const est = F.enemyStats(def, lv, diff);
+        const fg = def.frontGuard ? 0.5 + 0.5 * def.frontGuard.damageMult : 1;
+        out.push({ stage: stage.id, id, level: lv, strings: est.hp / (strPower * perPower(p, 'melee', est) * fg) });
+      }
+    }
+  });
+  return out;
+}
+
+/** The GDD 7.1 reference grunt: every multiplier 1. */
+const BASE_GRUNT = Object.freeze({ tier: 'grunt', mult: { hp: 1, atk: 1, def: 1, xp: 1, shells: 1 }, poise: 25 });
+
+/**
+ * Same-level grunt checks of GDD 7.1 (Warrior, typical allocation, no gear) on the base curve: a grunt with
+ * multipliers 1 (the roster's own multipliers carry the fight pacing, see stageGruntStrings).
+ */
 export function gruntTargets(level) {
   const p = playerAt({ id: 'none', minute: 0, gear: [], unlocks: [] }, level);
   const ss = B.tech.strike_string;
   const strPower = ss.hits.reduce((s, h) => s + h.power, 0);
   const out = {};
-  for (const id of ['tusk_boar', 'choir_acolyte']) {
-    const est = F.enemyStats(ENEMY[id], level, 'warrior');
+  for (const id of ['base_grunt']) {
+    const est = F.enemyStats(BASE_GRUNT, level, 'warrior');
     out[id] = { strings: est.hp / (strPower * perPower(p, 'melee', est)), hits: p.stats.hpMax / (B.enemyScale.referenceHitPower * enemyPerPower(p, est, 'warrior')) };
   }
   return out;
@@ -604,7 +647,9 @@ if (isMain) {
     console.log(JSON.stringify(out.map((o) => ({ diff: o.diff, rows: o.rows })), null, 1));
   } else {
     for (const o of out) console.log(print(o));
-    console.log('\nGDD 7.1 same-level grunt targets (strings to kill 1-2, hits survived 9-18):');
+    console.log('\nRoster grunts on the main path (Strike Strings to kill, target 2-3):');
+    console.log('  ' + stageGruntStrings().map((r) => `${r.stage} ${r.id} L${r.level} ${r.strings.toFixed(2)}`).join('; '));
+    console.log('\nGDD 7.1 base-curve grunt (multipliers 1; strings to kill 1-2, hits survived 9-18):');
     for (const L of [1, 5, 10, 20, 30]) {
       const g = gruntTargets(L);
       console.log(`  L${L}: ` + Object.entries(g).map(([id, v]) => `${id} ${v.strings.toFixed(2)} strings, ${v.hits.toFixed(1)} hits`).join('; '));

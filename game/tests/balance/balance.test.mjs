@@ -10,7 +10,7 @@ import { BALANCE } from '../../src/core/balance.js';
 import { enemies } from '../../src/ai/data/enemies.js';
 import { aiTechniques } from '../../src/ai/data/techniques.js';
 import { playerTechniques } from '../../src/combat/data/techniques.js';
-import { STAGES, checks, gruntTargets, killShellsPerHour, profileFor, run, shellsPerHour, totalNodeCost } from '../../tools/balance-sim.mjs';
+import { STAGES, checks, gruntTargets, killShellsPerHour, profileFor, run, shellsPerHour, stageGruntStrings, totalNodeCost } from '../../tools/balance-sim.mjs';
 
 const DIFFS = ['story', 'warrior', 'master'];
 const RUNS = Object.fromEntries(DIFFS.map((d) => [d, run(d, profileFor(d))]));
@@ -20,6 +20,25 @@ const inBand = (v, [lo, hi], msg) => assert.ok(v >= lo && v <= hi, `${msg}: ${ty
 const BOSS_SECONDS = { durn: [40, 80], bramblehorn: [65, 120], gorrumaw: [75, 140], iskra: [80, 150], vorrhal: [120, 240] };
 /** Healing items a boss may cost at most (Master: the carry cap). */
 const MAX_HEALS = { story: 1, warrior: 3, master: BALANCE.economy.carryCap };
+
+test('fight pacing: a roster grunt on the main path takes 2-3 Strike Strings from the route\'s player', () => {
+  // tusk_boar keeps the GDD 7.2 multipliers (tests/core/formulas.test.mjs pins them); every other grunt is paced.
+  const rows = stageGruntStrings('warrior').filter((r) => r.id !== 'tusk_boar');
+  for (const r of rows) inBand(r.strings, [1.4, 3.0], `${r.stage} ${r.id} L${r.level} strings to kill`);
+  const mean = rows.reduce((s, r) => s + r.strings, 0) / rows.length;
+  inBand(mean, [2, 3], 'mean strings to kill a grunt');
+});
+
+test('fight pacing: a group of 3-4 at the player\'s level lasts about 8-15 s on Warrior', () => {
+  for (const r of RUNS.warrior.rows) {
+    for (const f of r.fights) {
+      if (f.n < 3 || f.n > 4) continue;
+      // Ember Wisps alone are the gentlest fight of the game (fragile flyers): shorter, but no longer a blink.
+      const band = /^(mq1_)?wisps$/.test(f.id) ? [5, 17] : [8, 17];
+      inBand(f.ttkGroup, band, `Warrior ${r.stage} ${f.id} x${f.n} seconds`);
+    }
+  }
+});
 
 test('GDD 7.1: a same-level grunt dies to 1-2 Strike Strings and a full-HP player survives 9-18 grunt hits (L1-30)', () => {
   for (let L = 1; L <= 30; L++) {
@@ -42,14 +61,13 @@ test('player level follows the region level along the main path, and every boss 
   inBand(mq7.level, [25, 28], 'level when MQ7 starts');
 });
 
-// Lower bound 2 s: three level-2 Ember Wisps fall in 2.7 s in the browser check since the first string hit rises to
-// flyers (tools/scenarios/balance.mjs, balance-meadows), so a small wisp group may clear in under 3 s.
+// Lower bound 4 s: the pacing pass made three wisps a fight of about 6 s (they fell in 2.7 s before).
 test('group fights: quick, never a death sentence', () => {
   for (const d of DIFFS) {
     const maxLost = d === 'master' ? 1.2 : 0.9;
     for (const r of RUNS[d].rows) {
       for (const f of r.fights) {
-        inBand(f.ttkGroup, [2, 25], `${d} ${r.stage} ${f.id} seconds to clear`);
+        inBand(f.ttkGroup, [4, 25], `${d} ${r.stage} ${f.id} seconds to clear`);
         assert.ok(f.hpLost <= maxLost * r.hp, `${d} ${r.stage} ${f.id}: ${(100 * f.hpLost / r.hp).toFixed(0)}% HP lost`);
         if (d !== 'master') assert.ok(f.ttd > f.ttkGroup, `${d} ${r.stage} ${f.id}: dies in ${f.ttd.toFixed(1)} s, clears in ${f.ttkGroup.toFixed(1)} s`);
       }
