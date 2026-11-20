@@ -292,7 +292,7 @@ function mixInto(a, b, t) {
  * - golden hour (16.2-18.9, peak 17.6): a cool sky fill against the warm sun, so shadows turn blue-violet and the
  *   lit side glows; a deeper zenith over the warm horizon; the sun 12% stronger;
  * - blue hour (19.0-21.5, peak 20.1): a deep blue sky, ambient and shadow after the sunset; the horizon keeps the
- *   dusk key's warm fog (the sky adds the afterglow band).
+ *   dusk key's warm fog only in the afterglow band of the sky; the haze itself turns blue.
  * Allocation-free.
  * @param {number} h 0..24 @param {DaySample} s mutated
  * @returns {DaySample}
@@ -310,6 +310,7 @@ export function lookOfDay(h, s) {
     mixInto(s.zenith, BLUE_ZENITH, 0.65 * bw);
     mixInto(s.shadow, BLUE_SHADOW, 0.45 * bw);
     mixInto(s.ambGround, BLUE_GROUND, 0.35 * bw);
+    mixInto(s.fog, BLUE_SKY, 0.3 * bw);
   }
   return s;
 }

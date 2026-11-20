@@ -248,4 +248,42 @@ export const scenarios = [
       assert.ok(k.orbs >= 1 || k.particles > 0, 'death particles and XP orbs');
     },
   },
+  {
+    // render polish: the phone tier's shadow map (on by default, shed on request), the blob fade, and ?res up to 2
+    name: 'gfx-shadows',
+    query: 'res=2&hour=16',
+    width: 412,
+    height: 915,
+    async run({ game, assert, shot }) {
+      await opening(game, assert);
+      const on = await game((g) => {
+        g.step(20);
+        g.render();
+        const q = g.ctx.render.quality();
+        return { q, dc: g.stats().drawCalls, programs: g.stats().programs };
+      });
+      assert.equal(on.q.shadows, true, 'the low tier draws the shadow map');
+      assert.equal(on.q.shadow.size, 1024);
+      assert.equal(on.q.scale, 2, 'res=2 asks for pixel ratio 2 on the low tier');
+      assert.deepEqual(on.q.canvas, [412, 915], 'but never above the device ratio (1 in the harness)');
+      assert.ok(on.programs <= 30, `programs ${on.programs} <= 30`);
+      await shot('gfx-shadows-on');
+      const off = await game((g) => {
+        g.ctx.render.setShadows(false);
+        g.render();
+        const q = g.ctx.render.quality();
+        return { q, dc: g.stats().drawCalls, p: g.ctx.render.globals.uShadowP.value.w };
+      });
+      assert.equal(off.q.shadows, false);
+      assert.equal(off.p, 0, 'receivers are off');
+      assert.ok(off.dc < on.dc, `the shadow pass costs draw calls (${on.dc} on, ${off.dc} off)`);
+      await shot('gfx-shadows-off');
+      const back = await game((g) => {
+        g.ctx.render.setShadows(true);
+        g.render();
+        return g.ctx.render.quality().shadows;
+      });
+      assert.equal(back, true);
+    },
+  },
 ];

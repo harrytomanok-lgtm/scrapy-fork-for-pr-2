@@ -90,6 +90,8 @@ export function createRender(ctx) {
   const internal = {
     uViewport: { value: new Vector2(1, 1) },
     uInk: { value: new Color(PALETTE.ink) },
+    /** The final grade (shared with render.globals.uGrade; the high composite reads contrast and saturation). */
+    uGrade: globals.uGrade,
     uPointPos0: { value: new Vector4(0, 0, 0, 0) },
     uPointPos1: { value: new Vector4(0, 0, 0, 0) },
     uPointCol0: { value: new Color(0, 0, 0) },
