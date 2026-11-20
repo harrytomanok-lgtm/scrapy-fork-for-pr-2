@@ -126,7 +126,8 @@ test('enemy scaling of GDD 7.1', () => {
   assert.equal(F.enemyDefense(1, 10), 20);
   assert.equal(F.enemyHp(1, 10, 'story'), Math.round(220 * 0.75));
   assert.equal(F.enemyHp(1, 10, 'master'), Math.round(220 * 1.25));
-  const boar = { tier: 'grunt', mult: BALANCE.enemies.tusk_boar.mult, poise: BALANCE.enemies.tusk_boar.poise };
+  // A reference grunt with every multiplier at 1: the formula is checked here, the tuned enemies in tests/balance.
+  const boar = { tier: 'grunt', mult: { hp: 1, atk: 1, def: 1, xp: 1, shells: 1 }, poise: 20 };
   const s = F.enemyStats(boar, 5);
   assert.equal(s.hpMax, 141, 'round(75 + 12*5 + 0.25*25)');
   assert.equal(s.hp, 141);

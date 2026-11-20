@@ -264,11 +264,11 @@ export const BALANCE = deepFreeze({
    * (0.5 / 0.6), bramble boar 4.2 / 0.8 (1.2 / 1.1), acolyte 3.9 / 0.75 (1 / 1), caster 3.4 / 0.75 (0.8 / 1), crab
    * 3.2 / 0.7 (1.6 / 0.9), golem 4.5 / 1.1 (3 / 1.5), harrier 3.6 / 0.95 (0.9 / 1.3), vanguard 4 / 1.1 (2.5 / 1.5), so a
    * grunt takes about 2-3 Strike Strings and a group of 3-4 lasts about 8-15 s on Warrior; ATK is lower so the longer
-   * fights cost about the HP they did. tusk_boar keeps the GDD values (tests/core/formulas.test.mjs pins them).
+   * fights cost about the HP they did.
    */
   enemies: {
     ember_wisp: { tier: 'grunt', movement: 'fly', brain: 'ranged', levels: [1, 10], mult: { hp: 2.0, atk: 0.45, def: 0.5, xp: 0.5, shells: 0.5 }, poise: 0 },
-    tusk_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [1, 8], mult: { hp: 1.0, atk: 1.0, def: 1.0, xp: 1.0, shells: 1.0 }, poise: 20 },
+    tusk_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [1, 8], mult: { hp: 2.8, atk: 0.75, def: 1.0, xp: 1.0, shells: 1.0 }, poise: 20 },
     bramble_boar: { tier: 'grunt', movement: 'ground', brain: 'charger', levels: [8, 14], mult: { hp: 4.2, atk: 0.8, def: 1.0, xp: 1.1, shells: 1.0 }, poise: 25, variantOf: 'tusk_boar' },
     choir_acolyte: { tier: 'grunt', movement: 'ground', brain: 'melee', levels: [2, 28], mult: { hp: 3.9, atk: 0.75, def: 1.0, xp: 1.0, shells: 1.2 }, poise: 25, guardChance: 0.3 },
     choir_caster: { tier: 'grunt', movement: 'hover', brain: 'ranged', levels: [4, 28], mult: { hp: 3.4, atk: 0.75, def: 0.8, xp: 1.1, shells: 1.2 }, poise: 15, keepRange: 25 },

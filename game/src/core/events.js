@@ -176,7 +176,7 @@ export const EVENTS = deepFreeze({
   'combat:lock': ['entId', 'targetId'],
   'combat:surge': ['value', 'full'],
   'combat:state': ['inCombat', 'threat'],
-  'combat:combo': ['count'],
+  'combat:combo': ['count', 'rank', 'rankId', 'expired', 'best'],
   'projectile:spawned': ['entId', 'fxId', 'ownerId', 'color'],
   'projectile:removed': ['entId', 'fxId', 'hit', 'x', 'y', 'z'],
   'boss:start': ['bossId', 'entId'],

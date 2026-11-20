@@ -389,7 +389,7 @@ Combat
 | `combat:lock` | `{ entId, targetId:number }` (0 = released) | combat | control (cam), ui |
 | `combat:surge` | `{ value:number, full:boolean }` (player only, on change of 1 or more) | combat | ui |
 | `combat:state` | `{ inCombat:boolean, threat:number }` (on change; threat 0..1) | combat | env (music), ui (HUD fade), foundation (autosave), rpg |
-| `combat:combo` | `{ count:number }` | combat | ui |
+| `combat:combo` | `{ count:number, rank:number, rankId:string, expired:boolean, best:number }` | combat | ui |
 | `projectile:spawned` | `{ entId, fxId:string, ownerId, color:number }` | combat | gfx |
 | `projectile:removed` | `{ entId, fxId:string, hit:boolean, x, y, z }` | combat | gfx, env (audio) |
 | `boss:start` | `{ bossId, entId }` | ai | ui (boss bar), control (cam intro), env (music), rpg (consumable snapshot) |
