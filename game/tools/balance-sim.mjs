@@ -60,9 +60,10 @@ export const MODEL = Object.freeze({
   reengage: 0, boltsPerCycle: 0.5,
   /**
    * Seconds lost per enemy of a group to switch target (lock, lunge, chase): ground melee, ranged (hovering casters)
-   * or flying (the first string hit rises to a flyer, so a flyer costs less than a caster that keeps its distance).
+   * or flying (the first string hit rises to a flyer, but wisps keep 5-11 m and dart off between hits: measured
+   * about 8-9.5 s for three wisps by an Attack-only player in the browser check whatever their HP).
    */
-  switchSeconds: { melee: 1.8, ranged: 1.7, fly: 0.5 },
+  switchSeconds: { melee: 1.8, ranged: 1.7, fly: 2.0 },
   /** Breaker as a tap after the string (s). */
   breakerSeconds: 0.45,
   /** HP fraction a player loses before the first healing item of a boss fight. */
