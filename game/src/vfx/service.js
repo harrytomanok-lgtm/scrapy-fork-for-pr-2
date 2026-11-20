@@ -306,6 +306,11 @@ export function createVfx(ctx) {
     auras.push(a);
   }
   const NULL_AURA = { set() {}, dispose() {} };
+  /** @param {number} entId */
+  function isGathering(entId) {
+    const e = ctx.ents.get(entId);
+    return !!(e && e.combat && e.combat.gathering);
+  }
   /** @param {any} a */
   function auraHandle(a) {
     const gen = ++a.gen;
@@ -314,10 +319,15 @@ export function createVfx(ctx) {
       set(intensity, color, style) {
         if (a.gen !== gen) return;
         const st = style && AURA_STYLE[style] ? style : 'base';
-        a.style = AURA_STYLE[st];
-        a.color.setHex(typeof color === 'number' ? color : AURA_COLOR[st]);
-        fringeOf(a.color, a.fringe);
         const t = intensity > 1 ? 1 : intensity > 0 ? intensity : 0;
+        // a Form fading out (its owner already reports the base style) keeps its flame on the way down instead of
+        // swapping to the base shell for a moment (a green egg around the hero after leaving a Form)
+        const fadingForm = a.style >= 2 && a.style <= 4 && AURA_STYLE[st] === 1 && t <= a.target && !(a.entId && isGathering(a.entId));
+        if (!fadingForm) {
+          a.style = AURA_STYLE[st];
+          a.color.setHex(typeof color === 'number' ? color : AURA_COLOR[st]);
+          fringeOf(a.color, a.fringe);
+        }
         if (a.target <= 0.01 && t > 0.01) a.flareT = 0.15;
         a.target = t;
         a.releasing = false;
@@ -745,6 +755,29 @@ export function createVfx(ctx) {
   };
 
   // ------------------------------------------------------------------ per-frame update
+  // ------------------------------------------------------------------ hit flashes (actors.flash, after the sim)
+  const MAX_FLASH = 16;
+  const flashId = new Int32Array(MAX_FLASH);
+  const flashSec = new Float32Array(MAX_FLASH);
+  let flashN = 0;
+  let lastDustT = -1;
+  /** @param {number} entId @param {number} seconds */
+  function queueFlash(entId, seconds) {
+    if (!entId || flashN >= MAX_FLASH) return;
+    flashId[flashN] = entId;
+    flashSec[flashN] = seconds;
+    flashN++;
+  }
+  /** Lengthen the white hit flash of bodies struck hard (combat sets a short one during the hit). @param {any} c */
+  function applyFlashes(c) {
+    const a = c.actors;
+    for (let i = 0; i < flashN; i++) {
+      const ent = c.ents.get(flashId[i]);
+      if (ent && ent.alive && a && typeof a.flash === 'function') a.flash(ent, flashSec[i]);
+    }
+    flashN = 0;
+  }
+
   /** @param {any} c @param {number} dt @param {number} alpha @param {boolean} low */
   function updateEmitters(c, dt, alpha, low) {
     const hdrMul = low ? 0.8 : 1;
@@ -1732,6 +1765,7 @@ export function createVfx(ctx) {
       if (!built) return;
       const low = isLow();
       parts.clearSprites();
+      applyFlashes(c);
       updateEmitters(c, dt, alpha, low);
       updateAuras(c, dt, alpha, low);
       updateSpeed(c, dt, alpha, low);
@@ -1769,12 +1803,30 @@ export function createVfx(ctx) {
       if (cls === 'boltHit') return;
       const color = teamColor(e.attackerId);
       let id = 'hit_light';
+      let weight = 0;
       if (e.perfect) id = 'perfect';
       else if (e.blocked) id = 'guard_block';
-      else if (cls === 'finisher' || cls === 'ultimate') id = 'hit_finisher';
-      else if (cls === 'heavyHit' || cls === 'burst' || cls === 'wallSlam' || e.crit) id = 'hit_heavy';
+      else if (cls === 'finisher' || cls === 'ultimate') { id = 'hit_finisher'; weight = 2; }
+      else if (cls === 'heavyHit' || cls === 'burst' || cls === 'wallSlam' || e.crit) { id = 'hit_heavy'; weight = 1; }
       else if (cls === 'beamTick') id = 'beam_hit';
-      vfx.burst(id, e.x, e.y, e.z, bopts(e.dirX, 0.2, e.dirZ, 1, color));
+      vfx.burst(id, e.x, e.y, e.z, bopts(e.dirX, 0.15, e.dirZ, 1, color));
+      if (weight === 0) return;
+      // the struck body reacts in light: a longer white flash than the light-hit default (applied after the sim)
+      queueFlash(e.targetId, weight === 2 ? 0.16 : 0.11);
+      // heavy blows near the ground kick up dust and debris; finishers also ring and crack the ground. Throttled so
+      // a Nova Ring through a crowd does not spend a decal (one draw call each) per target.
+      const real = ctx.time.real;
+      if (real - lastDustT < 0.12 || !ctx.world) return;
+      const gy = ctx.world.heightAt(e.x, e.z);
+      if (e.y - gy > 2.4) return;
+      lastDustT = real;
+      vfx.burst('impact_dust', e.x, gy + 0.15, e.z, bopts(e.dirX, 1, e.dirZ, weight === 2 ? 1.25 : 0.85, undefined));
+      if (weight === 2) {
+        decalOpts.color = undefined; decalOpts.seconds = 4; decalOpts.shape = 'circle';
+        vfx.decal('crack', e.x, e.z, 1.7, decalOpts);
+        waveOpts.radius = 3.6; waveOpts.seconds = 0.3; waveOpts.color = color; waveOpts.sphere = false; waveOpts.ground = true;
+        vfx.shockwave(e.x, gy, e.z, waveOpts);
+      }
     },
     /** @param {any} e projectile:spawned (pooled) */
     projectileSpawned(e) {
@@ -1893,6 +1945,12 @@ export function createVfx(ctx) {
     },
     /** @param {any} e actor:knocked */
     knocked(e) {
+      // a body launched or hurled off the ground leaves a puff of dust and debris where it stood
+      const ent = ctx.ents.get(e.entId);
+      if (ent && e.speed >= 8 && ctx.world) {
+        const gy = ctx.world.heightAt(ent.pos.x, ent.pos.z);
+        if (ent.pos.y - gy < 0.8) vfx.burst('impact_dust', ent.pos.x, gy + 0.15, ent.pos.z, bopts(0, 1, 0, Math.min(1.3, 0.6 + e.speed / 30), undefined));
+      }
       if (!e.hurtle) return;
       const h = vfx.attach('hurtle_trail', e.entId, 'chest');
       for (let i = 0; i < emitters.length; i++) if (emitters[i].id === h) emitters[i].ttl = 1.1;

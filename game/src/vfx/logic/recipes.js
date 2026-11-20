@@ -104,25 +104,38 @@ export const RECIPES = {
     { m: 1, cell: streak, n: 24, lo: 12, sp: [20, 30], life: [0.15, 0.25], sz: [0.06, 0.02], col: 'ora', sh: 'ring', st: 0.05, dr: 5, hdr: 1.8 },
   ] },
   // ---------------------------------------------------------------- melee and guard
+  // Hits read at phone size (a target 5-8 m from the camera). Light: a crisp spark (star, slash, sparks). Heavy: a
+  // flash frame, a directional burst and a shock ring. Finisher: all of it larger with ink splashes. Ground dust,
+  // debris and a crack under launches, slams and finishers come from impact_dust.
   hit_light: { body: 'ora', layers: [
-    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.09, 0.09], sz: [0.7, 1.3], col: 'core', sh: 'still', hdr: 2.2, rv: 6 },
-    { m: 1, cell: streak, n: 4, lo: 3, sp: [8, 13], life: [0.1, 0.18], sz: [0.05, 0.02], col: 'core', sh: 'dir', dir: 0.7, st: 0.04, dr: 6, hdr: 2, k: 1 },
-    { m: 1, cell: streak, n: 3, lo: 1, sp: [6, 10], life: [0.12, 0.2], sz: [0.04, 0.02], col: 'fringe', sh: 'dir', dir: 0.7, st: 0.04, dr: 6, hdr: 1.4 },
+    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.08, 0.08], sz: [1.1, 1.9], col: 'core', sh: 'still', hdr: 2.4, rv: 6 },
+    { m: 0, cell: slash, n: 1, lo: 1, sp: [0, 0], life: [0.1, 0.1], sz: [1.5, 2.1], col: 'body', sh: 'still', hdr: 2, k: 0.8, rr: true },
+    { m: 1, cell: streak, n: 6, lo: 5, sp: [9, 15], life: [0.1, 0.17], sz: [0.09, 0.03], col: 'core', sh: 'dir', dir: 0.7, st: 0.05, dr: 6, hdr: 2.2, k: 1 },
+    { m: 1, cell: streak, n: 3, lo: 2, sp: [6, 10], life: [0.12, 0.2], sz: [0.07, 0.03], col: 'fringe', sh: 'dir', dir: 0.7, st: 0.045, dr: 6, hdr: 1.5 },
   ] },
   hit_heavy: { body: 'ora', layers: [
-    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.13, 0.13], sz: [1.2, 2.2], col: 'core', sh: 'still', hdr: 2.4, rv: 5 },
-    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.16, 0.16], sz: [1.6, 0.6], col: 'body', sh: 'still', hdr: 1.6, k: 0.5 },
-    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.18, 0.18], sz: [0.4, 2.6], col: 'body', sh: 'still', hdr: 1.8 },
-    { m: 1, cell: streak, n: 10, lo: 6, sp: [10, 17], life: [0.12, 0.22], sz: [0.07, 0.02], col: 'core', sh: 'dir', dir: 0.8, st: 0.045, dr: 6, hdr: 2, k: 1 },
-    { m: 1, cell: streak, n: 5, lo: 2, sp: [7, 12], life: [0.14, 0.24], sz: [0.05, 0.02], col: 'fringe', sh: 'dir', dir: 0.6, st: 0.045, dr: 6, hdr: 1.4 },
-    { m: 2, cell: smoke, n: 2, lo: 1, sp: [0.5, 1.5], life: [0.35, 0.5], sz: [0.5, 1.1], col: 'paper', a: 0.4, sh: 'sphere', fb: 4, dr: 2 },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.06, 0.06], sz: [3.4, 2.2], col: 'core', sh: 'still', hdr: 2.6, k: 1 },
+    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.13, 0.13], sz: [1.8, 3.0], col: 'core', sh: 'still', hdr: 2.4, rv: 5 },
+    { m: 0, cell: slash, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [2.2, 3.0], col: 'body', sh: 'still', hdr: 2.2, k: 0.8, rr: true },
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.2, 0.2], sz: [0.6, 3.6], col: 'body', sh: 'still', hdr: 2 },
+    { m: 1, cell: streak, n: 12, lo: 9, sp: [11, 19], life: [0.12, 0.22], sz: [0.12, 0.04], col: 'core', sh: 'dir', dir: 0.9, st: 0.05, dr: 6, hdr: 2.2, k: 1 },
+    { m: 1, cell: streak, n: 6, lo: 3, sp: [7, 12], life: [0.14, 0.24], sz: [0.09, 0.03], col: 'fringe', sh: 'dir', dir: 0.6, st: 0.045, dr: 6, hdr: 1.5 },
+    { m: 2, cell: chip, n: 4, lo: 3, sp: [6, 10], life: [0.35, 0.55], sz: [0.2, 0.12], col: 'path', sh: 'dir', dir: 0.6, g: 18, rv: 9 },
+    { m: 2, cell: smoke, n: 2, lo: 1, sp: [0.5, 1.5], life: [0.35, 0.5], sz: [0.6, 1.3], col: 'paper', a: 0.45, sh: 'sphere', fb: 4, dr: 2 },
   ] },
   hit_finisher: { body: 'ora', layers: [
-    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.16, 0.16], sz: [1.8, 3.2], col: 'core', sh: 'still', hdr: 2.6, rv: 4 },
-    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.22, 0.22], sz: [0.6, 3.6], col: 'body', sh: 'still', hdr: 2 },
-    { m: 1, cell: streak, n: 14, lo: 8, sp: [12, 20], life: [0.14, 0.26], sz: [0.08, 0.02], col: 'core', sh: 'dir', dir: 0.7, st: 0.05, dr: 5, hdr: 2.2, k: 1 },
-    { m: 1, cell: streak, n: 6, lo: 3, sp: [8, 14], life: [0.16, 0.26], sz: [0.06, 0.02], col: 'fringe', sh: 'sphere', st: 0.05, dr: 5, hdr: 1.4 },
-    { m: 2, cell: chip, n: 6, lo: 6, sp: [7, 11], life: [0.3, 0.45], sz: [0.42, 0.3], col: 'ink', a: 1, sh: 'dir', dir: 0.5, dr: 5, rv: 2 },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.08, 0.08], sz: [4.6, 3.0], col: 'core', sh: 'still', hdr: 2.8, k: 1 },
+    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.16, 0.16], sz: [2.4, 4.0], col: 'core', sh: 'still', hdr: 2.6, rv: 4 },
+    { m: 0, cell: slash, n: 2, lo: 2, sp: [0, 0], life: [0.14, 0.18], sz: [3.0, 4.0], col: 'body', sh: 'still', hdr: 2.2, k: 0.8, rr: true },
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.24, 0.24], sz: [0.8, 5], col: 'body', sh: 'still', hdr: 2 },
+    { m: 1, cell: streak, n: 18, lo: 12, sp: [13, 22], life: [0.14, 0.26], sz: [0.14, 0.04], col: 'core', sh: 'dir', dir: 0.8, st: 0.055, dr: 5, hdr: 2.3, k: 1 },
+    { m: 1, cell: streak, n: 8, lo: 4, sp: [8, 14], life: [0.16, 0.26], sz: [0.1, 0.03], col: 'fringe', sh: 'sphere', st: 0.05, dr: 5, hdr: 1.5 },
+    { m: 2, cell: chip, n: 6, lo: 6, sp: [7, 11], life: [0.3, 0.45], sz: [0.5, 0.34], col: 'ink', a: 1, sh: 'dir', dir: 0.5, dr: 5, rv: 2 },
+  ] },
+  /** Ground under a heavy impact, a launch or a slam: a dust ring, debris and a small crack (internal id). */
+  impact_dust: { body: 'path', layers: [
+    { m: 2, cell: smoke, n: 8, lo: 6, sp: [3, 5.5], life: [0.45, 0.7], sz: [0.6, 1.5], col: 'paper', a: 0.6, sh: 'ring', r: 0.4, fb: 4, dr: 3.5 },
+    { m: 2, cell: chip, n: 8, lo: 6, sp: [4, 8], life: [0.45, 0.75], sz: [0.2, 0.12], col: 'body', sh: 'hemi', r: 0.4, g: 18, rv: 9 },
   ] },
   guard_shell: { body: 'ora', layers: [
     { m: 0, cell: hex, rate: 26, lo: 10, sp: [0, 0.2], life: [0.25, 0.45], sz: [0.42, 0.42], col: 'body', a: 0.5, sh: 'shield', r: 1.4, hdr: 1.3, fi: 0.3 },
@@ -176,9 +189,10 @@ export const RECIPES = {
     { m: 1, cell: streak, rate: 40, lo: 18, sp: [0.3, 1.2], life: [0.2, 0.32], sz: [0.12, 0.03], col: 'core', sh: 'sphere', r: 0.35, st: 0.1, hdr: 1.5, trail: true },
   ] },
   slam: { body: 'paper', decal: { kind: 'crack', r: 2.2, t: 6 }, shock: { r: 3.5, t: 0.25, ground: true, col: 'paper' }, layers: [
-    { m: 2, cell: smoke, n: 10, lo: 5, sp: [3, 6], life: [0.5, 0.8], sz: [0.8, 1.8], col: 'paper', a: 0.6, sh: 'ring', fb: 4, dr: 3 },
-    { m: 2, cell: chip, n: 10, lo: 5, sp: [5, 10], life: [0.5, 0.8], sz: [0.22, 0.12], col: 'path', sh: 'hemi', g: 18, rv: 9 },
-    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.1, 0.1], sz: [1, 1.8], col: 'core', sh: 'still', hdr: 1.6 },
+    { m: 2, cell: smoke, n: 12, lo: 8, sp: [3, 6.5], life: [0.55, 0.9], sz: [0.9, 2.2], col: 'paper', a: 0.65, sh: 'ring', fb: 4, dr: 3 },
+    { m: 2, cell: chip, n: 12, lo: 8, sp: [5, 11], life: [0.5, 0.85], sz: [0.3, 0.16], col: 'path', sh: 'hemi', g: 18, rv: 9 },
+    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [1.6, 2.8], col: 'core', sh: 'still', hdr: 1.8, rv: 3 },
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.2, 0.2], sz: [0.6, 3.2], col: 'paper', sh: 'still', hdr: 1.4 },
   ] },
   crater: { body: 'scorchRim', layers: [
     { m: 2, cell: smoke, n: 18, lo: 8, sp: [5, 10], life: [0.9, 1.4], sz: [1.6, 3.4], col: 'paper', a: 0.4, sh: 'ring', fb: 4, dr: 2 },

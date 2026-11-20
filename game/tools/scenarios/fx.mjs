@@ -90,7 +90,7 @@ const EFFECTS = [
   // ---------------------------------------------------------------- melee
   { name: 'strike-1', label: 'Strike String hit 1 (light)', fn: (g, P, fx) => {
     fx.dummy(P, 2.4); fx.cam(P); g.step(2);
-    g.use('strike_string', { force: true }); fx.run(5);
+    g.use('strike_string', { force: true }); fx.run(8);
   } },
   { name: 'strike-3', label: 'Strike String hit 3 (heavy)', fn: (g, P, fx) => {
     fx.dummy(P, 2.4); fx.cam(P); g.step(2);
@@ -464,7 +464,17 @@ export const scenarios = [
         }).join('');
         await sheetPage.setContent(`<html><body style="margin:4px;background:#222;display:grid;grid-template-columns:repeat(3,206px);gap:4px;font:12px sans-serif;color:#eee">
           <style>figure{margin:0}img{width:206px;height:458px;display:block}figcaption{height:18px;padding-top:2px;white-space:nowrap;overflow:hidden}</style>${rows}</body></html>`);
-        await sheetPage.screenshot({ path: join(OUT_SHOTS, `fx-sheet-${String(s + 1).padStart(2, '0')}.png`) });
+        // the game page keeps rendering in the background; a capture can fail once under load
+        for (let tries = 0; ; tries++) {
+          try {
+            await sheetPage.bringToFront();
+            await sheetPage.screenshot({ path: join(OUT_SHOTS, `fx-sheet-${String(s + 1).padStart(2, '0')}.png`) });
+            break;
+          } catch (err) {
+            if (tries >= 3) throw err;
+            await sheetPage.waitForTimeout(1000);
+          }
+        }
       }
       await sheetPage.close();
       const errs = await game((g) => g.errors.filter((x) => x.indexOf('[error]') === 0 || x.indexOf('[fatal]') === 0));
