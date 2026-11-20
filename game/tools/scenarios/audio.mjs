@@ -218,7 +218,9 @@ export const scenarios = [
           last = await game((g) => { g.step(2); g.render(); return g.ctx.audio.debug().place.bed; });
           await page.waitForTimeout(400);
         }
-        return game((g) => ({ bed: g.ctx.audio.debug().place.bed, region: g.ctx.world.regionAt(g.ctx.player.pos.x, g.ctx.player.pos.z), nodes: g.ctx.audio.nodes(), last }));
+        const r = await game((g) => ({ bed: g.ctx.audio.debug().place.bed, region: g.ctx.world.regionAt(g.ctx.player.pos.x, g.ctx.player.pos.z), nodes: g.ctx.audio.nodes() }));
+        r.last = last;
+        return r;
       };
       const storm = await bedAt(2000, -1700);
       assert.equal(storm.region, 'stormwell');
