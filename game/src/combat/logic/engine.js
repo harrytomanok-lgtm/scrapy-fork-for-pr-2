@@ -15,6 +15,7 @@ import { BALANCE } from '../../core/balance.js';
 import * as F from '../../core/formulas.js';
 import { PALETTE } from '../../core/palette.js';
 import { resolveRank } from './rank.js';
+import { WEIGHT, HAPTICS, HURT } from '../data/weight.js';
 import { STYLE, createStyle, resetStyle, styleHit, styleBonus, styleHurt, styleStep } from './style.js';
 import {
   TAG, KIND_MASK, frontal, isPerfectGuard, isPerfectFlicker, hitAmount, surgeForHit, surgeForHpLoss, surgeDecay,
@@ -176,6 +177,7 @@ export function createCombatEngine(ctx) {
       perfectUsed: false, flickerStart: -10, flickX: 0, flickY: 0, flickZ: 0, cdKeys: [], stringHits: 0, stringT: 0, pursuitId: 0, pursuitT: 0, pursuitBonus: 0,
       juggleT: 0, burnT: 0, burnNext: 0, burnEvery: 0.5, burnPower: 0, burnSrc: 0, craterDone: false, formScripted: false, transformT: 0,
       transformLong: false, secondBreathT: 0, slamFraction: 0, scrX: 0, scrY: 0, scrZ: 0, scrFlag: 0, lastHitBy: 0,
+      hurtGraceT: 0,
     };
     recs.set(ent.id, r);
     recList.push(r);
@@ -1114,6 +1116,7 @@ export function createCombatEngine(ctx) {
     if (r.pursuitT > 0) r.pursuitT -= dt;
     if (r.juggleT > 0) r.juggleT -= dt;
     if (r.secondBreathT > 0) r.secondBreathT -= dt;
+    if (r.hurtGraceT > 0) r.hurtGraceT -= dt;
     r.stringT += dt;
     if (r.stringHits > 0 && r.stringT > STRING_GRACE && c.techId !== 'strike_string') r.stringHits = 0;
     const keys = r.cdKeys;
@@ -1415,6 +1418,12 @@ export function createCombatEngine(ctx) {
   function staggerEnt(ent, seconds, broken) {
     const c = ent.combat;
     if (!c || c.state === 'dead') return;
+    if (isPlayer(ent)) {
+      // Stun-lock guard: the hero keeps control between two staggers (weight.js HURT.graceSeconds).
+      const pr = recOf(ent);
+      if (pr.hurtGraceT > 0 && seconds < GUARD.breakStagger) return;
+      pr.hurtGraceT = seconds + HURT.graceSeconds;
+    }
     if (isBusy(c.state)) endTech(ent, true);
     if (c.guarding) setGuard(ent, false);
     if (c.gathering) setGather(ent, false);
@@ -1447,6 +1456,11 @@ export function createCombatEngine(ctx) {
     }
     if (kk.kind === 'launch' && kk !== JUGGLE && !WHO.boss && !WHO.player) tr.juggleT = STRING.juggle.maxSeconds;
     if (tr.juggleT <= 0 && KV.gravityScale < 1) KV.gravityScale = 1;
+    if (WHO.player) {
+      // Inside the grace a knock only pushes; otherwise the stun opens a new grace.
+      if (tr.hurtGraceT > 0) KV.stun = 0;
+      else tr.hurtGraceT = KV.stun + HURT.graceSeconds;
+    }
     KNOCK_OPTS.hurtle = KV.hurtle; KNOCK_OPTS.stun = KV.stun; KNOCK_OPTS.gravityScale = KV.gravityScale;
     KNOCK_OPTS.sourceId = src ? src.id : 0; KNOCK_OPTS.slamDamage = KV.hurtle ? amount * CB.slam.damageFraction : 0;
     ctx.move.knock(t, KV.vx, KV.vy, KV.vz, KNOCK_OPTS);
@@ -1649,6 +1663,7 @@ export function createCombatEngine(ctx) {
           ctx.bus.emit('combat:perfect', pPerfect);
           combat.addSurge(t, FLICK.perfect.surge);
           styleReward(t, STYLE.perfect);
+          haptic('perfect');
           if (st.hardTarget && ctx.move) {
             const ht = ctx.ents.get(st.hardTarget);
             if (ht && ht.alive) {
@@ -1788,7 +1803,10 @@ export function createCombatEngine(ctx) {
         if (sg > 0) combat.addSurge(src, sg);
       } else if (tPlayer && amount > 0 && !blocked && styleHurt(style)) comboEvent(false);
       if (perfect) {
-        if (tPlayer) styleReward(t, STYLE.perfect);
+        if (tPlayer) {
+          styleReward(t, STYLE.perfect);
+          haptic('perfect');
+        }
         pPerfect.entId = t.id; pPerfect.kind = 'guard'; pPerfect.attackerId = src ? src.id : 0;
         ctx.bus.emit('combat:perfect', pPerfect);
         combat.addSurge(t, GUARD.perfect.surge);
@@ -2145,20 +2163,46 @@ export function createCombatEngine(ctx) {
     seenForms.clear();
   }
 
-  /** The visual feel of one hit that is not automatic through events (actor flash, flinch, camera punch). */
+  /**
+   * The weight of one hit that is not automatic through the core feel table (data/weight.js): the flinch and shove
+   * of the struck body, the camera punch, the haptic pattern, and when the hero is hit, the jolt and the input
+   * softness.
+   */
   function hitFeel(t, src, cls, dirX, dirZ, amount, blocked, killed, hurtle) {
     const a = ctx.actors;
+    const w = WEIGHT[cls] || WEIGHT.lightHit;
+    const tPlayer = isPlayer(t);
     if (a && amount > 0) {
       if (a.flash) a.flash(t, blocked ? 0.04 : 0.07);
-      if (!hurtle && !killed && a.flinch && (t.tags & TAG.BOSS) === 0) a.flinch(t, dirX, dirZ, cls === 'lightHit' || cls === 'boltHit' ? 0.4 : 0.9);
+      if (!hurtle && !killed && a.flinch && (t.tags & TAG.BOSS) === 0) a.flinch(t, dirX, dirZ, tPlayer ? 0.9 : w.flinch);
     }
-    if (isPlayer(src) && ctx.cam && ctx.cam.punch && (cls === 'heavyHit' || cls === 'finisher' || cls === 'burst')) {
-      ctx.cam.punch(dirX, 0, dirZ, cls === 'heavyHit' ? 0.08 : 0.14);
+    if (isPlayer(src)) {
+      if (ctx.cam && ctx.cam.punch && (cls === 'heavyHit' || cls === 'finisher' || cls === 'burst')) {
+        ctx.cam.punch(dirX, 0, dirZ, cls === 'heavyHit' ? 0.08 : 0.14);
+      }
+      if (w.haptic && amount > 0) haptic(blocked ? 'light' : w.haptic);
+    } else if (tPlayer && amount > 0) {
+      const heavy = t.stats && t.stats.hpMax > 0 && amount >= t.stats.hpMax * HURT.heavyFraction;
+      haptic(blocked ? 'light' : 'hurt');
+      // The jolt: the view is shoved along the blow, harder for a heavy one.
+      if (!blocked && ctx.cam && ctx.cam.punch) ctx.cam.punch(dirX, -0.25, dirZ, heavy ? HURT.joltHeavy : HURT.joltLight);
+      // Input softness: a moment of heavier legs, never longer than the hit's own stun.
+      if (!blocked && t.move && ctx.move && t.move.lockT <= 0) {
+        LOCK_OPTS.slow = HURT.softSlow;
+        ctx.move.lock(t, HURT.softSeconds, LOCK_OPTS);
+      }
     }
-    // Light string hits shove grounded grunts a little so contact reads as physical.
-    if (!blocked && !killed && !hurtle && t.move && ctx.move && !isPlayer(t) && (t.tags & TAG.BOSS) === 0 && cls === 'lightHit' && !airborne(t)) {
-      ctx.move.impulse(t, dirX * 1.6, 0, dirZ * 1.6);
+    // Light hits shove grounded grunts a little so contact reads as physical.
+    if (!blocked && !killed && !hurtle && w.shove > 0 && t.move && ctx.move && !tPlayer && (t.tags & TAG.BOSS) === 0 && !airborne(t)) {
+      ctx.move.impulse(t, dirX * w.shove, 0, dirZ * w.shove);
     }
+  }
+
+  /** Play a haptic pattern (input.vibrate honours the Vibration setting and feature detection). @param {string} id */
+  function haptic(id) {
+    const inp = ctx.input;
+    const pat = HAPTICS[id];
+    if (pat && inp && typeof inp.vibrate === 'function') inp.vibrate(pat);
   }
 
   /** Emit combat:combo { count, rank, rankId, expired, best } (the UI shows it). @param {boolean} expired */

@@ -206,7 +206,16 @@ test('a hurtling body hitting the ground at 20 m/s slams, at 8 m/s it does not',
   for (let i = 0; i < 10; i++) stepActor(a, r, DT, w, s);
   assert.equal(s.ev.slam.length, 1);
   assert.ok(s.ev.slam[0].speed >= 20 && s.ev.slam[0].surface === 'terrain');
+  // One readable ground bounce (6 m/s up at most), then it lands for good.
+  assert.equal(a.move.mode, 'air');
+  let peak = 0;
+  for (let i = 0; i < 90; i++) {
+    stepActor(a, r, DT, w, s);
+    peak = Math.max(peak, a.pos.y);
+  }
+  assert.ok(peak > 0.6 && peak < 2.5, 'bounce height ' + peak.toFixed(2));
   assert.equal(a.move.mode, 'ground');
+  assert.equal(s.ev.slam.length, 1, 'the bounce does not slam again');
   const b = makeEnt({ kind: 'enemy' });
   b.pos.y = 0.1;
   const s2 = makeSink();

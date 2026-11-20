@@ -93,3 +93,29 @@ test('finisher: the last enemy of a group dies with slow motion and a camera pus
   h.combat.damage({ sourceId: p.id, targetId: c.id, power: 5, kind: 'true' });
   assert.equal(pushes.length, 1);
 });
+
+test('weight: no stun-lock; the hero can always act within a second under a barrage of red hits and knocks', () => {
+  const h = makeCtx();
+  h.ctx.cam.yaw = 0;
+  const p = h.addPlayer({ hp: 1e6, hpMax: 1e6 });
+  const foes = [h.addEnemy(0, 1.6), h.addEnemy(1.4, -0.8), h.addEnemy(-1.4, -0.8)];
+  const vib = [];
+  h.ctx.input.vibrate = (pat) => vib.push(pat);
+  let run = 0;
+  let longest = 0;
+  for (let t = 0; t < 600; t++) {
+    // Every 0.25 s one of them throws an unguardable hit; every 0.4 s someone shoves.
+    if (t % 15 === 0) h.combat.useTechnique(foes[(t / 15) % 3], 'test_red', { force: true, targetId: p.id });
+    if (t % 24 === 0) h.combat.damage({ sourceId: foes[0].id, targetId: p.id, power: 0.1, knock: { kind: 'push', speed: 10 } });
+    h.step(1);
+    const stuck = p.combat.state === 'stagger';
+    run = stuck ? run + 1 : 0;
+    if (run > longest) longest = run;
+  }
+  assert.ok(longest > 0, 'the red hits do stagger');
+  assert.ok(longest / 60 <= 1.0 + 1e-6, 'longest loss of control ' + (longest / 60).toFixed(2) + ' s');
+  // Knocks inside the grace only push.
+  const kn = h.move.knocks.filter((k) => k.id === p.id);
+  assert.ok(kn.some((k) => k.stun === 0), 'grace knocks carry no stun');
+  assert.ok(vib.length > 0 && vib.every((v) => Array.isArray(v) || typeof v === 'number'), 'haptics played');
+});
