@@ -174,7 +174,12 @@ export function createLife(ctx, chimneys) {
     m.count = n;
     m.visible = n > 0;
     if (n > 0) {
+      // upload only the instances written
+      m.instanceMatrix.clearUpdateRanges();
+      m.instanceMatrix.addUpdateRange(0, n * 16);
       m.instanceMatrix.needsUpdate = true;
+      m.instanceColor.clearUpdateRanges();
+      m.instanceColor.addUpdateRange(0, n * 3);
       m.instanceColor.needsUpdate = true;
     }
   }
@@ -187,6 +192,11 @@ export function createLife(ctx, chimneys) {
     frame(dt, cam, wind, night) {
       const w = ctx.world;
       if (!cam || !w || typeof w.heightAt !== 'function') return;
+      // only during a journey (not behind the title and loading screens)
+      if (!ctx.player || !ctx.player.alive) {
+        for (let i = 0; i < meshes.length; i++) meshes[i].visible = false;
+        return;
+      }
       time += dt > 0.1 ? 0.1 : dt;
       const t = time;
       const cx = cam.position.x;
