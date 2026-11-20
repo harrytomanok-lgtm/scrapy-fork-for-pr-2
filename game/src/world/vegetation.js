@@ -3,8 +3,8 @@
  * instanced mesh per prop kind (a draw call only for the kinds in view), chunky faceted geometry with baked vertex
  * colours, wind sway on the plants, refilled nearest first from the seeded per-cell scatter when the focus crosses a
  * 128 m cell, with the tier radii and instance caps. Three draw classes: trees (tree radius and cap), rocks (rock
- * radius and cap) and ground cover (bushes, ferns, flowers, grass, scrub, mushrooms: half the rock radius up to 200 m, 1.5x the
- * rock cap). Tinted kinds take a per-instance colour from their region (foliage, flowers, cliff) and one of four
+ * radius and cap) and ground cover (bushes, ferns, flowers, grass, scrub, mushrooms: a third of the rock radius up to
+ * 200 m, 1.5x the rock cap). Tinted kinds take a per-instance colour from their region (foliage, flowers, cliff) and one of four
  * variants, so the same mesh reads differently in every region.
  * Streaming: an instance that was not drawn before grows in from its root over 0.7 s instead of popping (a flush
  * from a teleport places everything at full size). Prop colliders around the player enter the collider grid;
@@ -521,12 +521,14 @@ export function capacityFor(k, caps) {
 }
 
 /**
- * Draw radius of the ground cover: half the rock radius, at most 200 m (low: 150 m of its 300 m rock radius).
+ * Draw radius of the ground cover: about a third of the rock radius, at most 200 m (low: 102 m of its 300 m rock
+ * radius; high: 200 m). Beyond 100 m a bush is a few pixels on a phone, and the cover drawn out to 150 m took the
+ * densest forest views over the low tier's triangle budget.
  * @param {any} caps @returns {number}
  */
 export function coverRadius(caps) {
   const r = caps && typeof caps.rockRadius === 'number' ? caps.rockRadius : 700;
-  return Math.min(200, r * 0.5);
+  return Math.min(200, r * 0.34);
 }
 
 /**

@@ -41,7 +41,7 @@ test('vegetation instance buffers are sized for the active tier', () => {
     assert.equal(capacityFor(k, null), tree ? 4000 : cover ? 1600 : 2000, 'no caps: the high maximum');
   }
   assert.equal(CLASS.length, KIND_COUNT);
-  assert.ok(coverRadius(TIERS.low) <= 160 && coverRadius(TIERS.low) > 100, 'ground cover radius on low');
+  assert.ok(coverRadius(TIERS.low) <= 160 && coverRadius(TIERS.low) > 100, 'ground cover radius on low (about 100 m)');
   assert.ok(trees > 0 && trees < KIND_COUNT);
   assert.equal(capacityFor(KIND.ROCK, TIERS.low), 600);
 });
