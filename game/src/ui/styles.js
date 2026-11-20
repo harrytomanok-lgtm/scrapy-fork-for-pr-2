@@ -263,6 +263,7 @@ export const UI_CSS = `
   display:flex;flex-direction:column-reverse;align-items:center;gap:8px;pointer-events:none;transition:transform 240ms var(--ui-ease)}
 .ui-m-portrait .ui-lane{inset-block-end:calc(32% + 10px);max-inline-size:min(320px,calc(100% - 32px))}
 .ui-lane.ui-holdt .ui-toasts{display:none}
+.ui-toasts.ui-toasthold{display:none}
 .ui-banner.ui-held{visibility:hidden}
 .ui-m-short .ui-lane{inset-block-end:calc(var(--safe-bottom) + 114px)}
 .ui-m-desktop .ui-lane{inset-block-end:16%;max-inline-size:420px}

@@ -67,6 +67,11 @@ function hudState(g) {
   g.setDevice('touch');
   const id = g.spawn('tusk_boar', { dist: 10, passive: true });
   g.lock(id);
+  // The lock camera settles over a few test frames (the rig advances at most 0.5 s per frame).
+  for (let i = 0; i < 4; i++) {
+    g.step(20);
+    g.render();
+  }
   g.damage(id, 0.4);
   const p = g.player();
   g.damage(p.id, 0.3, { kind: 'true', sourceId: id });

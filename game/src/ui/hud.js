@@ -397,6 +397,8 @@ export function createHud(ctx, kit, ui) {
   const toastRect = { x: 0, y: 0, w: 0, h: 0, on: false };
   const keeps2 = [heroBox, tgtBox, laneBox, toastRect];
   let toastsHeld = false;
+  /** Outside portrait: the top-centre toasts wait (hidden, their time still runs) when no place clears the hero and target. */
+  let toastTopHeld = false;
   const laneBase = { x: 0, y: 0, w: 0, h: 0 };
   const laneAt = { dx: 0, dy: 0 };
   const bnrBase = { x: 0, y: 0, w: 0, h: 0 };
@@ -1016,9 +1018,19 @@ export function createHud(ctx, kit, ui) {
       // Never up into the target frame: down or aside only.
       lim.minTop = toastBase.y;
       lim.maxBottom = viewH * 0.6;
+      // Sideways only within the middle: the touch controls (Gather, Item, the arc) own the outer sides.
+      const side = Math.max(viewW * 0.15, 150);
+      lim.minX = side;
+      lim.maxX = viewW - side;
       placeAround(toastBase, keeps, lim, placed);
+      lim.minX = 8;
+      lim.maxX = viewW - 8;
       lim.maxBottom = undefined;
-      toastRect.on = true;
+      if (placed.ok === toastTopHeld) {
+        toastTopHeld = !placed.ok;
+        toastBox.classList.toggle('ui-toasthold', toastTopHeld);
+      }
+      toastRect.on = !toastTopHeld;
       toastRect.x = toastBase.x + placed.dx;
       toastRect.y = toastBase.y + placed.dy;
       toastRect.w = toastBase.w;
@@ -1028,8 +1040,10 @@ export function createHud(ctx, kit, ui) {
         toastAt.dy = placed.dy;
         toastBox.style.translate = Math.round(placed.dx) + 'px ' + Math.round(placed.dy) + 'px';
       }
-    } else if (toastAt.dx || toastAt.dy || toastRect.on) {
+    } else if (toastAt.dx || toastAt.dy || toastRect.on || toastTopHeld) {
       toastRect.on = false;
+      toastTopHeld = false;
+      toastBox.classList.remove('ui-toasthold');
       toastAt.dx = 0;
       toastAt.dy = 0;
       toastBox.style.translate = '';
@@ -1121,7 +1135,7 @@ export function createHud(ctx, kit, ui) {
     },
     /** Pieces held back because no place clear of the hero and target was found (scenarios). */
     held() {
-      return { toasts: toastsHeld, banner: bannerHeld };
+      return { toasts: toastsHeld || toastTopHeld, banner: bannerHeld };
     },
     /** Transient centre messages on show: the banner and the call-out (scenarios). */
     centre() {

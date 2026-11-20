@@ -238,14 +238,15 @@ export function lockPitch(pitch, elev, half, top, bottom) {
 
 /**
  * Lock-on safe area in screen units from the centre (v up, u right, -1..1 at the edges): everything of the hero and
- * the locked target stays inside it. `top` keeps clear of the HUD target frame, `bottom` of the touch deck (portrait:
+ * the locked target stays inside it. `top` keeps clear of the HUD target frame (landscape: also of the toasts at
+ * the top centre), `bottom` of the touch deck (portrait:
  * it fills the lower quarter; landscape: it sits at the sides). `heroV` and `heroU` are where the hero's body centre
  * goes when nothing forces it elsewhere (portrait: the lower part of the middle third, just over the deck; the hero
  * on one side and the target toward the other).
  */
 export const LOCK_SAFE = Object.freeze({
   portrait: { top: 0.62, bottom: -0.5, side: 0.8, heroV: -0.2, heroU: 0.12 },
-  landscape: { top: 0.62, bottom: -0.8, side: 0.7, heroV: -0.28, heroU: 0.2 },
+  landscape: { top: 0.1, bottom: -0.85, side: 0.7, heroV: -0.4, heroU: 0.2 },
 });
 
 /** Lock rig search: the nearest back distance (m, before the portrait pull-back), the farthest, the step. */
