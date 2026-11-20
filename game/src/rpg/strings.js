@@ -36,6 +36,7 @@ const ROWS = [
   ['rpg.toast.rematch', 'An echo at level {level}', 'הד ברמה {level}'],
   ['rpg.toast.trialWave', 'Wave {n} / {total}', 'גל {n} / {total}'],
   ['rpg.toast.trialGo', 'Clear them. The clock is running.', 'לנקות את השטח. השעון רץ.'],
+  ['rpg.toast.busyRace', 'Finish the race you are flying first', 'קודם לסיים את המרוץ הנוכחי'],
   ['rpg.toast.busyBoss', 'Not while a guardian is fighting you', 'לא בזמן קרב עם שומר'],
   ['rpg.toast.trialFailed', 'Trial over', 'המבחן נגמר'],
   ['rpg.toast.travel', 'Arrived: {place}', 'הגעת: {place}'],

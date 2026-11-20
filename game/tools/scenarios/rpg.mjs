@@ -639,9 +639,22 @@ export const scenarios = [
         out.retryDist = Math.round(Math.hypot(g.ctx.player.pos.x + 1650, g.ctx.player.pos.z - 1835));
         for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.questTag === 'trial_trial_waves')) g.ctx.ai.despawn(e.id);
         Q.runActions([]);
-        // The Spire Circuit.
+        // A wave that cannot spawn is never a cleared wave: the trial ends without a medal.
+        const sg = g.ctx.ai.spawnGroup;
+        g.ctx.ai.spawnGroup = () => [];
+        const rec0 = JSON.stringify(st.quests.flags['trial.trial_waves'] || null);
+        Q.runActions([{ op: 'script', script: 'trial_waves' }]);
+        g.step(60 * 7);
+        g.ctx.ai.spawnGroup = sg;
+        out.noSpawn = { rec: JSON.stringify(st.quests.flags['trial.trial_waves'] || null) === rec0,
+          failed: g.events(['ui:toast']).some((e) => e.payload.key === 'rpg.toast.trialFailed') };
+        // The Spire Circuit; a second start while it runs is refused where the player is.
         Q.runActions([{ op: 'script', script: 'trial_sky' }]);
         g.step(5);
+        g.teleport(g.ctx.player.pos.x + 50, g.ctx.player.pos.z, { alt: 20 });
+        const px = g.ctx.player.pos.x;
+        Q.runActions([{ op: 'script', script: 'trial_sky' }]);
+        out.skyRefused = Math.abs(g.ctx.player.pos.x - px) < 1 && g.events(['ui:toast']).some((e) => e.payload.key === 'rpg.toast.busyRace');
         out.race = g.ctx.quests.objects().length > 0 && g.ctx.player.move.mode;
         return out;
       }, drainSrc.toString());
@@ -674,6 +687,8 @@ export const scenarios = [
       assert.ok(r.rematch && r.rematch.medals.length >= 1, 'the rematch records a medal');
       assert.ok(r.trialFoes >= 4, 'the gauntlet band spawns');
       assert.ok(r.trial && r.trial.medals.length >= 1 && r.trial.best > 0, 'the trial records a time and a medal');
+      assert.ok(r.noSpawn.rec && r.noSpawn.failed, 'a wave that never spawned fails the trial, no medal');
+      assert.ok(r.skyRefused, 'a refused Spire Circuit leaves the player where they are');
       assert.ok(r.canRetry, 'a lost trial offers Retry');
       assert.ok(r.retryFoes >= 1 && r.retryDist < 30, 'Retry puts the player back in the trial (' + r.retryFoes + ' foes, ' + r.retryDist + ' m)');
     },

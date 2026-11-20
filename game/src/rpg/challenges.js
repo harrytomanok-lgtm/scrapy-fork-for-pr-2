@@ -9,7 +9,7 @@
 
 import { BALANCE } from '../core/balance.js';
 import { PALETTE } from '../core/palette.js';
-import { REMATCH, TRIALS, TRIAL_REWARDS, TRIAL_LEASH, RINGSTONES } from './data/challenges.js';
+import { REMATCH, TRIALS, TRIAL_REWARDS, TRIAL_LEASH, TRIAL_SPAWN_WAIT, RINGSTONES } from './data/challenges.js';
 import { medalFor } from './logic/activity.js';
 
 const ORDER = ['bronze', 'silver', 'gold'];
@@ -145,13 +145,15 @@ export function registerChallenges(ctx, host) {
         cancelActive();
         const course = c.defs.find('course', tr.course);
         const p = pl(c);
-        if (course && p) {
+        // The race starts first: when it is refused (a race already on) the player stays where they are.
+        if (course && p && c.ai && c.ai.boss) c.bus.emit('ui:toast', { key: 'rpg.toast.busyBoss', args: null, kind: 'warn' });
+        else if (course && p && !host.raceStart(tr.course)) c.bus.emit('ui:toast', { key: 'rpg.toast.busyRace', args: null, kind: 'warn' });
+        else if (course && p) {
           const g0 = course.gates[0];
           const y = c.world.heightAt(course.start.x, course.start.z) + 30;
           c.move.teleport(p, course.start.x, y, course.start.z, Math.atan2(g0.x - course.start.x, g0.z - course.start.z));
           c.move.setMode(p, 'fly');
           if (c.cam) c.cam.setOrbit(Math.atan2(g0.x - course.start.x, g0.z - course.start.z), 0.1);
-          host.raceStart(tr.course);
         }
         api.done();
       });
@@ -171,8 +173,15 @@ export function registerChallenges(ctx, host) {
       let wave = 0;
       let t = 0;
       let over = false;
+      /** Seconds a wave has failed to spawn (the cap of live enemies, no ground): retried, then the trial ends. */
+      let stuck = -1;
       const spawnWave = () => {
-        c.ai.spawnGroup(tr.waves[wave], at.x, at.z - 6, { level, questTag: tag, aggro: true, radius: 9 });
+        const ids = c.ai.spawnGroup(tr.waves[wave], at.x, at.z - 6, { level, questTag: tag, aggro: true, radius: 9 });
+        if (!Array.isArray(ids) || ids.length === 0) {
+          if (stuck < 0) stuck = 0;
+          return;
+        }
+        stuck = -1;
         if (c.vfx) c.vfx.shockwave(at.x, c.world.heightAt(at.x, at.z) + 0.5, at.z - 6, { radius: 12, color: PALETTE.hostile, seconds: 0.6, ground: true });
         if (tr.waves.length > 1) c.bus.emit('ui:toast', { key: 'rpg.toast.trialWave', args: { n: wave + 1, total: tr.waves.length }, kind: 'warn' });
         else c.bus.emit('ui:toast', { key: 'rpg.toast.trialGo', args: null, kind: 'warn' });
@@ -207,6 +216,13 @@ export function registerChallenges(ctx, host) {
         t += dt;
         const e = pl(c);
         if (e && Math.hypot(e.pos.x - at.x, e.pos.z - at.z) > TRIAL_LEASH) return end(false);
+        if (stuck >= 0) {
+          // A wave that did not spawn is not a cleared wave: try again twice a second, give up cleanly.
+          stuck += dt;
+          if (stuck > TRIAL_SPAWN_WAIT) return end(false);
+          if (Math.floor(stuck * 2) !== Math.floor((stuck - dt) * 2)) spawnWave();
+          return;
+        }
         const list = c.ents.list('enemy');
         let alive = 0;
         for (let i = 0; i < list.length; i++) if (list[i].alive && list[i].questTag === tag && (!list[i].combat || list[i].combat.state !== 'dead')) alive++;
