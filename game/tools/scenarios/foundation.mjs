@@ -1121,6 +1121,12 @@ export const scenarios = [
       const layout = async (w, h) => {
         await host.setViewportSize({ width: w, height: h });
         await host.waitForTimeout(700);
+        // The renderer applies a resize on its next rendered frame, and a frame of the software rasteriser can take
+        // longer than the fixed wait: wait (bounded) until the drawing buffer has the new orientation.
+        await frame.waitForFunction((wide) => {
+          const c = window.__GAME__.ctx.three.renderer.domElement;
+          return (c.width / c.height > 1) === wide && Math.abs(c.clientWidth - innerWidth) < 2;
+        }, w > h, { timeout: 20000, polling: 200 }).catch(() => {});
         return frame.evaluate(() => {
           const g = window.__GAME__;
           const c = g.ctx.three.renderer.domElement;
