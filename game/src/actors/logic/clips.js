@@ -37,7 +37,7 @@ function strike(f, id, s, wind, hit, hold = 0.45) {
 
 const H = 'humanoid';
 const HUMANOID_DEFS = [
-  C(H, 'idle', 2.4, true, [[0, 'idle'], [1.2, 'idle_b', 'inOut'], [2.4, 'idle', 'inOut']]),
+  C(H, 'idle', 4.8, true, [[0, 'idle'], [1.2, 'idle_b', 'inOut'], [2.4, 'idle', 'inOut'], [3.4, 'idle_c', 'inOut'], [4.8, 'idle', 'inOut']]),
   C(H, 'walk', 1, true, [[0, 'walk_c'], [0.25, 'walk_p'], [0.5, 'walk_c2'], [0.75, 'walk_p2'], [1, 'walk_c']]),
   C(H, 'run', 0.7, true, [[0, 'run_c'], [0.175, 'run_p'], [0.35, 'run_c2'], [0.525, 'run_p2'], [0.7, 'run_c']]),
   C(H, 'sprint', 0.56, true, [[0, 'sprint_c'], [0.14, 'sprint_p'], [0.28, 'sprint_c2'], [0.42, 'sprint_p2'], [0.56, 'sprint_c']]),
@@ -56,6 +56,9 @@ const HUMANOID_DEFS = [
   C(H, 'guard', 1.2, true, [[0, 'guard'], [0.6, 'guard_b', 'inOut'], [1.2, 'guard', 'inOut']]),
   C(H, 'gather', 1, true, [[0, 'gather'], [0.5, 'gather_b', 'inOut'], [1, 'gather', 'inOut']]),
   C(H, 'transform', 0.9, false, [[0, 'ready'], [0.15, 'curl', 'out'], [0.45, 'curl'], [0.53, 'burst', 'back'], [0.9, 'burst']]),
+  C(H, 'transform_ember', 0.9, false, [[0, 'ready'], [0.15, 'curl', 'out'], [0.45, 'curl'], [0.53, 'burst_ember', 'back'], [0.9, 'burst_ember']]),
+  C(H, 'transform_tempest', 0.9, false, [[0, 'ready'], [0.15, 'curl', 'out'], [0.45, 'curl'], [0.53, 'burst_tempest', 'back'], [0.9, 'burst_tempest']]),
+  C(H, 'transform_zenith', 0.9, false, [[0, 'ready'], [0.15, 'curl', 'out'], [0.45, 'curl'], [0.55, 'burst_zenith', 'back'], [0.9, 'burst_zenith']]),
   C(H, 'flicker', 0.25, false, [[0, 'ready'], [0.04, 'flicker', 'out'], [0.18, 'flicker'], [0.25, 'ready', 'inOut']]),
   strike(H, 'attack1', 0.28, 'jab_wind', 'jab_hit'),
   strike(H, 'attack2', 0.3, 'cross_wind', 'cross_hit'),

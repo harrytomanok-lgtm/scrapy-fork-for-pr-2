@@ -13,7 +13,7 @@ import { Bone, Skeleton, SkinnedMesh, Mesh, BufferGeometry, BufferAttribute, Vec
 import { PALETTE } from '../core/palette.js';
 import { clamp, angleDelta } from '../core/math.js';
 import { buildRig, geometryFor, SOCKET_NAMES } from './builder.js';
-import { resolveClip, sampleClip, rigPoseSize } from './logic/clips.js';
+import { resolveClip, sampleClip, rigPoseSize, clipById } from './logic/clips.js';
 import { blendPose, POSE_EXTRA } from './logic/poses.js';
 
 const OWNER = 'actors';
@@ -203,7 +203,14 @@ export function createActors(ctx) {
     if (!res.clip) return;
     if (res.fallback) warnOnce('clip ' + clipId + ' missing for ' + r.rig.id + ', using ' + res.clip.id);
     const upper = o && o.layer ? o.layer === 'upper' : res.clip.upper;
-    startSlot(r, upper ? r.upper : r.full, res.clip, clipId, o);
+    const s = upper ? r.upper : r.full;
+    // the same one-shot asked again early (a technique's windup and active phases share a strike clip): keep its
+    // timing instead of restarting the anticipation
+    if (s.clip === res.clip && s.id === clipId && !s.stopping && !s.loop && s.t < res.clip.seconds * 0.6) {
+      if (o && o.hold) s.hold = true;
+      return;
+    }
+    startSlot(r, s, res.clip, clipId, o);
   }
 
   const actors = {
@@ -257,6 +264,7 @@ export function createActors(ctx) {
         expr: 'neutral', exprUntil: 0, exprCur: new Float32Array(9), dead: false, talkUntil: 0,
         eyeOpen: 1, blinkAt: 1 + (ent.id % 7) * 0.37, blinkStart: -1, blinkSeed: (ent.id * 2654435761) & 0x7fffffff,
         accum: 0, visible: true, sashScale: 1, lift: 0,
+        prevFwd: 0, prevSide: 0, lean: 0, leanV: 0, leanS: 0, squash: 0, squashT: 0, stretch: 0,
       };
       ent.visual = r;
       records.push(r);
@@ -709,6 +717,46 @@ export function createActors(ctx) {
         r.spin = 0;
       }
     }
+    // weight: the torso leans into acceleration on a damped spring (a hard stop throws it forward past upright and
+    // it settles back), leans with running speed, and the hips squash on landing and stretch on take-off
+    if (dt > 0 && hips >= 0) {
+      const syw = Math.sin(r.yaw);
+      const cyw = Math.cos(r.yaw);
+      const fv = ent.vel.x * syw + ent.vel.z * cyw;
+      const sv = ent.vel.x * cyw - ent.vel.z * syw;
+      const ground = lm === 'ground';
+      const acc = clamp((fv - r.prevFwd) / dt, -60, 60);
+      const accS = clamp((sv - r.prevSide) / dt, -60, 60);
+      r.prevFwd = fv;
+      r.prevSide = sv;
+      const busy = r.full.w > 0.5 && !r.full.loop;
+      // both a start (drive) and a stop (follow-through) pitch the torso forward; the spring settles it back
+      const lt = ground && !busy && !r.dead ? clamp(Math.abs(acc) * (acc < 0 ? 0.014 : 0.009), 0, 0.34) : 0;
+      const ls = ground && !busy && !r.dead ? clamp(-accS * 0.006, -0.15, 0.15) : 0;
+      const kL = rig.fam === 'humanoid' ? 1 : 0.5;
+      r.leanV += (90 * (lt - r.lean) - 11 * r.leanV) * dt;
+      r.lean = clamp(r.lean + r.leanV * dt, -0.45, 0.45);
+      r.leanS += (ls - r.leanS) * (1 - Math.exp(-8 * dt));
+      const lean = r.lean * kL;
+      if (rig.spine >= 0) { F[rig.spine * 3] += lean * 0.45; F[rig.spine * 3 + 2] += r.leanS * 0.5; }
+      if (rig.chest >= 0) { F[rig.chest * 3] += lean * 0.55; F[rig.chest * 3 + 2] += r.leanS * 0.5; }
+      if (rig.head >= 0) F[rig.head * 3] -= lean * 0.5;
+      if (rig.fam === 'humanoid' && ground && rig.spine >= 0) {
+        const run = clamp((r.speed - 2.5) / 6, 0, 1);
+        F[rig.spine * 3] += run * 0.1;
+        F[rig.chest * 3] += run * 0.08;
+        if (rig.head >= 0) F[rig.head * 3] -= run * 0.12;
+      }
+      r.squash *= Math.exp(-9 * dt);
+      const up = !grounded && ent.vel.y > 2 ? Math.min(1, ent.vel.y / 10) : 0;
+      r.stretch += (up - r.stretch) * (1 - Math.exp(-12 * dt));
+      const o = nb * 3;
+      const sq = r.squash * (Math.sin(Math.min(1, (r.time - r.squashT) * 7) * Math.PI) * 0.4 + 0.6);
+      F[o + 1] -= sq * 0.06;
+      F[o + 4] *= 1 - sq * 0.12 + r.stretch * 0.06;
+      F[o + 3] *= 1 + sq * 0.07 - r.stretch * 0.03;
+      F[o + 5] *= 1 + sq * 0.07 - r.stretch * 0.03;
+    }
     // flinch: quick rise, fast decay
     if (r.flinchT < 1 && rig.chest >= 0) {
       r.flinchT += dt;
@@ -1058,7 +1106,22 @@ export function createActors(ctx) {
     /** @param {any} e */
     form(e) {
       const ent = ctx.ents.get(e.entId);
-      if (rec(ent)) actors.setForm(ent, e.formId);
+      const r = rec(ent);
+      if (!r) return;
+      actors.setForm(ent, e.formId);
+      // the transformation ends in that Form's own pose
+      if (e.formId && r.full.clip && r.full.id === 'transform') {
+        const v = clipById(r.rig.fam + '.transform_' + e.formId);
+        if (v) r.full.clip = v;
+      }
+    },
+    /** A short flourish on level-up when the player is standing free. */
+    levelUp() {
+      const r = rec(ctx.player);
+      if (!r || r.dead || r.full.clip || r.locoMode !== 'ground' || r.speed > 1) return;
+      const c = r.ent.combat;
+      if (c && c.state !== 'idle') return;
+      playInternal(r, 'victory', null);
     },
     /** @param {any} e */
     combatState(e) {
@@ -1067,7 +1130,10 @@ export function createActors(ctx) {
     /** @param {any} e */
     landed(e) {
       const r = rec(ctx.ents.get(e.entId));
-      if (r) r.landKick = clamp(e.speed / 12, 0, 1.6);
+      if (!r) return;
+      r.landKick = clamp(e.speed / 12, 0, 1.6);
+      r.squash = clamp(e.speed / 14, 0.25, 1);
+      r.squashT = r.time;
     },
     /** @param {any} e */
     line(e) {
