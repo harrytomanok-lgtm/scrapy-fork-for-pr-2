@@ -161,7 +161,7 @@ export function createVfx(ctx) {
     const sj = 0.8 + 0.4 * rnd();
     pool.s0[i] = L.sz[0] * sc * sj;
     pool.s1[i] = L.sz[1] * sc * sj;
-    pool.rot[i] = sh === 'still' && L.cell !== CELL.star ? 0 : rnd() * TAU;
+    pool.rot[i] = sh === 'still' && L.cell !== CELL.star && !L.rr ? 0 : rnd() * TAU;
     pool.rotV[i] = L.rv || 0;
     tokenColor(L.col, cTok);
     const hdr = (L.hdr || 1) * hdrMul;
@@ -702,6 +702,33 @@ export function createVfx(ctx) {
       let pj = 0;
       for (let i = 0; i < projs.length; i++) if (projs[i].entId) pj++;
       return { particles: pool.live, cap: pool.cap, emitters: em, beams: bm, decals: dc, shells: sh, orbs: ob, projectiles: pj, speed: speedK, weather: weatherK };
+    },
+
+    /**
+     * Gallery and tests: drop every one-shot effect (particles, emitters, timed beams and decals, sphere waves, orbs,
+     * afterimages, icons, lights) so the next effect is seen alone. Auras and beams owned by a running technique stay.
+     */
+    debugReset() {
+      pool.clear();
+      for (let i = 0; i < emitters.length; i++) emitters[i].id = 0;
+      for (let i = 0; i < MAX_BOOST; i++) boostEnt[i] = 0;
+      for (let i = 0; i < orbs.length; i++) orbs[i].on = false;
+      for (let i = 0; i < icons.length; i++) icons[i].entId = 0;
+      for (let i = 0; i < afters.length; i++) afters[i].t = afters[i].seconds;
+      for (let i = 0; i < mfx.shells.length; i++) {
+        const s = mfx.shells[i];
+        if (s.active && s.kind === 0) { s.active = false; s.mesh.visible = false; }
+      }
+      for (let i = 0; i < mfx.decals.length; i++) {
+        const d = mfx.decals[i];
+        if (d.active && d.seconds > 0) { d.active = false; d.mesh.visible = false; }
+      }
+      for (let i = 0; i < mfx.beams.length; i++) {
+        const b = mfx.beams[i];
+        if (b.active && (b.timed > 0 || b.followA)) endBeam(b, 0.02);
+      }
+      pBoost = 0;
+      speedK = 0;
     },
 
     /** Remove every pooled mesh. */

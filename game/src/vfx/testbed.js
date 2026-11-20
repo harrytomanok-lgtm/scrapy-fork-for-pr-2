@@ -125,4 +125,7 @@ export function registerVfxTestbed(ctx) {
   ctx.debug.register('gfxClearBeamAura', clearBeamAura);
   ctx.debug.register('gfxTelegraphs', telegraphs);
   ctx.debug.register('gfxVfxState', () => ctx.vfx.debugState());
+  ctx.debug.register('vfxReset', () => {
+    if (typeof ctx.vfx.debugReset === 'function') ctx.vfx.debugReset();
+  });
 }
