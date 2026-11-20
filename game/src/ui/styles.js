@@ -191,6 +191,8 @@ export const UI_CSS = `
 .ui-banner.ui-on .ui-banner-sub{opacity:1;transform:none;transition-delay:220ms}
 .ui-m-short .ui-banner-main,.ui-m-portrait .ui-banner-main{font-size:var(--fs-title)}
 .ui-m-portrait .ui-banner-main,.ui-m-portrait .ui-banner.ui-k-region .ui-banner-main{font-size:min(var(--fs-title),8vw)}
+/* Portrait: a long banner (a quest step with a reward, a technique's name) wraps to two balanced lines, never cut. */
+.ui-m-portrait .ui-banner-main{white-space:normal;text-align:center;text-wrap:balance;overflow-wrap:anywhere}
 .ui-banner.ui-k-level .ui-banner-main{background:linear-gradient(to bottom,#FFF6D8,var(--ui-crit))}
 .ui-banner.ui-k-level .ui-banner-sub{color:var(--ui-crit)}
 .ui-banner.ui-k-quest .ui-banner-main{background:linear-gradient(to bottom,var(--paper),var(--paper-dim))}

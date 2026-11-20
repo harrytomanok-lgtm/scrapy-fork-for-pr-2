@@ -193,7 +193,9 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       const W = window.innerWidth || 1;
       const H = window.innerHeight || 1;
       const b = hero.getBoundingClientRect();
-      if (b.width < 40 || b.height < 60) return;
+      // A short screen (a landscape phone, 412 px tall) leaves a window too short to show the hero under its name
+      // and numbers without cropping the head: the card keeps its silhouette there instead.
+      if (b.width < 40 || b.height < 60 || H < 480) return;
       const nx = ((b.left + b.width / 2) / W) * 2 - 1;
       const ny = -(((b.top + b.height / 2) / H) * 2 - 1);
       const fov = 38;

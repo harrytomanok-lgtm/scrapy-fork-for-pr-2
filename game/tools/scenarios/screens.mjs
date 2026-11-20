@@ -313,8 +313,11 @@ function contentScenario(tag, width, height) {
         f['ora.shards'] = f['ora.shards'].slice(0, 4);
         const next = g.ctx.quests.shards().list.find((s) => !s.found);
         g.ctx.bus.emit('pickup:collected', { kind: 'xp', itemId: next.id, amount: 25 });
-        g.step(12);
-        g.render();
+        // The lock camera settles over a few test frames (at most 0.5 s each); the HUD places around it.
+        for (let i = 0; i < 4; i++) {
+          g.step(4);
+          g.render();
+        }
       });
       const el = await game((g) => ({ elite: document.querySelector('.ui-target.ui-elite') !== null, rank: !document.querySelector('.ui-trank').hidden }));
       assert.ok(el.elite && el.rank, 'the camp leader has its plate');
