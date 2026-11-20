@@ -768,6 +768,7 @@ export function createRpg(ctx) {
       if (!p.defeated) return;
       const w = S().world;
       if (w.bosses.indexOf(p.bossId) < 0) w.bosses.push(p.bossId);
+      S().quests.flags['beaten.' + p.bossId] = true;
       retryBoss = null;
       bossSnapshot = null;
     },

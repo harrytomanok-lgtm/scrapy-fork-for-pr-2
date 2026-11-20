@@ -92,6 +92,8 @@ export function createActivities(ctx, host) {
     // Every attuned stone carries its flag (the Ringstone menu's travel choices read it; older journeys and the
     // tutorial=0 shortcut only had the list).
     for (const id of W().ringstones) flags()['attuned.' + id] = true;
+    // Likewise every beaten boss (the menu offers a rematch only for those).
+    for (const id of W().bosses) flags()['beaten.' + id] = true;
     for (const poi of w.pois('ringstone')) buildRingstone(poi);
     for (const poi of w.pois('shrine')) buildShrine(poi);
     for (const poi of w.pois('chest')) buildChest(poi, poi.data && poi.data.table ? poi.data.table : 'chest_t1');

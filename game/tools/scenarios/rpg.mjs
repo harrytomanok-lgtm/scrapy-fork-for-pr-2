@@ -720,9 +720,11 @@ export const scenarios = [
         const b2 = bossOf()[0];
         out.retried = !!b2;
         out.retryLevel = b2 ? b2.level : 0;
+        out.addLevels = [];
         for (let i = 0; i < 60 && b2 && b2.alive && !st.quests.flags['rematch.durn']; i++) {
           g.damage(b2.id, 0.2);
           g.step(20);
+          for (const e of g.ctx.ents.list('enemy')) if (e.alive && e.defId === 'choir_acolyte' && out.addLevels.indexOf(e.level) < 0) out.addLevels.push(e.level);
         }
         g.step(300);
         out.record = st.quests.flags['rematch.durn'];
@@ -738,6 +740,7 @@ export const scenarios = [
       assert.ok(r.canRetry, 'the death screen can Retry the rematch');
       assert.ok(r.retried && r.retryLevel === r.level, 'Retry restarts it at the same level');
       assert.ok(r.record && r.record.medals.length >= 1, 'the retried win records its medal');
+      assert.ok(r.addLevels.length > 0 && r.addLevels.every((l) => l === r.level), 'the adds come at the rematch level (' + r.addLevels + ')');
       const once = { bronze: 300, silver: 600, gold: 1200 };
       const want = r.record.medals.reduce((a, m) => a + once[m], 0);
       assert.ok(r.paid >= want && r.paid < want + 400, 'the medals are paid once (' + r.paid + ' for ' + r.record.medals.join(',') + ')');

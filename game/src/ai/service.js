@@ -907,7 +907,8 @@ export function createAi(ctx) {
     const g = c.defs.find('group', groupId);
     if (!g) return;
     const before = addIds.length;
-    spawnGroupAt(g, ent.pos.x, ent.pos.z, { level: bossDef ? bossDef.level : ent.level, aggro: true, radius: 10 }, ORIGIN.add, undefined, addIds);
+    // At the boss's own level: a rematch's raised level (ai.startBoss opts.level) carries to its adds.
+    spawnGroupAt(g, ent.pos.x, ent.pos.z, { level: ent.level || (bossDef ? bossDef.level : 1), aggro: true, radius: 10 }, ORIGIN.add, undefined, addIds);
     for (let i = before; i < addIds.length; i++) {
       const a = c.ents.get(addIds[i]);
       if (a && a.brain) a.brain.leash = 400;

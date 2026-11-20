@@ -296,3 +296,13 @@ test('activities: medals and the Siphon core cycle (4 s open in every 8 s)', () 
   assert.equal(siphonOpen(1, 8, 4), false);
   assert.equal(siphonOpen(5, 8, 4), true);
 });
+
+test('the Ringstone menu offers a rematch only for a beaten boss', async () => {
+  const { DIALOGUES } = await import('../../src/rpg/data/dialogues.js');
+  const menu = DIALOGUES.find((d) => d.id === 'ringstone_menu');
+  for (const c of menu.nodes.rematch.choices) {
+    const a = (c.actions || []).find((x) => x.script && x.script.startsWith('rematch_'));
+    if (!a) continue;
+    assert.deepEqual(c.if, { flag: 'beaten.' + a.script.slice('rematch_'.length) });
+  }
+});
