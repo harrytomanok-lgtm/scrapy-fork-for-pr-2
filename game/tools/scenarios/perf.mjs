@@ -115,7 +115,9 @@ export const scenarios = [
         check(assert, s, FIGHT, 'fight frame ' + i);
       }
       console.log(`  fight peak: ${peak.drawCalls} calls, ${peak.triangles} tris: ${fmt(peak)}`);
-      await shot('perf-fight');
+      // the picture is for review only: under a loaded machine SwiftShader can take the 12-enemy frame past the
+      // harness's 30 s screenshot limit, which says nothing about the budget asserted above
+      await shot('perf-fight').catch((e) => console.log('  perf-fight screenshot skipped: ' + String(e.message || e).split('\n')[0]));
     },
   },
   {
