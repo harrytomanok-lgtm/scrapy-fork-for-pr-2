@@ -159,9 +159,9 @@ export const scenarios = [
     ...LANDSCAPE,
     async run({ game, assert, shot }) {
       await opening(game, assert);
-      await sheet(game, assert, { items: BOSSES.map((id) => ({ id, clip: 'idle', t: 0.3 })), dist: 20, gap: 0.6, back: 12, up: 2.6, look: 2.4 });
+      await sheet(game, assert, { items: BOSSES.map((id) => ({ id, clip: 'idle', t: 0.3 })), dist: 20, gap: 0.6, back: 16, up: 2.4, look: 2.6 });
       await shot('cast-bosses');
-      await sheet(game, assert, { items: BOSSES.map((id) => ({ id, clip: 'roar', t: 0.5 })), dist: 20, gap: 0.6, back: 12, up: 2.6, look: 2.4, turn: -0.4 });
+      await sheet(game, assert, { items: BOSSES.map((id) => ({ id, clip: 'roar', t: 0.5 })), dist: 20, gap: 0.6, back: 16, up: 2.4, look: 2.6, turn: -0.4 });
       await shot('cast-bosses-intro');
     },
   },
@@ -170,9 +170,13 @@ export const scenarios = [
     ...LANDSCAPE,
     async run({ game, assert, shot }) {
       await opening(game, assert);
-      const ids = ['npc_sela', 'npc_kerrin', 'npc_dov', 'npc_mira', 'npc_bren', 'npc_yael', 'npc_noa', 'npc_villager_1', 'npc_villager_2', 'npc_villager_3', 'npc_villager_4', 'npc_villager_5', 'npc_villager_6'];
-      await sheet(game, assert, { items: ids.map((id, i) => ({ id, clip: i % 3 === 1 ? 'talk' : 'idle', t: 0.4 + i * 0.1 })), dist: 9, gap: 0.1, back: 5.6, up: 1.0, look: 0.95 });
+      const ids = ['npc_sela', 'npc_kerrin', 'npc_dov', 'npc_mira', 'npc_bren', 'npc_yael', 'npc_noa'];
+      await sheet(game, assert, { items: ids.map((id, i) => ({ id, clip: i === 4 ? 'talk' : 'idle', t: i === 1 ? 2.5 : 0.6 + i * 0.3 })), dist: 7, gap: 0.1, back: 4.2, up: 1.0, look: 0.95 });
       await shot('cast-villagers');
+      // generic villagers: the same few specs, a different look per person, with idle gestures
+      const gen = ['npc_villager_1', 'npc_villager_1', 'npc_villager_2', 'npc_villager_2', 'npc_villager_3', 'npc_villager_4', 'npc_villager_5', 'npc_villager_6'];
+      await sheet(game, assert, { items: gen.map((id, i) => ({ id, clip: 'idle', t: 2.5 + i * 0.45 })), dist: 7.5, gap: 0.1, back: 4.4, up: 1.0, look: 0.95 });
+      await shot('cast-villagers-crowd');
     },
   },
 ];

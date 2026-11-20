@@ -15,6 +15,7 @@ import { clamp, angleDelta } from '../core/math.js';
 import { buildRig, geometryFor, SOCKET_NAMES } from './builder.js';
 import { resolveClip, sampleClip, rigPoseSize, clipById } from './logic/clips.js';
 import { blendPose, POSE_EXTRA } from './logic/poses.js';
+import { villagerLook } from './data/specs.js';
 
 const OWNER = 'actors';
 const TWO_PI = Math.PI * 2;
@@ -250,7 +251,14 @@ export function createActors(ctx) {
         if (rig.parent[b] >= 0) bones[rig.parent[b]].add(bone);
         bones.push(bone);
       }
-      const o = opts || {};
+      let o = opts || {};
+      // generic villagers: a look of their own per person (colours and height)
+      let vScale = 1;
+      if (!o.palette && rig.id.indexOf('npc_villager_') === 0) {
+        const look = villagerLook(ent.id);
+        o = { formKey: o.formKey, palette: look.palette };
+        vScale = look.scale;
+      }
       const formKey = o.formKey && rig.spec.forms && rig.spec.forms[o.formKey] ? o.formKey : null;
       const mat = render.materials.toonSkinned({ palette: true });
       // character rim and shadow floor (render toon): readable at dusk and night
@@ -262,6 +270,7 @@ export function createActors(ctx) {
       mesh.bind(skeleton);
       mesh.boundingSphere = rig.sphere;
       mesh.rotation.order = 'YXZ';
+      if (vScale !== 1) mesh.scale.setScalar(vScale);
       mesh.name = 'actor:' + specId;
       render.layers.actors.add(mesh);
       const n = rigPoseSize(rig.rig);
@@ -835,6 +844,8 @@ export function createActors(ctx) {
         F[rig.browR * 3 + i] += r.exprCur[3 + i];
         if (rig.jaw >= 0) F[rig.jaw * 3 + i] += r.exprCur[6 + i];
       }
+      // talking: the jaw moves with the words while a dialogue line runs
+      if (rig.jaw >= 0 && r.talkUntil > r.time) F[rig.jaw * 3] += Math.max(0, Math.sin(r.time * 13.5) * Math.sin(r.time * 3.1 + 1)) * 0.3;
       if (rig.eyes >= 0) {
         if (r.time >= r.blinkAt) {
           r.blinkSeed = (r.blinkSeed * 1103515245 + 12345) & 0x7fffffff;

@@ -333,10 +333,29 @@ const NPC_SLOTS = { top: 'top', legs: 'legs', boots: 'boots', skin: 'skin', hair
 /** @param {string} id @param {any} build @param {Record<string,number>} palette @param {any} opts @param {any[]} extra */
 function npc(id, build, palette, opts, extra) {
   const parts = person(Object.assign({ build, detail: 'lite', face: true }, opts, { slots: Object.assign({}, NPC_SLOTS, opts.slots || {}) }));
-  return {
+  const spec = {
     id, rig: 'humanoid', scale: 1, build,
     palette: Object.assign({ ink: PALETTE.ink, glint: PALETTE.oraCore }, palette), emissive: Object.assign({ glint: 0.3 }, opts.emissive || {}),
     parts: parts.concat(extra), radius: 0.4 * (build.shoulder / 0.44), outline: true, face: true,
+  };
+  if (opts.idle) spec.clips = { idle: 'humanoid.' + opts.idle };
+  return spec;
+}
+
+/** Idle gestures handed out to villagers by index (the plain idle included). */
+const GESTURES = ['idle_look', 'idle_cross', null, 'idle_scratch', 'idle_look', 'idle_cross'];
+
+/**
+ * A per-person look for a generic villager spec, so a settlement of a few specs does not read as clones: skin, hair
+ * and outfit colours from the generator tables and a height factor, picked by a seed (the entity id).
+ * @param {number} seed @returns {{ palette:Record<string, number>, scale:number }}
+ */
+export function villagerLook(seed) {
+  const h = (seed * 2654435761) >>> 0;
+  const of = OUTFITS[(h >>> 3) % 6];
+  return {
+    palette: { skin: SKINS[(h >>> 7) % 4], hair: HAIRS[(h >>> 11) % 4], top: of[0], sash: of[1], legs: of[2] },
+    scale: 0.94 + ((h >>> 15) % 9) * 0.0125,
   };
 }
 
@@ -383,7 +402,8 @@ export function villager(id, i, prop) {
   return npc(id, build, {
     top: of[0], sash: of[1], legs: of[2], boots: 0x4a3a2e, skin: SKINS[(i * 3 + 2) % 4], hair: HAIRS[(i * 7 + 1) % 4], brooch: CHAR.bronze,
     hat: [0xd8c08a, 0x7a5a4a, 0xc8463a, 0x3f5566][i % 4], prop: [0x9a7a4a, 0xd9c7a0, 0x6b4a3a, 0xe9dcc0, 0x8a6a4e, PALETTE.structure.kites[i % 3]][i % 6],
-  }, { hair: hw === 'none' || hw === 'straw' ? style : 'crop', hairLen: 0.3, boots: 'short', skirt: i % 2 ? { slot: 'top', len: 0.5, r: 0.2 } : null }, extra.concat(prop || []));
+  }, { hair: hw === 'none' || hw === 'straw' ? style : 'crop', hairLen: 0.3, boots: 'short', skirt: i % 2 ? { slot: 'top', len: 0.5, r: 0.2 } : null, idle: GESTURES[i % 6] },
+  extra.concat(prop || []));
 }
 
 function namedNpcs() {
@@ -406,7 +426,7 @@ function namedNpcs() {
     const build = { height: 1.76, shoulder: 0.5, bulk: 0.78, head: 1 };
     const k = build.height / 1.8;
     out.push(npc('npc_kerrin', build, { top: CHAR.kerrinJacket, under: 0x2e2a36, legs: 0x3a3344, boots: 0x4a3a2e, skin: 0xd09a74, hair: CHAR.kerrinHair, sash: CHAR.kerrinSash, ring: CHAR.bronze },
-      { hair: 'short', boots: 'tall', slots: { abdomen: 'under', upper: 'top', fore: 'skin' } }, [
+      { hair: 'short', boots: 'tall', idle: 'idle_ring', slots: { abdomen: 'under', upper: 'top', fore: 'skin' } }, [
         P('spine', 'torus', [0.15, 0.03 * k], [0, -0.02 * k, 0], null, 'sash', { seg: 6 }),
         P('hips', 'box', [0.07, 0.32 * k, 0.014], [0.12, -0.14 * k, 0.06], [0, 0, 0.12], 'sash'),
         P('handR', 'torus', [0.035, 0.008], [0, -0.1, 0.02], null, 'ring', { seg: 6 }),
@@ -418,7 +438,7 @@ function namedNpcs() {
     const build = { height: 1.7, shoulder: 0.5, bulk: 1.0, head: 1 };
     const k = build.height / 1.8;
     out.push(npc('npc_dov', build, { top: 0xd9c7a0, legs: 0x5a4a3a, boots: 0x3a2e26, skin: 0xc98f6b, hair: 0x3a2a1e, apron: CHAR.dovApron, hat: 0x6b4a3a, ladle: 0x9a9590 },
-      { hair: 'crop', boots: 'short' }, [
+      { hair: 'crop', boots: 'short', idle: 'idle_belly' }, [
         P('spine', 'sphere', [0.36, 0.3, 0.32], [0, 0.04 * k, 0.02], null, 'top', { seg: 8 }),
         P('spine', 'box', [0.26, 0.5 * k, 0.02], [0, -0.1 * k, 0.17], [-0.08, 0, 0], 'apron'),
         P('head', 'cylinder', [0.27 * k, 0.018 * k], [0, 0.22 * k, 0], [-0.06, 0, 0], 'hat', { seg: 10 }),
@@ -432,7 +452,7 @@ function namedNpcs() {
     const build = { height: 1.74, shoulder: 0.47, bulk: 0.7, head: 1 };
     const k = build.height / 1.8;
     out.push(npc('npc_mira', build, { top: 0x8a7a68, legs: 0x4a3a2e, boots: 0x2e2620, skin: 0xb98060, hair: CHAR.redCloth, apron: CHAR.leather, iron: 0x5a5660 },
-      { hair: 'crop', boots: 'short', slots: { fore: 'skin' } }, [
+      { hair: 'crop', boots: 'short', idle: 'idle_cross', slots: { fore: 'skin' } }, [
         P('head', 'sphere', [0.25, 0.2, 0.26], [0, 0.2 * k, -0.04], [0.25, 0, 0], 'hair', { seg: 6 }),
         P('head', 'sphere', [0.09, 0.09, 0.09], [0, 0.24 * k, -0.15], null, 'hair', { seg: 5 }),
         P('chest', 'box', [0.28, 0.36 * k, 0.02], [0, 0.0, 0.115], [-0.05, 0, 0], 'apron'),
