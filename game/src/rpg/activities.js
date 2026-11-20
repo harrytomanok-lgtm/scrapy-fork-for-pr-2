@@ -654,21 +654,16 @@ export function createActivities(ctx, host) {
     if (s.view) revealRegion(s.regionId);
   }
 
-  /** A viewpoint: every point of interest of the region is put on the map (discovered, with its discovery XP). */
+  /**
+   * A viewpoint: the region's points of interest go on the map (flag `revealed.<regionId>`; the map screen shows
+   * every POI of a revealed region, see shards().revealed). Their discovery XP still waits for the visit.
+   */
   function revealRegion(regionId) {
     const f = flags();
     if (f['revealed.' + regionId]) return;
     f['revealed.' + regionId] = true;
-    const w = W();
-    let xp = 0;
     let n = 0;
-    for (const d of discover) {
-      if (w.discovered.indexOf(d.id) >= 0 || !ctx.world || ctx.world.regionAt(d.x, d.z) !== regionId) continue;
-      w.discovered.push(d.id);
-      xp += d.type === 'landmark' ? BALANCE.xp.discovery.landmark : BALANCE.xp.discovery.poi;
-      n++;
-    }
-    if (xp > 0) ctx.rpg.grantXp(xp, 'discovery');
+    for (const d of discover) if (W().discovered.indexOf(d.id) < 0 && ctx.world && ctx.world.regionAt(d.x, d.z) === regionId) n++;
     ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.viewpoint', args: { region: ctx.i18n.t('region.' + regionId + '.name'), n } });
   }
 
@@ -723,7 +718,9 @@ export function createActivities(ctx, host) {
         r.total++;
         if (got.indexOf(s.id) >= 0) r.found++;
       }
-      return { found: got.length, total: shards.length, regions, title: flags().title || null,
+      const revealed = [];
+      for (const r of regions) if (r.revealed) revealed.push(r.id);
+      return { found: got.length, total: shards.length, regions, revealed, title: flags().title || null,
         list: shards.map((s) => ({ id: s.id, x: s.x, y: s.y, z: s.z, regionId: s.regionId, kind: s.kind, view: s.view, found: got.indexOf(s.id) >= 0 })),
         next: shardReward.find((r) => r.at > got.length) || null };
     },

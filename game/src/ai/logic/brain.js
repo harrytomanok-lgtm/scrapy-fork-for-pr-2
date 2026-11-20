@@ -22,8 +22,6 @@
 export const HOVER_RULE = { height: 12, seconds: 6 };
 /** A target this far above a ground-only enemy is out of its reach (throw instead). */
 const OUT_OF_REACH = 2.5;
-/** Extra distance (m) a ranged enemy keeps while it has allies near (behind the melee line). */
-const BACKLINE = 4;
 
 /**
  * @typedef {{ id:string, min:number, max:number, weight:number, cooldown:number, token:'melee'|'ranged',
@@ -90,6 +88,8 @@ export function createBrain(kind, params, techs, home, opts) {
     engage: p.engage || (kind === 'ranged' ? 18 : kind === 'charger' ? 12 : 6),
     preferMin: p.prefer ? p.prefer[0] : 1.5,
     preferMax: p.prefer ? p.prefer[1] : 3,
+    /** Extra range kept behind the allies' line (EnemyDef.params.backline; the Choir Caster). */
+    backline: typeof p.backline === 'number' ? p.backline : 0,
     strafe: typeof p.strafe === 'number' ? p.strafe : 0.5,
     guardChance: p.guardChance || 0,
     fleeHp: p.fleeHp || 0,
@@ -346,7 +346,7 @@ export function think(b, s, api) {
       if (b.kind === 'ranged') {
         // With melee allies in front, a ranged enemy hangs back behind their line: the player has to cut through or
         // fly over to reach it first.
-        const mid = (b.preferMin + b.preferMax) * 0.5 + (s.allies > 0 ? BACKLINE : 0);
+        const mid = (b.preferMin + b.preferMax) * 0.5 + (s.allies > 0 ? b.backline : 0);
         orbit(b, s, mid, 0.7);
       } else if (b.kind === 'diver') {
         orbit(b, s, b.engage, 0.8);

@@ -45,7 +45,7 @@ const PARAMS = {
   tusk_boar: { sight: 32, leash: 70, engage: 12, prefer: [8, 16], strafe: 0.3, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 8 },
   bramble_boar: { sight: 36, leash: 75, engage: 12, prefer: [8, 16], strafe: 0.3, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 8.5 },
   choir_acolyte: { sight: 45, leash: 80, engage: 6, prefer: [1.5, 3], strafe: 0.5, guardChance: E.choir_acolyte.guardChance, fleeHp: 0.18, jumpAtFlyer: true },
-  choir_caster: { sight: 50, leash: 85, engage: 22, prefer: [E.choir_caster.keepRange - 7, E.choir_caster.keepRange + 5], strafe: 0.8, guardChance: 0, fleeHp: 0.2, hover: 3.5, jumpAtFlyer: false },
+  choir_caster: { sight: 50, leash: 85, engage: 22, prefer: [E.choir_caster.keepRange - 7, E.choir_caster.keepRange + 5], strafe: 0.8, guardChance: 0, fleeHp: 0.2, hover: 3.5, jumpAtFlyer: false, backline: 4 },
   scuttlecrab: { sight: 28, leash: 60, engage: 5, prefer: [1.5, 3], strafe: 0.6, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 5.5 },
   rust_golem: { sight: 40, leash: 70, engage: 8, prefer: [2, 4], strafe: 0.2, guardChance: 0, fleeHp: 0, jumpAtFlyer: false, runSpeed: 5 },
   frost_harrier: { sight: 60, leash: 110, engage: 16, prefer: [12, 26], strafe: 1, guardChance: 0, fleeHp: 0, hover: 16, jumpAtFlyer: false, flySpeed: 18 },

@@ -526,11 +526,11 @@ export const scenarios = [
         for (let i = 0; i < 12 && Q.shards().found === 0; i++) g.step(5);
         const afterPass = Q.shards().found;
         // The viewpoint: the region's highest peak.
-        const disc0 = g.state().world.discovered.length;
         g.teleport(a.view.x, a.view.z, { alt: 2, fly: true });
         g.step(40);
         const st = Q.shards();
-        return { pickups, afterPass, found: st.found, revealed: st.regions.find((r) => r.id === 'meadows').revealed, disc: g.state().world.discovered.length - disc0 };
+        const vb = g.events(['ui:banner']).find((e) => e.payload.key === 'rpg.banner.viewpoint');
+        return { pickups, afterPass, found: st.found, revealed: st.revealed.includes('meadows'), disc: vb ? vb.payload.args.n : 0 };
       }, a);
       // Five shards: +1 TP.
       const c = await game((g) => {
@@ -548,7 +548,7 @@ export const scenarios = [
       assert.ok(a.kinds.includes('peak') && a.kinds.includes('sky') && a.kinds.includes('roof'), 'peaks, open air and roofs');
       assert.ok(b.pickups >= 1, 'the nearby shard stands as a pickup');
       assert.equal(b.afterPass, 1, 'flying past collects it');
-      assert.ok(b.revealed && b.disc > 3, 'the viewpoint reveals the region (' + b.disc + ' places)');
+      assert.ok(b.revealed && b.disc > 3, 'the viewpoint puts the region on the map (' + b.disc + ' places)');
       assert.equal(c.found, 5);
       assert.equal(c.saved, 5, 'the count is kept in the journey');
       assert.ok(c.banner && c.tp > a.tp0, 'five shards: +1 TP (with the level-ups of their XP)');

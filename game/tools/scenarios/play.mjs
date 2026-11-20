@@ -1309,17 +1309,23 @@ const sandbox = {
       }
       src += ' after ' + waited * 30 + ' ticks';
       const n0 = g.ctx.ents.list('enemy').filter((e) => e.alive && near(e)).length;
+      // Close the distance (the group may stand 100 m off): land a few metres from the nearest.
+      const first = S.nearest(near);
+      if (first) g.teleport(first.pos.x + 8, first.pos.z + 8, {});
       const r = S.brawl(near, 60 * 50, 10, 0.3);
-      // Finish the stragglers (flyers out of melee reach) with bolts.
+      // Finish the stragglers (flyers out of melee reach, enemies that went home) with bolts from close by.
       for (let k = 0; k < 60 && S.nearest(near); k++) {
         const e = S.nearest(near);
+        if (Math.hypot(e.pos.x - g.ctx.player.pos.x, e.pos.z - g.ctx.player.pos.z) > 25) g.teleport(e.pos.x + 6, e.pos.z + 6, {});
+        if (g.ctx.player.stats.hp < g.ctx.player.stats.hpMax * 0.3) g.heal();
         g.lock(e.id);
         g.press('bolt');
         S.sim(15);
         if (k > 40) g.damage(e.id, 0.5);
       }
       g.heal();
-      return { pop, seen, src, n0, r, left: g.ctx.ents.list('enemy').filter((e) => e.alive && near(e)).length };
+      const rest = g.ctx.ents.list('enemy').filter((e) => e.alive && near(e)).map((e) => e.defId + ':' + Math.round(e.stats.hp) + '/' + Math.round(e.stats.hpMax) + ' t' + e.tags + ' d' + Math.round(Math.hypot(e.pos.x - g.ctx.player.pos.x, e.pos.z - g.ctx.player.pos.z)) + ' ' + e.combat.state);
+      return { pop, seen, src, n0, r, rest, left: rest.length };
     });
     console.log('    fight: ' + JSON.stringify(fight));
     assert.ok(fight.n0 >= 1 && fight.left === 0, 'the group is beaten');
@@ -1330,7 +1336,8 @@ const sandbox = {
       let best = null;
       for (const c of g.cmd.aiCamps()) {
         const d = Math.hypot(c.x - p.pos.x, c.z - p.pos.z);
-        if (c.regionId === 'meadows' && (!best || d < best.d)) best = { c, d };
+        // A beast camp: Choir camps stand empty in a region whose Siphon is silenced.
+        if (c.regionId === 'meadows' && c.tier === 1 && (!best || d < best.d)) best = { c, d };
       }
       const c = best.c;
       g.teleport(c.x + 30, c.z, {});
