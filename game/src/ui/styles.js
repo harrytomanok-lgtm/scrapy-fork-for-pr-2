@@ -161,7 +161,7 @@ export const UI_CSS = `
 .ui-toast span{overflow:hidden;text-overflow:ellipsis}
 .ui-m-short .ui-toast span{white-space:nowrap}
 
-.ui-bwrap{position:absolute;top:24%;left:0;right:0;block-size:0;display:flex;align-items:center;justify-content:center;transition:transform 220ms var(--ui-ease)}
+.ui-bwrap{position:absolute;top:24%;left:50%;inline-size:0;block-size:0;display:flex;align-items:center;justify-content:center;transition:transform 220ms var(--ui-ease)}
 .ui-m-portrait .ui-bwrap{top:21%}
 .ui-tgt .ui-bwrap{top:calc(var(--safe-top) + 150px)}
 .ui-m-portrait.ui-tgt .ui-bwrap{top:calc(var(--safe-top) + 200px)}
