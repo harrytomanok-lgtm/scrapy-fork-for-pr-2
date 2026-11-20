@@ -73,7 +73,8 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
       syncAll();
     });
     const lookDesc = kit.el('p', 'ui-small', pages.gfx);
-    const shadowRow = switchRow(kit, pages.gfx, 'ui.set.shadows', () => shadowsOn(ctx), (v) => setShadows(ctx, v));
+    // The switch is the `shadows` setting, shown on only while the renderer really allows the shadow map.
+    const shadowRow = switchRow(kit, pages.gfx, 'ui.set.shadows', () => S().shadows !== false && shadowsOn(ctx), (v) => setShadows(ctx, v));
     const shadowNote = kit.el('p', 'ui-small', pages.gfx, 'ui.set.shadowsNote');
     syncs.push(() => {
       const ql = S().quality;
@@ -616,8 +617,8 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
   });
 }
 
-/** Storage key of the player's shadow choice (a session option of the renderer, kept per device). */
-const SHADOW_KEY = 'kethra.ui.shadows';
+/** The old per-device key of the shadow choice (before it became the `shadows` setting); migrated once on boot. */
+const OLD_SHADOW_KEY = 'kethra.ui.shadows';
 
 /** @param {any} ctx @returns {boolean} the renderer can draw a shadow map on this tier */
 function shadowsPossible(ctx) {
@@ -636,27 +637,45 @@ function shadowsOn(ctx) {
   }
 }
 
-/** Allow or forbid the shadow map and remember the choice on this device. @param {any} ctx @param {boolean} on */
+/** @param {any} ctx @returns {boolean} the ?shadows URL flag fixes the shadow map (tests, the device report) */
+function shadowsForced(ctx) {
+  const raw = ctx.flags && ctx.flags.raw;
+  return !!raw && (raw.shadows === '0' || raw.shadows === '1');
+}
+
+/** Allow or forbid the shadow map and keep the choice in the `shadows` setting. @param {any} ctx @param {boolean} on */
 export function setShadows(ctx, on) {
   const r = ctx.render;
   if (r && typeof r.setShadows === 'function') r.setShadows(!!on);
-  try {
-    ctx.dom.safeStorage.set(SHADOW_KEY, on ? '1' : '0');
-  } catch (e) {
-    // storage is optional
-  }
+  if (ctx.save && typeof ctx.save.setSetting === 'function') ctx.save.setSetting('shadows', !!on);
 }
 
-/** Apply a stored shadow choice (boot). @param {any} ctx */
+/**
+ * Boot: move the old per-device key into the `shadows` setting (once: the key is removed), then apply the setting.
+ * Off forbids the shadow map; on leaves the renderer's own choice (the weakest devices never get one) unless the
+ * player turned it on in Settings this session. The ?shadows URL flag wins over both.
+ * @param {any} ctx
+ */
 export function applyStoredShadows(ctx) {
+  const st = ctx.dom && ctx.dom.safeStorage;
   let v = null;
   try {
-    v = ctx.dom.safeStorage.get(SHADOW_KEY);
+    v = st ? st.get(OLD_SHADOW_KEY) : null;
   } catch (e) {
     v = null;
   }
+  if (v !== null && v !== undefined) {
+    if ((v === '0' || v === '1') && ctx.save && typeof ctx.save.setSetting === 'function') ctx.save.setSetting('shadows', v === '1');
+    try {
+      st.remove(OLD_SHADOW_KEY);
+    } catch (e) {
+      // storage is optional
+    }
+  }
   const r = ctx.render;
-  if ((v === '0' || v === '1') && r && typeof r.setShadows === 'function') r.setShadows(v === '1');
+  const s = ctx.save && ctx.save.settings;
+  if (shadowsForced(ctx) || !r || typeof r.setShadows !== 'function' || !s) return;
+  if (s.shadows === false) r.setShadows(false);
 }
 
 /**

@@ -144,6 +144,15 @@ test('settings: defaults, persistence, validation, settings:changed', () => {
   assert.equal(again.settings.lang, 'he', 'invalid stored values fall back to defaults');
 });
 
+test('settings: the shadows choice is a boolean setting, on by default', () => {
+  assert.equal(DEFAULT_SETTINGS.shadows, true);
+  const storage = mapStorage();
+  const save = createSave({ store: createStore(), storage });
+  assert.equal(save.setSetting('shadows', 'off'), false, 'type checked');
+  assert.equal(save.setSetting('shadows', false), true);
+  assert.equal(createSave({ store: createStore(), storage }).settings.shadows, false, 'kept across sessions');
+});
+
 test('onBeforeSave and onAfterLoad hooks', () => {
   const store = createStore();
   const save = createSave({ store, storage: mapStorage() });
