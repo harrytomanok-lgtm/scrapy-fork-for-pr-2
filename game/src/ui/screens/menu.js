@@ -95,6 +95,7 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
   // ------------------------------------------------------------------ character
   reg('character', () => {
     const { root, body } = tabbed('character', 'ui.tab.character');
+    root.classList.add('ui-charscr');
     const two = kit.el('div', 'ui-two ui-char', body);
     const hero = kit.el('div', 'ui-hero ui-card', two);
     const sil = kit.el('div', 'ui-hero-sil', hero);
@@ -176,7 +177,61 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       dd('core.term.tp', formatInt(rpg.tp));
       dd('core.term.shells', formatInt(rpg.shells));
     }
-    return { el: root, group: 'pause', onOpen: render, onClose() {}, onLang: render };
+    /**
+     * The hero on show: the game camera frames the hero inside the hero card's window (no second renderer).
+     * Falls back to the silhouette when the camera cannot play a shot.
+     */
+    function frameHero() {
+      const cam = ctx.cam;
+      const p = ctx.player;
+      const r3 = ctx.three && ctx.three.camera;
+      root.classList.remove('ui-live');
+      if (!cam || typeof cam.play !== 'function' || !p || !r3) return;
+      const W = window.innerWidth || 1;
+      const H = window.innerHeight || 1;
+      const b = hero.getBoundingClientRect();
+      if (b.width < 40 || b.height < 60) return;
+      const nx = ((b.left + b.width / 2) / W) * 2 - 1;
+      const ny = -(((b.top + b.height / 2) / H) * 2 - 1);
+      const fov = 38;
+      const t = Math.tan((fov * Math.PI) / 360);
+      // The hero's 2.2 m fill the window's height.
+      const d = Math.min(14, Math.max(2.4, (2.2 * H) / b.height / (2 * t)));
+      const fx = Math.sin(p.yaw);
+      const fz = Math.cos(p.yaw);
+      const hx = p.pos.x;
+      const hy = p.pos.y + 0.95;
+      const hz = p.pos.z;
+      const halfH = d * t;
+      const halfW = halfH * (W / H);
+      // Camera right when looking back at the hero (along -forward) is (fz, 0, -fx).
+      const lx = hx - nx * halfW * fz;
+      const lz = hz + nx * halfW * fx;
+      const ly = hy - ny * halfH;
+      const from = { x: hx + fx * d - fz * 0.35 * d * 0.2, y: hy + 0.25, z: hz + fz * d + fx * 0.35 * d * 0.2 };
+      const to = { x: hx + fx * d, y: hy + 0.2, z: hz + fz * d };
+      try {
+        cam.play('ui_char', [{ seconds: 1.2, from, to, lookAt: { x: lx, y: ly, z: lz }, fov, ease: 'out' },
+          { seconds: 600, from: to, to, lookAt: { x: lx, y: ly, z: lz }, fov }], { skippable: true });
+        root.classList.add('ui-live');
+      } catch (e) {
+        root.classList.remove('ui-live');
+      }
+    }
+    return {
+      el: root,
+      group: 'pause',
+      onOpen() {
+        render();
+        frameHero();
+      },
+      onClose() {
+        const cam = ctx.cam;
+        if (root.classList.contains('ui-live') && cam && cam.busy && typeof cam.skip === 'function') cam.skip();
+        root.classList.remove('ui-live');
+      },
+      onLang: render,
+    };
   });
 
   // ------------------------------------------------------------------ techniques
@@ -190,7 +245,7 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
     });
     branch.bar.classList.add('ui-grow');
     const two = kit.el('div', 'ui-two', body);
-    const list = kit.el('div', 'ui-list', two);
+    const list = kit.el('div', 'ui-list ui-tree', two);
     const col2 = kit.el('div', 'ui-col', two);
     const sheet = kit.el('div', 'ui-sheet ui-card', col2);
     const slots = kit.el('div', 'ui-col', col2);
@@ -209,12 +264,17 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       const rows = rpg.nodes().filter((r) => r.branch === branch.current);
       if (!sel && rows.length) sel = rows[0].id;
       for (const r of rows) {
-        const li = /** @type {HTMLButtonElement} */ (kit.el('button', 'ui-li' + (r.id === sel ? ' ui-sel' : ''), list));
+        const stc = r.state === 'owned' ? 'owned' : r.state === 'available' ? 'avail' : 'locked';
+        const li = /** @type {HTMLButtonElement} */ (kit.el('button', 'ui-li ui-node ui-st-' + stc + (r.id === sel ? ' ui-sel' : ''), list));
         li.type = 'button';
         li.dataset.node = r.id;
         const ring = kit.el('span', 'ui-ringico', li);
         ring.style.setProperty('--rc', r.state === 'owned' ? 'var(--accent)' : r.state === 'available' ? 'var(--paper)' : 'var(--line)');
         ring.appendChild(icon(doc, r.techId ? branch.current : 'charm'));
+        if (stc !== 'avail') {
+          const b = kit.el('b', 'ui-nodebadge', ring);
+          b.appendChild(icon(doc, stc === 'owned' ? 'check' : 'lockd'));
+        }
         const m = kit.el('span', 'ui-li-main', li);
         kit.el('span', 'ui-li-title', m, nodeNameKey(ctx, r));
         const subl = kit.el('span', 'ui-row', m);
@@ -373,9 +433,16 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       dom.clear(cells);
       if (!sel && items.length) sel = items[0].uid;
       let found = false;
+      /** Total stat value of an equipped or carried piece. @param {number} uid */
+      const score = (uid) => {
+        const st = uid ? rpg.itemStats(uid) : null;
+        let t = 0;
+        if (st && st.stats) for (const k of Object.keys(st.stats)) t += st.stats[k] || 0;
+        return t;
+      };
       for (const it of items) {
         const def = ctx.defs.find('item', it.itemId);
-        const c = /** @type {HTMLButtonElement} */ (kit.el('button', 'ui-cell' + (it.uid === sel ? ' ui-sel' : ''), cells));
+        const c = /** @type {HTMLButtonElement} */ (kit.el('button', 'ui-cell' + (def && def.rarity ? ' ui-r-' + def.rarity : '') + (it.uid === sel ? ' ui-sel' : ''), cells));
         c.type = 'button';
         c.dataset.uid = String(it.uid);
         c.dataset.item = it.itemId;
@@ -385,6 +452,18 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
         if (it.equipped) {
           const e = kit.el('span', 'ui-eq', c);
           e.appendChild(icon(doc, 'check', 'ui-ico ui-eq'));
+        } else if (def && def.type === 'gear') {
+          // Better or worse than what that slot holds now (the weaker charm for charms; an empty slot is worse).
+          const slots = def.slot === 'charm' ? ['charm1', 'charm2'] : [def.slot];
+          let other = Infinity;
+          for (const sl of slots) other = Math.min(other, eq[sl] ? score(eq[sl]) : -1);
+          const mine = score(it.uid);
+          if (mine !== other) {
+            const better = mine > other;
+            const a = kit.el('span', 'ui-cmp ' + (better ? 'ui-up' : 'ui-down'), c);
+            a.appendChild(icon(doc, better ? 'up' : 'down'));
+            kit.attr(a, 'aria-label', better ? 'ui.inv.better' : 'ui.inv.worse');
+          }
         }
         if (it.uid === sel) found = true;
         c.addEventListener('click', () => {
@@ -532,10 +611,21 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
       kit.el('div', 'ui-li-title', sheet, 'quest.' + sel + '.title');
       let row = null;
       for (const r of active) if (r.questId === sel) row = r;
+      // The steps so far as a checklist: done steps ticked, the current one highlighted, later ones not revealed.
+      const qdef = ctx.defs.find('quest', sel);
+      const steps = qdef && Array.isArray(qdef.steps) ? qdef.steps : [];
+      const doneQ = !row;
+      const upto = row ? row.stepIndex : steps.length - 1;
+      const check = kit.el('div', 'ui-checklist', sheet);
+      for (let i = 0; i <= upto && i < steps.length; i++) {
+        const cur = !doneQ && i === upto;
+        const key = cur ? row.objectiveKey : 'quest.' + sel + '.' + steps[i].id;
+        if (!ctx.i18n.has(key)) continue;
+        const st = kit.el('div', 'ui-qstep' + (cur ? ' ui-cur' : ' ui-done'), check);
+        st.appendChild(icon(doc, cur ? 'diamond' : 'check'));
+        kit.el('span', '', st, key, cur ? row.objectiveArgs : null);
+      }
       if (row) {
-        const step = kit.el('div', 'ui-qstep', sheet);
-        step.appendChild(icon(doc, 'diamond'));
-        kit.el('span', '', step, row.objectiveKey, row.objectiveArgs);
         const tracked = q.tracked === sel;
         const b = kit.button(sheet, tracked ? 'ui.quest.untrack' : 'ui.quest.track', () => {
           q.track(tracked ? null : sel);
@@ -569,7 +659,9 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
     const icons = kit.el('div', '', inner);
     const arrow = kit.el('div', 'ui-maparrow', inner);
     arrow.appendChild(icon(doc, 'arrow'));
-    const legend = kit.el('div', 'ui-row ui-small', body);
+    const legend = kit.el('div', 'ui-row ui-small ui-legend', body);
+    const count = kit.el('span', 'ui-tag ui-ok', legend);
+    const trackedLine = kit.el('span', 'ui-tag ui-trk', legend);
     for (const [ic, key] of [['ring', 'ui.poi.ringstone'], ['spirit', 'ui.poi.shrine'], ['core', 'ui.poi.siphon'], ['diamond', 'ui.map.quest']]) {
       const t = kit.el('span', 'ui-tag', legend);
       t.appendChild(icon(doc, ic));
@@ -699,7 +791,20 @@ export function registerMenuScreens(ctx, kit, ui, mgr, reg) {
         }
       }
       const ms = ctx.quests ? ctx.quests.markers() : [];
-      for (const m of ms) if (m.kind !== 'giver') place(m.x, m.z, 'diamond', 'ui-q', null, 'quest:' + m.questId);
+      const tr = ctx.quests ? ctx.quests.tracked : null;
+      for (const m of ms) if (m.kind !== 'giver') place(m.x, m.z, 'diamond', 'ui-q' + (m.questId === tr ? ' ui-tracked' : ''), null, 'quest:' + m.questId);
+      // Places found so far, of every Ringstone and Shrine on the island.
+      let found = 0;
+      let all = 0;
+      for (const type of ['ringstone', 'shrine']) {
+        for (const pp of world.pois(type)) {
+          all++;
+          if (disc.indexOf(pp.id) >= 0) found++;
+        }
+      }
+      count.textContent = kit.t('ui.map.found', { n: formatInt(found), all: formatInt(all) });
+      trackedLine.textContent = tr ? kit.t('ui.map.tracking', { title: kit.t('quest.' + tr + '.title') }) : '';
+      trackedLine.hidden = !tr;
       const p = ctx.player;
       if (p) {
         world.toMap(p.pos.x, p.pos.z, uv);

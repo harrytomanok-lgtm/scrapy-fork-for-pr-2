@@ -179,6 +179,7 @@ export const UI_CSS = `
 .ui-banner-sub[hidden]{display:none}
 .ui-banner.ui-on .ui-banner-sub{opacity:1;transform:none;transition-delay:220ms}
 .ui-m-short .ui-banner-main,.ui-m-portrait .ui-banner-main{font-size:var(--fs-title)}
+.ui-m-portrait .ui-banner-main,.ui-m-portrait .ui-banner.ui-k-region .ui-banner-main{font-size:min(var(--fs-title),8vw)}
 .ui-banner.ui-k-level .ui-banner-main{background:linear-gradient(to bottom,#FFF6D8,var(--ui-crit))}
 .ui-banner.ui-k-level .ui-banner-sub{color:var(--ui-crit)}
 .ui-banner.ui-k-quest .ui-banner-main{background:linear-gradient(to bottom,var(--paper),var(--paper-dim))}
@@ -308,6 +309,14 @@ export const UI_CSS = `
   padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
   background:var(--ui-dim);animation:ui-fadein 180ms ease-out;overflow:hidden}
 .ui-scr[hidden]{display:none}
+.ui-scr.ui-closing{animation:ui-fadeout 120ms ease-in forwards;pointer-events:none}
+.ui-scr.ui-closing .ui-panel{animation:ui-outp 120ms ease-in forwards}
+.ui-scr.ui-tabin .ui-panel{animation:ui-slidel 180ms var(--ui-ease)}
+.ui-scr.ui-tabin-r .ui-panel{animation:ui-slider 180ms var(--ui-ease)}
+.ui-scr.ui-tabin,.ui-scr.ui-tabin-r{animation:none}
+.ui-li:active,.ui-cell:active,.ui-slot:active,.ui-chipbtn:active,.ui-tab:active,.ui-langpill button:active{transform:scale(.96)}
+.ui-li,.ui-cell,.ui-slot,.ui-chipbtn,.ui-tab{transition:transform 80ms ease-out,background-color 120ms,box-shadow 120ms}
+.ui-chipbtn[disabled],.ui-li[disabled],.ui-slot[disabled]{opacity:.42;cursor:default;transform:none}
 .ui-scr.ui-menuscr{background:rgba(27,22,38,.88)}
 .ui-scr.ui-solid{background:var(--ink)}
 .ui-scr.ui-clear{background:transparent}
@@ -342,7 +351,8 @@ export const UI_CSS = `
 #app[dir=rtl] .ui-btn{clip-path:${CUT_S_RTL}}
 .ui-btn:hover{background:#FFF8EC}
 .ui-btn.ui-press{animation:ui-press 160ms ease-out}
-.ui-btn[disabled]{opacity:.42;cursor:default}
+.ui-btn:active{transform:scale(.94)}
+.ui-btn[disabled]{opacity:.42;cursor:default;filter:saturate(.3);transform:none}
 .ui-btn.ui-ghostbtn{background:rgba(243,235,221,.08);color:var(--paper);box-shadow:inset 0 0 0 2px rgba(243,235,221,.45)}
 .ui-btn.ui-ghostbtn:hover{background:rgba(243,235,221,.16)}
 .ui-btn.ui-accent{background:var(--accent)}
@@ -371,6 +381,21 @@ export const UI_CSS = `
   font:inherit;cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
 .ui-li.ui-sel{box-shadow:inset 0 0 0 2px var(--accent);background:rgba(127,242,224,.08)}
 .ui-li[disabled]{opacity:.5;cursor:default}
+.ui-tree{gap:10px}
+.ui-node{position:relative;overflow:visible}
+.ui-node::before{content:"";position:absolute;inset-inline-start:31px;inset-block-start:-11px;block-size:11px;inline-size:2px;background:var(--line)}
+.ui-node:first-child::before{display:none}
+.ui-node.ui-st-owned::before{background:var(--accent)}
+.ui-node.ui-st-locked{background:rgba(27,22,38,.35)}
+.ui-node.ui-st-locked .ui-li-title{color:var(--paper-dim)}
+.ui-node.ui-st-locked .ui-ringico{opacity:.6}
+.ui-node.ui-st-avail .ui-ringico{animation:ui-avail 1.8s ease-in-out infinite}
+.ui-nodebadge{position:absolute;inset-block-end:-4px;inset-inline-end:-4px;inline-size:18px;block-size:18px;border-radius:50%;background:var(--ink);
+  display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px var(--rc,var(--line))}
+.ui-nodebadge .ui-ico{inline-size:12px;block-size:12px}
+.ui-st-owned .ui-nodebadge{color:var(--accent)}
+.ui-st-locked .ui-nodebadge{color:var(--paper-dim)}
+.ui-reduced .ui-node.ui-st-avail .ui-ringico{animation:none}
 .ui-li-main{flex:1;min-inline-size:0;display:flex;flex-direction:column;gap:2px}
 .ui-li-title{font-family:var(--font-display);font-size:var(--fs-body);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ui-li-sub{font-size:var(--fs-small);color:var(--paper-dim);line-height:1.3}
@@ -421,9 +446,23 @@ export const UI_CSS = `
   text-shadow:-2px -2px 0 var(--ink),2px -2px 0 var(--ink),-2px 2px 0 var(--ink),2px 2px 0 var(--ink),0 5px 0 var(--ink),0 0 18px rgba(127,242,224,.8),0 0 40px rgba(27,22,38,.9);overflow:hidden}
 .ui-logo-main::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 35%,rgba(255,255,255,.55) 50%,transparent 65%);
   transform:translateX(-120%);animation:ui-sweep 5s ease-in-out 1s infinite;mix-blend-mode:overlay}
+.ui-logo{position:relative;isolation:isolate}
+.ui-logo-main{animation:ui-float 7s ease-in-out infinite}
+.ui-logo-ring{position:absolute;z-index:-1;left:50%;top:50%;inline-size:min(78vw,340px);block-size:min(78vw,340px);margin:calc(min(78vw,340px) / -2) 0 0 calc(min(78vw,340px) / -2);
+  fill:none;stroke-linecap:round;opacity:.9;filter:drop-shadow(0 0 6px rgba(127,242,224,.55))}
+.ui-logo-ring g{transform-origin:100px 100px;animation:ui-spinslow 60s linear infinite}
+.ui-logo-ring .a{stroke:var(--accent);stroke-dasharray:120 14 40 14}
+.ui-logo-ring .b{stroke:var(--paper);opacity:.55;stroke-dasharray:3 7}
+.ui-logo-ring .t{stroke:var(--ui-crit);stroke-width:2.5;opacity:.85}
+.ui-reduced .ui-logo-main,.ui-reduced .ui-logo-ring g{animation:none}
+@media (prefers-reduced-motion:reduce){.ui-logo-main,.ui-logo-ring g{animation:none}}
 .ui-logo-sub{font:400 clamp(16px,3.4vw,24px)/1.2 var(--font-display);color:var(--accent);text-shadow:${OUTLINE},0 2px 0 var(--ink);letter-spacing:.06em}
 .ui-logo-alt{font-size:var(--fs-small);color:var(--paper);text-shadow:${OUTLINE}}
 .ui-menu{display:flex;flex-direction:column;gap:8px;inline-size:min(340px,100%);align-self:center;margin-block-end:2vh}
+.ui-titlerow{justify-content:center;gap:10px}
+.ui-credhead{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.ui-credname{font:400 clamp(34px,9vw,52px)/1 var(--font-display);color:var(--paper);letter-spacing:.04em;text-shadow:0 3px 0 var(--ink),0 0 18px rgba(127,242,224,.5)}
+.ui-legal{margin:0;font:11px/1.45 var(--font-body);color:var(--paper-dim);direction:ltr;text-align:left;unicode-bidi:isolate}
 .ui-langpill{align-self:center;display:flex;gap:0;border-radius:22px;overflow:hidden;box-shadow:0 0 0 2px var(--paper)}
 .ui-langpill button{min-block-size:40px;min-inline-size:56px;border:0;background:var(--panel);color:var(--paper);font:15px/1 var(--font-display);cursor:pointer}
 .ui-langpill button.ui-sel{background:var(--paper);color:var(--ink)}
@@ -446,6 +485,16 @@ export const UI_CSS = `
 .ui-char .ui-main{grid-area:main}
 .ui-eqslots .ui-slot{min-block-size:52px}
 .ui-portrait-only{display:none}
+/* character: the hero, framed by the game camera, shows through the hero card */
+.ui-scr.ui-charscr.ui-live{background:linear-gradient(to bottom,rgba(27,22,38,.55),rgba(27,22,38,.25) 40%,rgba(27,22,38,.55))}
+.ui-charscr.ui-live .ui-pbody{background:transparent;box-shadow:none}
+.ui-charscr.ui-live .ui-pin{background:transparent}
+.ui-charscr.ui-live .ui-pbody > .ui-spread,.ui-charscr.ui-live .ui-main,.ui-charscr.ui-live .ui-der{padding:10px 12px;background:linear-gradient(to bottom,rgba(58,47,79,.96),rgba(36,29,51,.97));
+  box-shadow:inset 0 0 0 1px var(--line)}
+.ui-charscr.ui-live .ui-hero{background:linear-gradient(to top,rgba(27,22,38,.85),transparent 45%);box-shadow:inset 0 0 0 2px rgba(243,235,221,.35);justify-content:flex-end;min-block-size:240px}
+.ui-charscr.ui-live .ui-hero-sil{display:none}
+@media (max-width:560px){.ui-charscr.ui-live .ui-hero{min-block-size:220px;flex-direction:column;align-items:center}}
+@media (max-height:440px){.ui-charscr.ui-live .ui-hero{min-block-size:0;block-size:100%}}
 .ui-statline{display:flex;align-items:center;gap:10px;min-block-size:52px;padding:2px 0;border-block-end:1px solid rgba(74,63,92,.7)}
 .ui-statline > .ui-grow{display:flex;flex-direction:column}
 .ui-stat-name{font-family:var(--font-display);font-size:var(--fs-body)}
@@ -463,6 +512,9 @@ export const UI_CSS = `
   box-shadow:inset 0 0 0 1px var(--line);padding:0;color:var(--paper)}
 .ui-cell.ui-sel{box-shadow:inset 0 0 0 2px var(--accent)}
 .ui-cell .ui-cnt{position:absolute;inset-block-end:2px;inset-inline-end:4px;font:12px/1 var(--font-display)}
+.ui-cmp{position:absolute;inset-block-start:3px;inset-inline-end:3px;inline-size:16px;block-size:16px;border-radius:50%;background:var(--ink);display:flex;align-items:center;justify-content:center}
+.ui-cmp .ui-ico{inline-size:12px;block-size:12px}
+.ui-cell.ui-r-fine,.ui-cell.ui-r-rare{background:radial-gradient(circle at 50% 60%,color-mix(in srgb,var(--rc) 22%,transparent),rgba(27,22,38,.55) 70%)}
 .ui-cell .ui-eq{position:absolute;inset-block-start:3px;inset-inline-start:3px;inline-size:14px;block-size:14px;color:var(--accent)}
 .ui-sheet{display:flex;flex-direction:column;gap:8px}
 .ui-mapwrap{position:relative;inline-size:min(100%,calc(100vh - 150px));aspect-ratio:1;align-self:center;overflow:hidden;
@@ -472,6 +524,10 @@ export const UI_CSS = `
 .ui-mapico{position:absolute;inline-size:18px;block-size:18px;margin:-9px 0 0 -9px;color:var(--ink);display:flex}
 .ui-mapico .ui-ico{inline-size:18px;block-size:18px;stroke-width:2.4}
 .ui-mapico.ui-q{color:#B5651D}
+.ui-mapico.ui-q.ui-tracked{color:var(--danger);filter:drop-shadow(0 0 2px #F3EBDD)}
+.ui-mapico.ui-q.ui-tracked .ui-ico{animation:ui-mapq 1.4s ease-in-out infinite}
+.ui-legend .ui-tag{white-space:normal}
+.ui-trk{color:var(--ui-crit)}
 .ui-mapico.ui-s{color:#6A2FB0}
 .ui-mapico.ui-r{color:#127C70}
 .ui-maplabel{position:absolute;transform:translate(-50%,8px);font:11px/1 var(--font-display);color:var(--ink);white-space:nowrap;text-shadow:0 0 3px #F3EBDD,0 0 3px #F3EBDD}
@@ -480,6 +536,11 @@ export const UI_CSS = `
 .ui-tracks{display:flex;align-items:center;justify-content:center;gap:4px}
 .ui-qstep{display:flex;gap:8px;align-items:flex-start;font-size:var(--fs-small);line-height:1.4}
 .ui-qstep .ui-ico{inline-size:16px;block-size:16px;margin-block-start:2px;color:var(--ui-crit)}
+.ui-checklist{display:flex;flex-direction:column;gap:6px;padding-inline-start:2px}
+.ui-qstep.ui-done{color:var(--paper-dim)}
+.ui-qstep.ui-done span{text-decoration:line-through;text-decoration-color:rgba(217,205,184,.45)}
+.ui-qstep.ui-done .ui-ico{color:var(--ok)}
+.ui-qstep.ui-cur{color:var(--paper);font-size:var(--fs-body)}
 
 /* dialogue */
 .ui-dlg{align-items:flex-end;background:linear-gradient(to bottom,transparent 45%,rgba(27,22,38,.55))}
@@ -526,7 +587,17 @@ export const UI_CSS = `
   .ui-eqslots .ui-slot,.ui-slot{min-block-size:46px;padding:4px 6px}
   .ui-cells{grid-template-columns:repeat(auto-fill,minmax(56px,1fr))}
   .ui-cell{block-size:56px}
-  .ui-statline{min-block-size:46px}
+  /* character: the hero, framed by the game camera, shows through the hero card */
+.ui-scr.ui-charscr.ui-live{background:linear-gradient(to bottom,rgba(27,22,38,.55),rgba(27,22,38,.25) 40%,rgba(27,22,38,.55))}
+.ui-charscr.ui-live .ui-pbody{background:transparent;box-shadow:none}
+.ui-charscr.ui-live .ui-pin{background:transparent}
+.ui-charscr.ui-live .ui-pbody > .ui-spread,.ui-charscr.ui-live .ui-main,.ui-charscr.ui-live .ui-der{padding:10px 12px;background:linear-gradient(to bottom,rgba(58,47,79,.96),rgba(36,29,51,.97));
+  box-shadow:inset 0 0 0 1px var(--line)}
+.ui-charscr.ui-live .ui-hero{background:linear-gradient(to top,rgba(27,22,38,.85),transparent 45%);box-shadow:inset 0 0 0 2px rgba(243,235,221,.35);justify-content:flex-end;min-block-size:240px}
+.ui-charscr.ui-live .ui-hero-sil{display:none}
+@media (max-width:560px){.ui-charscr.ui-live .ui-hero{min-block-size:220px;flex-direction:column;align-items:center}}
+@media (max-height:440px){.ui-charscr.ui-live .ui-hero{min-block-size:0;block-size:100%}}
+.ui-statline{min-block-size:46px}
   .ui-pbody{padding:10px 14px 12px;gap:8px}
   .ui-ribbon{font-size:var(--fs-body);padding-block:3px}
   .ui-big{font-size:var(--fs-title)}
@@ -549,6 +620,10 @@ export const UI_CSS = `
 .ui-title .ui-ghostbtn{background:var(--panel);box-shadow:inset 0 0 0 2px rgba(243,235,221,.55)}
 
 @keyframes ui-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes ui-fadeout{from{opacity:1}to{opacity:0}}
+@keyframes ui-outp{from{opacity:1;transform:none}to{opacity:0;transform:translateY(6px) scale(.98)}}
+@keyframes ui-slidel{from{opacity:.2;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes ui-slider{from{opacity:.2;transform:translateX(-28px)}to{opacity:1;transform:none}}
 @keyframes ui-fadein{from{opacity:0}to{opacity:1}}
 @keyframes ui-press{0%{transform:scale(1)}40%{transform:scale(.94);box-shadow:0 0 0 0 rgba(127,242,224,.8)}100%{transform:scale(1);box-shadow:0 0 0 10px rgba(127,242,224,0)}}
 @keyframes ui-pulse{0%,100%{box-shadow:0 0 0 2px var(--ink),0 0 0 2px rgba(255,181,71,.6)}50%{box-shadow:0 0 0 2px var(--ink),0 0 0 6px rgba(255,181,71,0)}}
@@ -562,6 +637,10 @@ export const UI_CSS = `
 @keyframes ui-heart{0%,100%{transform:none}12%{transform:scale(1.07)}24%{transform:none}36%{transform:scale(1.05)}}
 @keyframes ui-heartv{0%,100%{opacity:.75}15%{opacity:1}30%{opacity:.8}45%{opacity:1}}
 @keyframes ui-surgefull{0%,100%{filter:drop-shadow(0 0 0 rgba(255,212,90,0))}50%{filter:drop-shadow(0 0 7px rgba(255,212,90,.95))}}
+@keyframes ui-avail{0%,100%{box-shadow:0 0 0 2px var(--paper),0 0 0 2px rgba(127,242,224,0)}50%{box-shadow:0 0 0 2px var(--paper),0 0 0 7px rgba(127,242,224,.35)}}
+@keyframes ui-mapq{0%,100%{transform:scale(1)}50%{transform:scale(1.35)}}
+@keyframes ui-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes ui-spinslow{to{transform:rotate(360deg)}}
 @keyframes ui-sheen{to{transform:translateX(110%)}}
 @keyframes ui-pop{0%{transform:scale(1.45)}100%{transform:scale(1)}}
 @keyframes ui-comboin{from{opacity:0;transform:translateX(-14px) scale(.8)}to{opacity:1;transform:none}}
@@ -578,7 +657,8 @@ export const UI_CSS = `
   .ui-combo-n.ui-pop,.ui-combo.ui-in,.ui-combo.ui-rankup .ui-combo-r,.ui-med.ui-burst,.ui-med.ui-burst::after,.ui-banner-main::after{animation:none}
   .ui-fly{transition:opacity 300ms}
 }
-.ui-reduced .ui-panel,.ui-reduced .ui-pill,.ui-reduced .ui-prompt{animation:ui-fadein 180ms ease-out}
+.ui-reduced .ui-panel,.ui-reduced .ui-pill,.ui-reduced .ui-prompt,.ui-reduced .ui-scr.ui-tabin .ui-panel,.ui-reduced .ui-scr.ui-tabin-r .ui-panel{animation:ui-fadein 180ms ease-out}
+.ui-reduced .ui-scr.ui-closing .ui-panel{animation:none}
 .ui-reduced .ui-logo-main::after,.ui-reduced .ui-dlgmore{animation:none}
 .ui-reduced .ui-toast{transform:none}
 .ui-reduced .ui-banner,.ui-reduced .ui-banner.ui-on,.ui-reduced .ui-callout,.ui-reduced .ui-callout.ui-on,.ui-reduced .ui-combo.ui-out{transform:none}

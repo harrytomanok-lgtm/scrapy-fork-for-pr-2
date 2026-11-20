@@ -13,7 +13,7 @@ import { createManager } from './manager.js';
 import { createHud } from './hud.js';
 import { registerBootScreens } from './screens/boot.js';
 import { registerMenuScreens } from './screens/menu.js';
-import { registerOtherScreens } from './screens/other.js';
+import { registerOtherScreens, applyStoredShadows } from './screens/other.js';
 import { createPerfLog } from './logic/perfLog.js';
 
 const OWNER = 'ui';
@@ -295,6 +295,8 @@ export function createUi(ctx) {
     const s = ctx.save && ctx.save.settings;
     if (s && s.reducedMotion) dom.root.classList.add('ui-reduced');
     if (s && s.photosensitive) dom.root.classList.add('ui-photo');
+    // The renderer exists once the game has booted; the stored shadow choice applies then.
+    ctx.onBoot(() => applyStoredShadows(ctx));
     syncGlyphs();
   } };
 }

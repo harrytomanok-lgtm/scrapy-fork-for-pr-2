@@ -152,11 +152,23 @@ export function createManager(ctx, kit) {
     }
   }
 
-  /** @param {string} id */
-  function hide(id) {
+  const animate = !(ctx.flags && ctx.flags.test);
+  /**
+   * Hide a screen; `fade` plays the 120 ms exit (ART_UX 7.1) before the element is hidden, unless it reopens first.
+   * @param {string} id @param {boolean} [fade]
+   */
+  function hide(id, fade) {
     const s = screens.get(id);
     if (!s) return;
-    s.el.hidden = true;
+    s.el.classList.remove('ui-tabin', 'ui-tabin-r');
+    if (fade && animate && typeof setTimeout === 'function') {
+      const el = s.el;
+      el.classList.add('ui-closing');
+      setTimeout(() => {
+        el.classList.remove('ui-closing');
+        if (stack.indexOf(id) < 0) el.hidden = true;
+      }, 120);
+    } else s.el.hidden = true;
     try {
       s.onClose();
     } catch (err) {
@@ -190,6 +202,7 @@ export function createManager(ctx, kit) {
       stack.push(id);
       syncLayer();
       openedAt.set(id, frameNo);
+      s.el.classList.remove('ui-closing');
       s.el.hidden = false;
       layer.appendChild(s.el);
       if (first) {
@@ -214,7 +227,7 @@ export function createManager(ctx, kit) {
       const wasTop = i === stack.length - 1;
       stack.splice(i, 1);
       syncLayer();
-      hide(cid);
+      hide(cid, true);
       if (focused && screens.get(cid) && screens.get(cid).el.contains(focused)) setFocus(null);
       if (stack.length === 0) {
         ctx.time.resume('menu');
@@ -254,6 +267,14 @@ export function createManager(ctx, kit) {
       setFocus(null);
       emit(cur, false);
       mgr.open(id, params);
+      // Tabs slide in from the side of the tab that was picked.
+      const a = PAUSE_TABS.indexOf(cur);
+      const b = PAUSE_TABS.indexOf(id);
+      const s2 = screens.get(id);
+      if (s2 && a >= 0 && b >= 0 && animate) {
+        const fwd = (b > a) !== (ctx.i18n.dir === 'rtl');
+        s2.el.classList.add(fwd ? 'ui-tabin' : 'ui-tabin-r');
+      }
     },
 
     top() {
