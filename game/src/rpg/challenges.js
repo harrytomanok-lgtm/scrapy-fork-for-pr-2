@@ -38,7 +38,7 @@ export function recordMedal(ctx, key, seconds, medal, rewards) {
 
 /**
  * Register the challenge scripts on the quests service.
- * @param {any} ctx @param {{ travel:(id:string)=>boolean, raceStart:(id:string)=>boolean }} host
+ * @param {any} ctx @param {{ travel:(id:string)=>boolean, raceStart:(id:string)=>boolean, busyReason?:()=>string|null }} host
  */
 export function registerChallenges(ctx, host) {
   const Q = ctx.quests;
@@ -46,6 +46,12 @@ export function registerChallenges(ctx, host) {
   const rematch = { bossId: '', first: false };
   /** The activity that another one cancels when it starts (a rematch). */
   const active = { cancel: /** @type {null|(() => void)} */ (null) };
+  /** A choice refused now (a race, a boss, a fight): says why in a toast. @param {any} c @returns {boolean} */
+  const refused = (c) => {
+    const why = host.busyReason ? host.busyReason() : null;
+    if (why) c.bus.emit('ui:toast', { key: why, args: null, kind: 'warn' });
+    return !!why;
+  };
   const cancelActive = () => {
     const f = active.cancel;
     active.cancel = null;
@@ -60,10 +66,7 @@ export function registerChallenges(ctx, host) {
       const bd = c.defs.find('boss', bossId);
       const p = pl(c);
       if (!bd || !p || !c.ai) return api.done();
-      if (c.ai.boss) {
-        c.bus.emit('ui:toast', { key: 'rpg.toast.busyBoss', args: null, kind: 'warn' });
-        return api.done();
-      }
+      if (refused(c)) return api.done();
       if (c.store.state.world.bosses.indexOf(bossId) < 0) return api.done();
       cancelActive();
       const level = Math.min(REMATCH.levelCap, Math.max(bd.level, c.rpg.level) + REMATCH.levelAbove);
@@ -146,9 +149,12 @@ export function registerChallenges(ctx, host) {
         const course = c.defs.find('course', tr.course);
         const p = pl(c);
         // The race starts first: when it is refused (a race already on) the player stays where they are.
-        if (course && p && c.ai && c.ai.boss) c.bus.emit('ui:toast', { key: 'rpg.toast.busyBoss', args: null, kind: 'warn' });
-        else if (course && p && !host.raceStart(tr.course)) c.bus.emit('ui:toast', { key: 'rpg.toast.busyRace', args: null, kind: 'warn' });
-        else if (course && p) {
+        if (!course || !p || refused(c)) {
+          api.done();
+          return;
+        }
+        if (!host.raceStart(tr.course)) c.bus.emit('ui:toast', { key: 'rpg.toast.busyRace', args: null, kind: 'warn' });
+        else {
           const g0 = course.gates[0];
           const y = c.world.heightAt(course.start.x, course.start.z) + 30;
           c.move.teleport(p, course.start.x, y, course.start.z, Math.atan2(g0.x - course.start.x, g0.z - course.start.z));
@@ -161,7 +167,7 @@ export function registerChallenges(ctx, host) {
     }
     Q.registerScript(trialId, (c, api) => {
       const p = pl(c);
-      if (!p || !c.ai) return api.done();
+      if (!p || !c.ai || refused(c)) return api.done();
       cancelActive();
       const at = tr.at;
       c.move.teleport(p, at.x, c.world.heightAt(at.x, at.z), at.z + 12, Math.PI);

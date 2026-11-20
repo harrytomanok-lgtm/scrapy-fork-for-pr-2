@@ -149,6 +149,17 @@ export function createActivities(ctx, host) {
   }
 
   /**
+   * Why the player cannot leave for another activity now (travel, a rematch, a trial): an i18n toast key, or null.
+   * @returns {string|null}
+   */
+  function busyReason() {
+    if (race.active) return 'rpg.toast.busyRace';
+    if (ctx.ai && ctx.ai.boss) return 'rpg.toast.busyBoss';
+    if (ctx.combat && ctx.combat.inCombat) return 'rpg.toast.busyFight';
+    return null;
+  }
+
+  /**
    * Travel to an attuned Ringstone (the Ringstone menu, and the map screen through ctx.quests.travel): not during a
    * boss fight, a race, a fight or a dialogue. The player arrives beside the stone on foot, healed like a touch.
    * @param {string} id ringstone POI id @returns {boolean}
@@ -157,7 +168,11 @@ export function createActivities(ctx, host) {
     const r = byId.get(id);
     const p = ctx.player;
     if (!r || r.kind !== 'ringstone' || W().ringstones.indexOf(id) < 0 || !p || !p.alive) return false;
-    if (race.active || (ctx.ai && ctx.ai.boss) || (ctx.combat && ctx.combat.inCombat)) return false;
+    const why = busyReason();
+    if (why) {
+      ctx.bus.emit('ui:toast', { key: why, args: null, kind: 'warn' });
+      return false;
+    }
     if (ctx.vfx) ctx.vfx.shockwave(p.pos.x, p.pos.y + 1, p.pos.z, { radius: 6, color: PALETTE.structure.ringstone, seconds: 0.4, sphere: true });
     ctx.move.teleport(p, r.x, ground(r.x, r.z), r.z, Math.atan2(RS_DX, RS_DZ));
     ctx.move.setMode(p, 'ground');
@@ -702,6 +717,7 @@ export function createActivities(ctx, host) {
     },
 
     travel,
+    busyReason,
 
     /** @param {any} p pickup:collected */
     pickupCollected(p) {

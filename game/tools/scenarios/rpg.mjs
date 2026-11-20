@@ -619,7 +619,7 @@ export const scenarios = [
           g.damage(boss.id, 0.2);
           g.step(20);
         }
-        g.step(200);
+        g.step(600);
         out.rematch = st.quests.flags['rematch.durn'];
         // The gauntlet trial.
         Q.runActions([{ op: 'script', script: 'trial_gauntlet' }]);
@@ -660,6 +660,12 @@ export const scenarios = [
         const px = g.ctx.player.pos.x;
         Q.runActions([{ op: 'script', script: 'trial_sky' }]);
         out.skyRefused = Math.abs(g.ctx.player.pos.x - px) < 1 && g.events(['ui:toast']).some((e) => e.payload.key === 'rpg.toast.busyRace');
+        // Travel and a rematch refused during the race: each says why.
+        const nRace = () => g.events(['ui:toast']).filter((e) => e.payload.key === 'rpg.toast.busyRace').length;
+        const n0 = nRace();
+        out.travelInRace = Q.travel('ringstone_copperwatch');
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        out.raceToasts = nRace() - n0;
         out.race = g.ctx.quests.objects().length > 0 && g.ctx.player.move.mode;
         return out;
       }, drainSrc.toString());
@@ -694,6 +700,8 @@ export const scenarios = [
       assert.ok(r.trial && r.trial.medals.length >= 1 && r.trial.best > 0, 'the trial records a time and a medal');
       assert.ok(r.noSpawn.rec && r.noSpawn.failed, 'a wave that never spawned fails the trial, no medal');
       assert.ok(r.skyRefused, 'a refused Spire Circuit leaves the player where they are');
+      assert.equal(r.travelInRace, false, 'no travel during a race');
+      assert.equal(r.raceToasts, 2, 'the refused travel and rematch each say why');
       assert.ok(r.canRetry, 'a lost trial offers Retry');
       assert.ok(r.retryFoes >= 1 && r.retryDist < 30, 'Retry puts the player back in the trial (' + r.retryFoes + ' foes, ' + r.retryDist + ' m)');
     },

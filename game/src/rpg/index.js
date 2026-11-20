@@ -36,7 +36,8 @@ export const pkg = {
     const q = createQuests(ctx, { isPlayerSide: r.isPlayerSide });
     ctx.provide('quests', q.quests, 'rpg');
     registerScripts(ctx);
-    r.setTrialRetry(registerChallenges(ctx, { travel: (id) => q.activities.travel(id), raceStart: (id) => q.activities.raceStart(id) }));
+    r.setTrialRetry(registerChallenges(ctx, { travel: (id) => q.activities.travel(id), raceStart: (id) => q.activities.raceStart(id),
+      busyReason: () => q.activities.busyReason() }));
 
     ctx.systems.add(r.tickSystem);
     ctx.systems.add(q.runSystem);
