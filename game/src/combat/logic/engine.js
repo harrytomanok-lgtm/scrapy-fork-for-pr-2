@@ -58,7 +58,7 @@ const THREAT_RANGE = 60;
  */
 const AIM = Object.freeze({
   meleeRange: CB.softLock.meleeRange, oraRange: CB.softLock.oraRange, coneDeg: CB.softLock.coneDeg,
-  closeRange: 6, oraClose: 14, meleeDown: 4, airBand: 10, oraBand: 60, keepRatio: 0.9, relockRange: 40,
+  closeRange: 10, oraClose: 14, meleeDown: 4, airBand: 10, oraBand: 60, keepRatio: 0.9, relockRange: 40,
 });
 
 /** @param {string} s */
