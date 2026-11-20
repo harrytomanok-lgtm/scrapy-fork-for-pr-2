@@ -720,10 +720,22 @@ export const scenarios = [
         st.quests.flags.credits = true;
         st.world.bosses.push('durn');
         const bossOf = () => g.ctx.ents.list('boss').filter((b) => b.alive && b.defId === 'durn');
+        // The kill reward of a boss during a rematch, measured on a synthetic actor:died (the XP the kill grants).
+        const killXp = () => {
+          const p = g.player();
+          const x0 = g.ctx.rpg.level * 1e6 + g.ctx.rpg.xp;
+          const lv0 = g.ctx.rpg.level;
+          let got = 0;
+          const off = g.ctx.bus.on('rpg:xp', (e) => { if (e.source === 'kill') got += e.amount; }, 'scenario');
+          g.ctx.bus.emit('actor:died', { entId: -1, sourceId: p.id, kind: 'boss', defId: 'durn', level: 22, questTag: null, x: p.x, y: p.y, z: p.z });
+          off();
+          return got + 0 * (x0 + lv0);
+        };
         // 1. Rematch, die, Rise, walk back into Sparkstead.
         Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
         g.step(30);
         out.level = (bossOf()[0] || {}).level || 0;
+        out.firstXp = killXp();
         g.kill(g.player().id);
         g.step(100);
         g.ctx.rpg.respawn({ retry: false });
@@ -758,6 +770,11 @@ export const scenarios = [
         out.record = st.quests.flags['rematch.durn'];
         out.paid = st.inv.shells - shells0;
         out.pendingAfterWin = bossOf().length;
+        // 3. A repeat (the record exists): a small share of the XP.
+        g.step(600);
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(30);
+        out.repeatXp = killXp();
         g.god(false);
         return out;
       });
@@ -769,6 +786,7 @@ export const scenarios = [
       assert.ok(r.retried && r.retryLevel === r.level, 'Retry restarts it at the same level');
       assert.ok(r.record && r.record.medals.length >= 1, 'the retried win records its medal');
       assert.ok(r.addLevels.length > 0 && r.addLevels.every((l) => l === r.level), 'the adds come at the rematch level (' + r.addLevels + ')');
+      assert.ok(r.firstXp > 0 && r.repeatXp > 0 && r.repeatXp <= r.firstXp * 0.2, 'a repeat pays a small share of the XP (' + r.repeatXp + ' of ' + r.firstXp + ')');
       const once = { bronze: 300, silver: 600, gold: 1200 };
       const want = r.record.medals.reduce((a, m) => a + once[m], 0);
       assert.ok(r.paid >= want && r.paid < want + 400, 'the medals are paid once (' + r.paid + ' for ' + r.record.medals.join(',') + ')');
