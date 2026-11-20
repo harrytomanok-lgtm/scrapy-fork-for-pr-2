@@ -824,9 +824,9 @@ export function createVegetation(ctx, grid, colliders, seed, clear) {
         lastAlt = alt;
         dirty = false;
         refill(fx, fy, fz, instant);
-      } else if (dt) {
-        grow(dt);
       }
+      // growth runs every frame, also right after a refill (a moving camera can refill on consecutive frames)
+      if (dt) grow(dt);
       const pci = Math.floor((px + WORLD_HALF) / SCATTER_CELL);
       const pcj = Math.floor((pz + WORLD_HALF) / SCATTER_CELL);
       if (pci !== colCi || pcj !== colCj) rebuildColliders(px, pz);

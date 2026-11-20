@@ -351,6 +351,9 @@ export function createProps(ctx) {
   /** @type {any} */
   let glowGeo = null;
   const camPos = new Vector3();
+  let snap = false;
+  let lastSim = 0;
+  let growDt = 0;
   let time = 0;
 
   function sharedPillar() {
@@ -516,6 +519,8 @@ export function createProps(ctx) {
     let glowK = 0;
     let visible = true;
     let near = true;
+    // grow-in when the prop comes into its draw distance (world pass: no popping)
+    let grow = 1;
     let anim = 0; // state transition clock (seconds since the last state change)
     let swing = 0;
     const lightCol = new Color(color);
@@ -566,6 +571,10 @@ export function createProps(ctx) {
       tick(dt) {
         anim += dt;
         cull();
+        if (grow < 1) {
+          grow = Math.min(1, grow + (growDt > 0.1 ? 0.1 : growDt) * 1.8);
+          detail.scale.setScalar(Math.max(0.05, grow * grow * (3 - 2 * grow)));
+        }
         animate(dt);
       },
     };
@@ -668,6 +677,10 @@ export function createProps(ctx) {
       if (n === near) return;
       near = n;
       detail.visible = n;
+      if (n) {
+        grow = snap ? 1 : 0.05;
+        detail.scale.setScalar(grow);
+      }
       glow.visible = visible && n && glowK > 0.01;
     }
 
@@ -771,7 +784,16 @@ export function createProps(ctx) {
     /** @param {number} dt @param {any} cam @param {any} wind */
     frame(dt, cam, wind) {
       time += dt;
-      if (cam) camPos.copy(cam.position);
+      // frames without time (stepped tests, renderNow) take the simulated time, so grow-in still completes
+      const sn = ctx.time ? ctx.time.now : 0;
+      const sd = sn - lastSim;
+      lastSim = sn;
+      growDt = dt > 0 ? dt : sd > 0 && sd < 2 ? sd : 0;
+      if (cam) {
+        // a camera jump (teleport, fast travel, a cut) shows props at full size at once
+        snap = camPos.distanceToSquared(cam.position) > 60 * 60;
+        camPos.copy(cam.position);
+      }
       for (let i = 0; i < live.length; i++) live[i].tick(dt);
     },
     /** Build the shared geometries before render.compile. */

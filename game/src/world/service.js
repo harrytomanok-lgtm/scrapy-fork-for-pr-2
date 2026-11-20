@@ -546,6 +546,7 @@ export function createWorld(ctx) {
 
   // ------------------------------------------------------------- region tracking and streaming
   let lastRegion = /** @type {string|null} */ (null);
+  let lastSim = 0;
   const regionPayload = { regionId: '', prevRegionId: /** @type {string|null} */ (null), first: false };
 
   const streamSystem = {
@@ -576,7 +577,12 @@ export function createWorld(ctx) {
       terrain.update(focusX, focusY, focusZ);
       water.follow(focusX, focusZ);
       const p = c.player;
-      veg.update(focusX, focusY, focusZ, p && p.alive ? p.pos.x : focusX, p && p.alive ? p.pos.z : focusZ, false, dt);
+      // growth clock: real frame time, or the simulated time when frames carry none (stepped tests, renderNow)
+      const simNow = c.time ? c.time.now : 0;
+      const sd = simNow - lastSim;
+      lastSim = simNow;
+      const gdt = dt > 0 ? dt : sd > 0 && sd < 2 ? sd : 0;
+      veg.update(focusX, focusY, focusZ, p && p.alive ? p.pos.x : focusX, p && p.alive ? p.pos.z : focusZ, false, gdt);
       if (p && p.alive) tufts.update(p.pos.x, p.pos.y, p.pos.z, focusY, false);
       pulseT += dt > 0 ? dt : 0;
       structs.update(pulseT);
