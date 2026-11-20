@@ -561,6 +561,8 @@ export function createSettlements(ctx) {
       const a = (i / REQUIRED_SPOTS.length) * Math.PI * 2 + 0.5;
       spots.push({ id: sid, dx: Math.sin(a) * 9, dz: Math.cos(a) * 9, yaw: a + Math.PI });
     }
+    // where people stand (NPCs, shops, quest givers, the Ringstone): no cover between the camera and the hero
+    for (const p of spots) keep(lm.x + p.dx, lm.z + p.dz, 8, false);
     infos[id] = {
       id, x: lm.x, z: lm.z, radius,
       spots: spots.map((p) => ({ id: p.id, x: lm.x + p.dx, y: w.heightAt(lm.x + p.dx, lm.z + p.dz), z: lm.z + p.dz, yaw: p.yaw })),

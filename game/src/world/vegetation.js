@@ -28,6 +28,10 @@ const MAX_RADIUS = 960;
 const MAX_PROP_COLLIDERS = 3000;
 /** Trees whose trunk is closer to the camera than this many metres (times the instance scale) are hidden. */
 const TREE_NEAR_HIDE = 4.2;
+/** Ground cover within this many metres (times its scale) of the camera, horizontally, is not drawn: nothing fills
+ * the screen or stands between the camera and the hero. Small rocks the same within 1.8 m x scale. */
+const COVER_NEAR_HIDE = 3.5;
+const ROCK_NEAR_HIDE = 1.8;
 /** Seconds an instance takes to grow in. */
 const GROW_S = 0.7;
 const GROW_MAX = 4096;
@@ -106,6 +110,31 @@ function blob(B, cx, cy, cz, rx, ry, rz, col, colTop) {
     const q = ring[(i + 1) % 4];
     B.tri(p, top, q, col, colTop, col);
     B.tri(p, q, bot, col, col, col);
+  }
+}
+
+/**
+ * A rounded faceted clump: a pentagonal belly at cy, a smaller rotated upper ring, a top point and a flat-ish dark
+ * underside. r horizontal radius, h half height. 20 triangles.
+ */
+function ball(B, cx, cy, cz, r, h, cBot, cMid, cTop, rot) {
+  const N = 5;
+  const mid = [];
+  const up = [];
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + rot;
+    const b = a + Math.PI / N;
+    mid.push([cx + Math.cos(a) * r, cy, cz + Math.sin(a) * r]);
+    up.push([cx + Math.cos(b) * r * 0.7, cy + h * 0.65, cz + Math.sin(b) * r * 0.7]);
+  }
+  const top = [cx, cy + h, cz];
+  const bot = [cx, cy - h * 0.75, cz];
+  for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    B.tri(mid[i], up[i], mid[j], cMid, cTop, cMid);
+    B.tri(up[i], up[j], mid[j], cTop, cTop, cMid);
+    B.tri(up[i], top, up[j], cTop, cTop, cTop);
+    B.tri(mid[i], mid[j], bot, cMid, cMid, cBot);
   }
 }
 
@@ -308,9 +337,10 @@ function buildGeometries() {
   // 13 bush: three leafy blobs (tinted per instance with the region foliage)
   {
     const B = builder();
-    blob(B, 0, 0.55, 0, 1.0, 0.65, 0.95, grey(0.74), grey(1.08));
-    blob(B, 0.6, 0.45, 0.35, 0.7, 0.5, 0.65, grey(0.8), grey(1.12));
-    blob(B, -0.55, 0.42, -0.3, 0.65, 0.48, 0.7, grey(0.78), grey(1.1));
+    // a cluster of three small rounded clumps (0.75 m tall at scale 1), dark underneath, light on top
+    ball(B, 0, 0.42, 0, 0.48, 0.36, grey(0.5), grey(0.82), grey(1.1), 0);
+    ball(B, 0.45, 0.3, 0.28, 0.36, 0.28, grey(0.52), grey(0.86), grey(1.14), 0.5);
+    ball(B, -0.4, 0.28, -0.22, 0.34, 0.26, grey(0.5), grey(0.84), grey(1.12), 1.1);
     out.push(B.geometry());
   }
   // 14 flower patch: seven small blooms on stems (tinted per instance; double-sided)
@@ -527,7 +557,7 @@ export function createVegetation(ctx, grid, colliders, seed, clear) {
     // a tree the camera is inside (crown at eye height, trunk a few metres away) is not drawn: no screen-filling
     // canopy; ground cover shrinks toward its root right under the lens instead
     const u = m.material.uniforms.uNearHide;
-    if (u) u.value = cls === 0 ? TREE_NEAR_HIDE : cls === 2 ? -2.5 : 0;
+    if (u) u.value = cls === 0 ? TREE_NEAR_HIDE : cls === 2 ? COVER_NEAR_HIDE : ROCK_NEAR_HIDE;
     ctx.render.layers.props.add(m);
     meshes.push(m);
   }

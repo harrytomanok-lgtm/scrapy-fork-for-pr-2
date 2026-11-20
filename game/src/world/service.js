@@ -278,7 +278,7 @@ export function createWorld(ctx) {
         poiAll.push(p);
         poiByType[p.type].push(p);
         // keep the points of interest clear of trees and rocks (camps get room for their tents and fights)
-        const pr = p.type === 'camp' ? 22 : p.type === 'shrine' ? 8 : p.type === 'race' ? 14 : p.type === 'siphon' ? 18 : 5;
+        const pr = p.type === 'camp' ? 22 : p.type === 'shrine' || p.type === 'ringstone' ? 9 : p.type === 'race' ? 14 : p.type === 'siphon' ? 18 : 6;
         if (p.type !== 'crownChest') addClear(clearSet, p.x, p.z, pr);
       }
       if (veg) {
