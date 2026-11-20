@@ -61,6 +61,7 @@ export const pkg = {
     bus.on('camp:cleared', q.activities.campCleared);
     bus.on('rpg:item', q.on.poll);
     bus.on('rpg:levelUp', q.on.poll);
+    bus.on('pickup:collected', q.activities.pickupCollected);
 
     if (ctx.debug && ctx.debug.register) {
       ctx.debug.register('rpgTalk', (npcId) => ctx.quests.talkTo(npcId));

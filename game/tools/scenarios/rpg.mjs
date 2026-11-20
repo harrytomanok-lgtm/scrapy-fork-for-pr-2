@@ -497,6 +497,64 @@ export const scenarios = [
     },
   },
   {
+    // Ora shards: a fixed set per region, collected by flying through them (the pickup system), a counter for the
+    // map, a light column on the nearest, TP at five, and the region's viewpoint revealing its places.
+    name: 'rpg-shards',
+    width: 412, height: 915,
+    query: 'res=1&quality=low',
+    async run({ game, assert, shot }) {
+      const a = await game((g) => {
+        const Q = g.ctx.quests;
+        g.god(true);
+        const s0 = Q.shards();
+        const meadows = s0.list.filter((s) => s.regionId === 'meadows');
+        const view = meadows.find((s) => s.view);
+        const sky = meadows.find((s) => s.kind === 'sky');
+        // Approach the sky shard in flight from 120 m and look at its light column.
+        g.teleport(sky.x - 120, sky.z, { alt: sky.y - g.heightAt(sky.x - 120, sky.z), fly: true, yaw: Math.PI / 2 });
+        g.step(25);
+        return { total: s0.total, regions: s0.regions.map((r) => r.id + ':' + r.total), kinds: [...new Set(s0.list.map((s) => s.kind))], view, sky, tp0: g.state().player.tp };
+      });
+      await game((g) => g.ctx.cam.setOrbit(Math.PI / 2, 0.1));
+      await game((g) => g.step(4));
+      await shot('rpg-shards-01-beacon');
+      const b = await game((g, a) => {
+        const Q = g.ctx.quests;
+        const pickups = g.ctx.ents.list('pickup').filter((e) => e.alive && e.data && String(e.data.itemId).startsWith('shard_')).length;
+        // Fly past 10 m from it: the flight magnet takes it.
+        g.teleport(a.sky.x - 8, a.sky.z + 6, { alt: a.sky.y - g.heightAt(a.sky.x - 8, a.sky.z + 6), fly: true, yaw: Math.PI / 2 });
+        for (let i = 0; i < 12 && Q.shards().found === 0; i++) g.step(5);
+        const afterPass = Q.shards().found;
+        // The viewpoint: the region's highest peak.
+        const disc0 = g.state().world.discovered.length;
+        g.teleport(a.view.x, a.view.z, { alt: 2, fly: true });
+        g.step(40);
+        const st = Q.shards();
+        return { pickups, afterPass, found: st.found, revealed: st.regions.find((r) => r.id === 'meadows').revealed, disc: g.state().world.discovered.length - disc0 };
+      }, a);
+      // Five shards: +1 TP.
+      const c = await game((g) => {
+        const Q = g.ctx.quests;
+        for (const s of Q.shards().list.filter((x) => !x.found).slice(0, 3)) {
+          g.teleport(s.x, s.z, { alt: s.y - g.heightAt(s.x, s.z), fly: true });
+          g.step(30);
+        }
+        const banner = g.events(['ui:banner']).some((e) => e.payload.key === 'rpg.banner.shardsTp');
+        return { found: Q.shards().found, tp: g.state().player.tp, saved: (g.state().quests.flags['ora.shards'] || []).length, banner };
+      });
+      console.log('    ' + JSON.stringify({ a: { total: a.total, regions: a.regions, kinds: a.kinds }, b, c }));
+      assert.ok(a.total >= 40, 'about eight shards in each of six regions (' + a.total + ')');
+      assert.deepEqual(a.kinds.sort(), ['islet', 'peak', 'roof', 'sky'].filter((k) => a.kinds.includes(k)).sort());
+      assert.ok(a.kinds.includes('peak') && a.kinds.includes('sky') && a.kinds.includes('roof'), 'peaks, open air and roofs');
+      assert.ok(b.pickups >= 1, 'the nearby shard stands as a pickup');
+      assert.equal(b.afterPass, 1, 'flying past collects it');
+      assert.ok(b.revealed && b.disc > 3, 'the viewpoint reveals the region (' + b.disc + ' places)');
+      assert.equal(c.found, 5);
+      assert.equal(c.saved, 5, 'the count is kept in the journey');
+      assert.ok(c.banner && c.tp > a.tp0, 'five shards: +1 TP (with the level-ups of their XP)');
+    },
+  },
+  {
     name: 'rpg-finale',
     width: W, height: H,
     async run({ game, assert, shot }) {

@@ -564,6 +564,10 @@ export function createQuests(ctx, rpgInternals) {
     objects() {
       return activities.objects();
     },
+    /** The Ora-shard counter and markers for the map screen (see activities.shards). */
+    shards() {
+      return activities.shards();
+    },
 
     /** The entity id of a spawned NPC, or 0 (debug, tests, scripts). @param {string} npcId */
     npcEntity(npcId) {

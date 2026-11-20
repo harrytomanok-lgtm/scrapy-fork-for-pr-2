@@ -11,6 +11,7 @@ import * as F from '../core/formulas.js';
 import { TAG } from '../core/ents.js';
 import { PALETTE } from '../core/palette.js';
 import { medalFor, gatePassed, siphonOpen } from './logic/activity.js';
+import { placeShards, shardRewards, SHARD_XP } from './data/shards.js';
 
 /** The Ringstone prop stands ahead of its POI so a journey (or respawn) never starts inside the stone (11). */
 const RS_DX = 4;
@@ -24,6 +25,13 @@ const SIPHON_CYCLE_RANGE = 600;
 /** Beyond this distance from a woken Siphon its guards are sent home (m). */
 const SIPHON_GUARD_LEASH = 400;
 const DISCOVERY_EVERY = 30;
+/** Ora shards: a pickup stands within SHARD_NEAR (m) of the player; the nearest SHARD_BEACONS within SHARD_BEACON_RANGE
+ * also raise a column of light so a flyer sees where to go. Checked every SHARD_EVERY ticks. */
+const SHARD_NEAR = 260;
+const SHARD_FAR = 300;
+const SHARD_BEACONS = 2;
+const SHARD_BEACON_RANGE = 700;
+const SHARD_EVERY = 20;
 /** An unbreakable quest object stands again this long after it is broken (s). */
 const OBJECT_RESPAWN = 1.2;
 
@@ -44,6 +52,19 @@ export function createActivities(ctx, host) {
   let tickN = 0;
   /** Unbreakable quest objects waiting to stand again. */
   let respawns = 0;
+  /** Ora shards: the placed set, their pickup entities and light columns by shard id. */
+  /** @type {Array<{ id:string, x:number, y:number, z:number, regionId:string, kind:string, view:boolean }>} */
+  let shards = [];
+  /** @type {Map<string, number>} */
+  const shardEnts = new Map();
+  /** @type {Map<string, any>} */
+  const shardBeacons = new Map();
+  /** @type {any[]} */
+  let shardReward = [];
+  const nearScratch = [];
+  /** The light columns lit now (shard ids) and the ones wanted this check. */
+  const beaconIds = [null, null];
+  const want = [null, null];
 
   const S = () => ctx.store.state;
   const W = () => ctx.store.state.world;
@@ -75,6 +96,8 @@ export function createActivities(ctx, host) {
     for (const poi of w.pois('siphon')) buildSiphon(poi);
     for (const poi of w.pois('race')) buildRaceStart(poi);
     for (const l of ctx.defs.all('landmark')) if (l.tag !== 'P1') discover.push({ id: l.id, type: 'landmark', x: l.x, z: l.z });
+    shards = placeShards((x, z) => w.heightAt(x, z), (x, z) => w.regionAt(x, z), ctx.defs.all('region'), ctx.defs.all('landmark'));
+    shardReward = shardRewards(shards.length);
     for (const poi of w.pois()) discover.push({ id: poi.id, type: poi.type, x: poi.x, z: poi.z });
     // Where the journey (re)starts is known already: no XP and no event for it.
     const pl = S().player;
@@ -493,6 +516,135 @@ export function createActivities(ctx, host) {
     }
   }
 
+  // ------------------------------------------------------------------ Ora shards
+
+  /** @returns {string[]} the collected shard ids (a quest flag, so it is saved with the journey) */
+  function shardsGot() {
+    const f = flags();
+    if (!Array.isArray(f['ora.shards'])) f['ora.shards'] = [];
+    return f['ora.shards'];
+  }
+
+  /** Stream shard pickups and light columns around the player. @param {any} p */
+  function stepShards(p) {
+    const got = shardsGot();
+    nearScratch.length = 0;
+    for (let i = 0; i < shards.length; i++) {
+      const s = shards[i];
+      if (got.indexOf(s.id) >= 0) continue;
+      const dx = p.pos.x - s.x;
+      const dz = p.pos.z - s.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      const id = shardEnts.get(s.id);
+      if (!id && d <= SHARD_NEAR) spawnShard(s);
+      else if (id && d > SHARD_FAR) dropShardEnt(s.id);
+      if (d <= SHARD_BEACON_RANGE) nearScratch.push(s, d);
+    }
+    // the nearest few raise a column of light; the others put theirs out
+    for (let k = 0; k < SHARD_BEACONS; k++) {
+      let bi = -1;
+      for (let i = 0; i < nearScratch.length; i += 2) if (nearScratch[i] && (bi < 0 || nearScratch[i + 1] < nearScratch[bi + 1])) bi = i;
+      want[k] = bi < 0 ? null : nearScratch[bi];
+      if (bi >= 0) nearScratch[bi] = null;
+    }
+    for (let k = 0; k < SHARD_BEACONS; k++) {
+      const cur = beaconIds[k];
+      if (cur && cur !== (want[0] && want[0].id) && cur !== (want[1] && want[1].id)) {
+        const h = shardBeacons.get(cur);
+        if (h) h.dispose();
+        shardBeacons.delete(cur);
+        beaconIds[k] = null;
+      }
+    }
+    for (let k = 0; k < SHARD_BEACONS; k++) {
+      const s = want[k];
+      if (!s || shardBeacons.has(s.id)) continue;
+      let slot = beaconIds.indexOf(null);
+      if (slot < 0) slot = k;
+      shardBeacons.set(s.id, prop('lightPillar', s.x, s.y, s.z, { state: 'on', color: PALETTE.ora }));
+      beaconIds[slot] = s.id;
+    }
+  }
+
+  /** @param {string} id */
+  function shardById(id) {
+    for (let i = 0; i < shards.length; i++) if (shards[i].id === id) return shards[i];
+    return null;
+  }
+
+  /** A shard pickup (the rpg pickup system collects it: magnet, sound and glow come with it). @param {any} s */
+  function spawnShard(s) {
+    const e = ctx.ents.create('pickup');
+    if (!e) return;
+    e.team = 0;
+    e.defId = 'ora_shard';
+    e.radius = 0.4;
+    e.height = 0.8;
+    e.pos.set(s.x, s.y, s.z);
+    e.prev.copy(e.pos);
+    e.data = { rpgPickup: true, kind: 'xp', itemId: s.id, amount: SHARD_XP, level: 1, rarity: null, life: 1e9 };
+    shardEnts.set(s.id, e.id);
+    ctx.bus.emit('pickup:spawned', { entId: e.id, kind: 'xp', itemId: s.id, rarity: null });
+  }
+
+  /** @param {string} id */
+  function dropShardEnt(id) {
+    const eid = shardEnts.get(id);
+    shardEnts.delete(id);
+    const e = eid ? ctx.ents.get(eid) : null;
+    if (e && e.alive) ctx.ents.destroy(e.id);
+  }
+
+  /** pickup:collected of a shard: count it, light the threshold rewards, and a viewpoint reveals its region. */
+  function shardCollected(id) {
+    const s = shardById(id);
+    const got = shardsGot();
+    if (!s || got.indexOf(id) >= 0) return;
+    got.push(id);
+    shardEnts.delete(id);
+    const h = shardBeacons.get(id);
+    if (h) h.dispose();
+    shardBeacons.delete(id);
+    const bk = beaconIds.indexOf(id);
+    if (bk >= 0) beaconIds[bk] = null;
+    const n = got.length;
+    if (ctx.vfx) ctx.vfx.shockwave(s.x, s.y, s.z, { radius: 7, color: PALETTE.ora, seconds: 0.5, sphere: true });
+    ctx.bus.emit('ui:toast', { key: 'rpg.toast.shard', args: { n, total: shards.length }, kind: 'good' });
+    for (const r of shardReward) {
+      if (r.at !== n) continue;
+      if (r.kind === 'tp') {
+        ctx.rpg.addTp(r.amount);
+        ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.shardsTp', args: { n } });
+      } else if (r.kind === 'shells') {
+        ctx.rpg.addShells(r.amount, 'shards');
+        ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.shardsShells', args: { n, shells: r.amount } });
+      } else if (r.kind === 'title') {
+        ctx.rpg.addShells(r.amount, 'shards');
+        flags().title = r.title;
+        ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.title', args: { title: ctx.i18n.t('rpg.title.' + r.title) } });
+      }
+    }
+    if (s.view) revealRegion(s.regionId);
+  }
+
+  /** A viewpoint: every point of interest of the region is put on the map (discovered, with its discovery XP). */
+  function revealRegion(regionId) {
+    const f = flags();
+    if (f['revealed.' + regionId]) return;
+    f['revealed.' + regionId] = true;
+    const w = W();
+    let xp = 0;
+    let n = 0;
+    for (const d of discover) {
+      if (w.discovered.indexOf(d.id) >= 0 || !ctx.world || ctx.world.regionAt(d.x, d.z) !== regionId) continue;
+      w.discovered.push(d.id);
+      xp += d.type === 'landmark' ? BALANCE.xp.discovery.landmark : BALANCE.xp.discovery.poi;
+      n++;
+    }
+    if (xp > 0) ctx.rpg.grantXp(xp, 'discovery');
+    ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.viewpoint', args: { region: ctx.i18n.t('region.' + regionId + '.name'), n } });
+  }
+
   // ------------------------------------------------------------------ public
 
   const api = {
@@ -506,6 +658,11 @@ export function createActivities(ctx, host) {
       respawns = 0;
       byId.clear();
       discover.length = 0;
+      for (const id of Array.from(shardEnts.keys())) dropShardEnt(id);
+      for (const h of shardBeacons.values()) if (h) h.dispose();
+      shardBeacons.clear();
+      beaconIds[0] = null;
+      beaconIds[1] = null;
     },
 
     /** @param {any} c @param {number} dt @param {any} p */
@@ -515,6 +672,31 @@ export function createActivities(ctx, host) {
       if (race.active) stepRace(dt, p);
       if (respawns > 0) stepRespawns(dt);
       if (tickN % DISCOVERY_EVERY === 0) stepDiscovery(p);
+      if (tickN % SHARD_EVERY === 0 && shards.length) stepShards(p);
+    },
+
+    /** @param {any} p pickup:collected */
+    pickupCollected(p) {
+      if (p && typeof p.itemId === 'string' && p.itemId.indexOf('shard_') === 0) shardCollected(p.itemId);
+    },
+
+    /**
+     * The Ora-shard counter for the map screen: found and total, per region (with its viewpoint state), and the
+     * title earned. `list` gives each shard's position and state for markers (found ones, and the viewpoints).
+     */
+    shards() {
+      const got = shardsGot();
+      const regions = [];
+      for (const s of shards) {
+        let r = null;
+        for (const x of regions) if (x.id === s.regionId) r = x;
+        if (!r) regions.push((r = { id: s.regionId, found: 0, total: 0, revealed: !!flags()['revealed.' + s.regionId] }));
+        r.total++;
+        if (got.indexOf(s.id) >= 0) r.found++;
+      }
+      return { found: got.length, total: shards.length, regions, title: flags().title || null,
+        list: shards.map((s) => ({ id: s.id, x: s.x, y: s.y, z: s.z, regionId: s.regionId, kind: s.kind, view: s.view, found: got.indexOf(s.id) >= 0 })),
+        next: shardReward.find((r) => r.at > got.length) || null };
     },
 
     /** player:died: a running race ends (the player wakes at a Ringstone; the start post is free again). */

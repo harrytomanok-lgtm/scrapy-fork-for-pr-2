@@ -15,6 +15,13 @@ import { gearPool, rollLoot } from './logic/loot.js';
 const PICKUP_LIFE = 120;
 const PICKUP_SPEED = 16;
 const COLLECT_RADIUS = 1.4;
+/**
+ * Flying pickups up: in flight the magnet reaches further and pulls faster than the flight speed, and the pickup is
+ * taken within a wider radius, so a pass at speed collects what it brushes (Ora shards in the air, drops in a fight).
+ */
+const FLY_MAGNET = 14;
+const FLY_PICKUP_SPEED = 70;
+const FLY_COLLECT_RADIUS = 3.5;
 
 /**
  * @param {any} ctx
@@ -662,6 +669,10 @@ export function createRpg(ctx) {
         }
       }
       const list = c.ents.list('pickup');
+      const flying = !!(e && e.move && e.move.mode === 'fly');
+      const magnet = flying ? FLY_MAGNET : BALANCE.pickups.magnetRadius;
+      const reach = flying ? FLY_COLLECT_RADIUS : COLLECT_RADIUS;
+      const pull = flying ? FLY_PICKUP_SPEED : PICKUP_SPEED;
       for (let i = 0; i < list.length; i++) {
         const k = list[i];
         const d = k.data;
@@ -676,14 +687,14 @@ export function createRpg(ctx) {
         const dy = e.pos.y + 0.8 - k.pos.y;
         const dz = e.pos.z - k.pos.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist <= COLLECT_RADIUS) {
+        if (dist <= reach) {
           if (d.kind === 'shells') rpg.addShells(d.amount, 'pickup');
           else if (d.kind === 'xp') rpg.grantXp(d.amount, 'pickup');
           else if (d.itemId && !rpg.addItem(d.itemId, d.amount, { level: d.level })) continue;
           c.bus.post('pickup:collected', { kind: d.kind, itemId: d.itemId, amount: d.amount });
           c.ents.destroy(k.id);
-        } else if (dist <= BALANCE.pickups.magnetRadius) {
-          const s = Math.min(dist, PICKUP_SPEED * dt) / dist;
+        } else if (dist <= magnet) {
+          const s = Math.min(dist, pull * dt) / dist;
           k.pos.x += dx * s;
           k.pos.y += dy * s;
           k.pos.z += dz * s;
