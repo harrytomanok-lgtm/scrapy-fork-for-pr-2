@@ -326,7 +326,64 @@ function contentScenario(tag, width, height) {
   };
 }
 
+/** Lock framing situations: [name, target distance m, target altitude m, enemy, hero altitude m]. */
+const LOCKS = [['near', 7, 0, 'tusk_boar', 0], ['flyer', 4, 16, 'frost_harrier', 0], ['below', 8, 0, 'tusk_boar', 10]];
+
+/**
+ * Lock framing in three situations (a boar 7 m away, a flyer high above, a boar below the flying hero): the hero
+ * and the target both on screen, inside the safe area of camMath.LOCK_SAFE (checked from their projected boxes).
+ * @param {string} tag @param {number} width @param {number} height
+ */
+function lockScenario(tag, width, height) {
+  return {
+    name: 'screens-lock-' + tag,
+    width,
+    height,
+    query: 'res=1&lang=he',
+    async run({ page, game, assert }) {
+      await game(opening);
+      // Open meadow, away from Sparkstead's houses (the HUD gallery's spot stands against one).
+      await game((g) => {
+        const p = g.player();
+        g.teleport(p.x + 40, p.z + 60, { yaw: Math.PI * 0.8 });
+        g.step(60);
+      });
+      for (const [name, dist, alt, kind, heroAlt] of LOCKS) {
+        const r = await game((g, dist, alt, kind, heroAlt) => {
+          g.killAll();
+          g.lock(0);
+          const p0 = g.player();
+          g.teleport(p0.x, p0.z, { alt: heroAlt, fly: heroAlt > 0, yaw: p0.yaw });
+          g.step(5);
+          const id = g.spawn(kind, { dist, passive: true, alt });
+          g.lock(id);
+          // The rig advances at most 0.5 s per test frame: settle it over a few frames.
+          for (let i = 0; i < 6; i++) {
+            g.step(30);
+            g.render();
+          }
+          const d = g.cmd.ui();
+          return { keep: d.keepOut, mode: g.ctx.cam.mode, W: innerWidth, H: innerHeight };
+        }, dist, alt, kind, heroAlt);
+        assert.equal(r.mode, 'lock', name);
+        const names = r.keep.map((k) => k.name).sort();
+        assert.deepEqual(names, ['hero', 'target'], `${name} ${tag}: hero and target on screen`);
+        for (const k of r.keep) {
+          const cx = k.x + k.w / 2;
+          const cy = k.y + k.h / 2;
+          assert.ok(cx > 0 && cx < r.W && cy > r.H * 0.12 && cy < r.H * 0.92, `${name} ${tag}: ${k.name} centre inside (${Math.round(cx)}, ${Math.round(cy)})`);
+        }
+        await snap(page, `screens-${tag}-lock-${name}`);
+      }
+      const errs = await game((g) => g.errors.filter((e) => e.indexOf('[error]') === 0 || e.indexOf('[fatal]') === 0));
+      assert.equal(errs.length, 0, 'no errors: ' + errs.join(' | '));
+    },
+  };
+}
+
 export const scenarios = [
+  lockScenario('p', 412, 915),
+  lockScenario('l', 915, 412),
   contentScenario('p', 412, 915),
   contentScenario('l', 915, 412),
   hudScenario('p', 412, 915),

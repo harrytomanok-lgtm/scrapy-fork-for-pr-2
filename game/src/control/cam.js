@@ -19,7 +19,7 @@ import { KIND_MASK, TAG } from '../core/ents.js';
 import { clamp, angleDelta, wrapAngle, lerp, smoothstep } from '../core/math.js';
 import {
   CAM, CAM_MODES, spring, noise1, kickEnvelope, frameShift, horizontalFov, lockFraming, easeToward, interpAngle, restPitch,
-  LOCK_BAND, lockPitch, recentreStep,
+  recentreStep, lockRig,
 } from './logic/camMath.js';
 
 const D2R = Math.PI / 180;
@@ -35,6 +35,8 @@ export function createCam(ctx, shared) {
     snap: true, lastReal: -1, aspect: 16 / 9, lastX: 0, lastY: 0, lastZ: 0,
     trauma: 0, kickPeak: 0, kickStart: -10, kickDur: 0.25, kickHold: false,
     dlgSpeaker: 0, dlgListener: 0, lockSide: 1, lockStartT: -10, threatT: 0, prevYaw: 0, prevMode: 'explore',
+    // Lock-on: an extra turn (rad) away from a wall or pillar behind the hero, and the time to the next clear-path check.
+    lockTurn: 0, lockCheckT: 0,
     blendT: 0, blendDur: 0.4, collDist: 5.5,
     // Orbit angles at the start of the last sim step: the rig shows yaw and pitch between these and the current
     // ones with the frame alpha (prevYaw above is the roll-rate state, a different thing).
@@ -57,6 +59,38 @@ export function createCam(ctx, shared) {
   const pY = { x: 0, v: 0 };
   const pZ = { x: 0, v: 0 };
   const lockOut = { yaw: 0, dist: 0, blend: 0 };
+  /** Lock-on rig: the look system's (pitch on the sim clock) and the frame rig's (camera place at render time). */
+  const lockSim = { back: 0, height: 0, lateral: 0, pitch: 0, pitchLo: 0, pitchHi: 0, fit: false };
+  const lockFrm = { back: 0, height: 0, lateral: 0, pitch: 0, pitchLo: 0, pitchHi: 0, fit: false };
+  /** 0 = follow framing, 1 = the lock rig's camera place (springs across the switch). */
+  const sLock = { x: 0, v: 0 };
+  /** Extra lock turns tried, in order, when something solid stands between the hero and the lock camera. */
+  const LOCK_TURNS = [0, 25 * D2R, 45 * D2R, 70 * D2R];
+  /** Seconds between clear-path checks of the lock camera. */
+  const LOCK_CHECK = 0.2;
+
+  /**
+   * True when the lock camera for `side` and `turn` sees the hero over clear ground: the sweep from the hero's body
+   * centre to the rig's place keeps most of its length (a pillar or a wall right behind the hero fails it).
+   * @param {any} c @param {any} hero @param {any} foe @param {number} side @param {number} turn
+   */
+  function lockClear(c, hero, foe, side, turn) {
+    const world = c.world;
+    if (!world || typeof world.sweepSphere !== 'function') return true;
+    lockFraming(hero.pos.x, hero.pos.z, foe.pos.x, foe.pos.z, side, st.aspect < 1, lockOut);
+    const yaw = lockOut.yaw + side * turn;
+    const portrait = st.aspect < 1;
+    lockRig(foe.pos.x - hero.pos.x, foe.pos.y - hero.pos.y, foe.pos.z - hero.pos.z, hero.height > 0 ? hero.height : 1.8,
+      foe.height > 0 ? foe.height : 1.8, yaw, side, portrait ? CAM_MODES.lock.fovP : CAM_MODES.lock.fovL, st.aspect, lockSim);
+    if (!lockSim.fit) return false;
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    const hy = hero.pos.y + (hero.height > 0 ? hero.height : 1.8) * 0.5;
+    const cx = hero.pos.x - fx * lockSim.back - fz * lockSim.lateral;
+    const cy = hero.pos.y + lockSim.height;
+    const cz = hero.pos.z - fz * lockSim.back + fx * lockSim.lateral;
+    return !(world.sweepSphere(hero.pos.x, hy, hero.pos.z, cx, cy, cz, CAM.collideRadius, hit) && hit.hit && hit.t < 0.85);
+  }
   const hit = { hit: false, t: 1, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, kind: null, colliderId: 0, propKey: 0 };
   const rp = new Vector3();
   const lp = new Vector3();
@@ -209,6 +243,8 @@ export function createCam(ctx, shared) {
       if (id === st.lockId) return;
       st.lockId = id;
       st.lockStartT = ctx.time.real;
+      st.lockTurn = 0;
+      st.lockCheckT = 0;
       const p = ctx.ents.get(st.targetId);
       const t = id ? ctx.ents.get(id) : null;
       if (p && t) {
@@ -380,20 +416,38 @@ export function createCam(ctx, shared) {
       const stickActive = mxA + Math.abs(myA) > 0.05;
       if (mode === 'lock') {
         const lockEnt = c.ents.get(st.lockId);
+        // A few times a second: if a wall or pillar blocks the lock camera, turn to the first clear place (the other
+        // side, then wider turns); back to the plain framing once it is clear again.
+        st.lockCheckT -= dt;
+        if (st.lockCheckT <= 0) {
+          st.lockCheckT = LOCK_CHECK;
+          if (!lockClear(c, target, lockEnt, st.lockSide, st.lockTurn)) {
+            let found = false;
+            for (let i = 0; i < LOCK_TURNS.length && !found; i++) {
+              for (let k2 = 0; k2 < 2 && !found; k2++) {
+                const sd = k2 === 0 ? st.lockSide : -st.lockSide;
+                if (lockClear(c, target, lockEnt, sd, LOCK_TURNS[i])) {
+                  st.lockSide = sd;
+                  st.lockTurn = LOCK_TURNS[i];
+                  found = true;
+                }
+              }
+            }
+          } else if (st.lockTurn > 0 && lockClear(c, target, lockEnt, st.lockSide, 0)) st.lockTurn = 0;
+        }
         lockFraming(target.pos.x, target.pos.z, lockEnt.pos.x, lockEnt.pos.z, st.lockSide, st.aspect < 1, lockOut);
         // 250 ms ease on lock and switch; look input can still nudge pitch.
         const k = 1 - Math.exp((-3 / CAM.lockEase) * dt);
-        st.yaw = wrapAngle(st.yaw + angleDelta(st.yaw, lockOut.yaw) * k);
-        if (idle > 0.5) st.pitch += (rest - st.pitch) * (1 - Math.exp(-4 * dt));
-        // Keep the target's body inside the readable band: under the HUD target frame, above the hero and the deck.
-        const ty = lockEnt.pos.y + lockEnt.height * 0.5;
-        const edx = lockEnt.pos.x - st.camX;
-        const edz = lockEnt.pos.z - st.camZ;
-        const elev = Math.atan2(ty - st.camY, Math.sqrt(edx * edx + edz * edz) || 1);
+        st.yaw = wrapAngle(st.yaw + angleDelta(st.yaw, lockOut.yaw + st.lockSide * st.lockTurn) * k);
+        // The lock rig frames both the hero and the target inside the safe area (camMath.lockRig): its pitch when
+        // the look input is idle, and never outside the pitch range that keeps both in.
         const portraitNow = st.aspect < 1;
-        const want = lockPitch(st.pitch, elev, st.vfov * 0.5, portraitNow ? LOCK_BAND.topPortrait : LOCK_BAND.top,
-          portraitNow ? LOCK_BAND.bottomPortrait : LOCK_BAND.bottom);
+        lockRig(lockEnt.pos.x - target.pos.x, lockEnt.pos.y - target.pos.y, lockEnt.pos.z - target.pos.z, target.height > 0 ? target.height : 1.8,
+          lockEnt.height > 0 ? lockEnt.height : 1.8, st.yaw, st.lockSide, portraitNow ? CAM_MODES.lock.fovP : CAM_MODES.lock.fovL, st.aspect, lockSim);
+        if (idle > 0.5) st.pitch += (lockSim.pitch - st.pitch) * (1 - Math.exp(-4 * dt));
+        const want = clamp(st.pitch, lockSim.pitchLo, lockSim.pitchHi);
         st.pitch = clamp(st.pitch + (want - st.pitch) * (1 - Math.exp(-6 * dt)), CAM.pitchMin, CAM.pitchMax);
+
         st.threatT = 0;
       } else if (mode === 'flight' || mode === 'boost') {
         if (idle > 0.4 && vh > 3) {
@@ -522,18 +576,48 @@ export function createCam(ctx, shared) {
         if (st.trauma < floor * rm) st.trauma = floor * rm;
       }
 
-      // Pivot target: the followed body plus the mode's height, look-ahead, or the lock blend.
+      // Orbit direction (the camera looks along it), interpolated between the last two sim steps.
+      if (snap) {
+        st.stepYaw0 = st.yaw;
+        st.stepPitch0 = st.pitch;
+      }
+      const yaw = interpAngle(st.stepYaw0, st.yaw, alpha);
+      const pitch = st.stepPitch0 + (st.pitch - st.stepPitch0) * (alpha < 0 ? 0 : alpha > 1 ? 1 : alpha);
+      const cp = Math.cos(pitch);
+      const sp = Math.sin(pitch);
+      const dirX = Math.sin(yaw) * cp;
+      const dirY = sp;
+      const dirZ = Math.cos(yaw) * cp;
+
+      // Pivot target: the followed body plus the mode's height and look-ahead. Locked on, the lock rig places the
+      // camera so the hero and the target both stay inside the safe area (camMath.lockRig); the pivot is then the
+      // hero's body centre (shifted onto the view's vertical plane), a point the hero's own body keeps clear, so the
+      // spring arm sweeps from it as in every other mode; the distance and the shift along the camera's up axis
+      // reach the rig's place from there.
       let px = p.x;
       let py = p.y + wantHeight;
       let pz = p.z;
+      let lockShift = 0;
       const lockEnt = mode === 'lock' ? c.ents.get(st.lockId) : null;
       if (lockEnt) {
-        lockFraming(p.x, p.z, lockEnt.pos.x, lockEnt.pos.z, st.lockSide, portrait, lockOut);
-        wantDist = lockOut.dist;
-        const b = lockOut.blend;
-        px += (lockEnt.pos.x - p.x) * b;
-        pz += (lockEnt.pos.z - p.z) * b;
-        py += (lockEnt.pos.y + lockEnt.height * 0.5 - (p.y + target.height * 0.5)) * b * 0.5;
+        const fovL = portrait ? CAM_MODES.lock.fovP : CAM_MODES.lock.fovL;
+        lockRig(lockEnt.pos.x - p.x, lockEnt.pos.y - p.y, lockEnt.pos.z - p.z, target.height > 0 ? target.height : 1.8,
+          lockEnt.height > 0 ? lockEnt.height : 1.8, yaw, st.lockSide, fovL, st.aspect, lockFrm);
+        const fx = Math.sin(yaw);
+        const fz = Math.cos(yaw);
+        const camX = p.x - fx * lockFrm.back - fz * lockFrm.lateral;
+        const camY = p.y + lockFrm.height;
+        const camZ = p.z - fz * lockFrm.back + fx * lockFrm.lateral;
+        const hy = p.y + (target.height > 0 ? target.height : 1.8) * 0.5;
+        // Right is (-fz, 0, fx): drop the hero centre's sideways offset from the camera.
+        const rc = (p.x - camX) * -fz + (p.z - camZ) * fx;
+        px = p.x + fz * rc;
+        py = hy;
+        pz = p.z - fx * rc;
+        wantDist = (px - camX) * dirX + (py - camY) * dirY + (pz - camZ) * dirZ;
+        // Up axis (-sp sin yaw, cp, -sp cos yaw).
+        lockShift = (camX - px) * -sp * fx + (camY - py) * cp + (camZ - pz) * -sp * fz;
+        wantFov = fovL;
       }
       const run = target.stats && target.stats.runSpeed > 0 ? target.stats.runSpeed : 7;
       spring(sAhead, mode === 'explore' ? clamp(vh / run, 0, 1) * CAM.lookAhead : 0, 3, dt);
@@ -547,6 +631,7 @@ export function createCam(ctx, shared) {
         sHeight.x = wantHeight; sHeight.v = 0;
         sFov.x = wantFov; sFov.v = 0;
         sFrame.x = portrait ? CAM.framePortrait : CAM.frameLandscape; sFrame.v = 0;
+        sLock.x = lockEnt ? 1 : 0; sLock.v = 0;
         st.collDist = wantDist;
       } else {
         // Boost lags 0.12 s; flight follows a little looser than the ground; vertical is softer to absorb jumps.
@@ -558,6 +643,7 @@ export function createCam(ctx, shared) {
         spring(sDist, wantDist, mode === 'boost' ? 2.5 : 4, dt);
         spring(sFov, wantFov, 5, dt);
         spring(sFrame, portrait ? CAM.framePortrait : CAM.frameLandscape, 6, dt);
+        spring(sLock, lockEnt ? 1 : 0, 8, dt);
       }
       // Never let the pivot fall behind the body by more than a few metres (sonic speeds).
       const lagX = sPx.x - px;
@@ -569,18 +655,6 @@ export function createCam(ctx, shared) {
         sPz.x = pz + (lagZ / lag) * maxLag;
       }
 
-      // Orbit direction (the camera looks along it), interpolated between the last two sim steps.
-      if (snap) {
-        st.stepYaw0 = st.yaw;
-        st.stepPitch0 = st.pitch;
-      }
-      const yaw = interpAngle(st.stepYaw0, st.yaw, alpha);
-      const pitch = st.stepPitch0 + (st.pitch - st.stepPitch0) * (alpha < 0 ? 0 : alpha > 1 ? 1 : alpha);
-      const cp = Math.cos(pitch);
-      const sp = Math.sin(pitch);
-      const dirX = Math.sin(yaw) * cp;
-      const dirY = sp;
-      const dirZ = Math.cos(yaw) * cp;
       // Camera up vector, used for the framing shift.
       const upX = -sp * Math.sin(yaw);
       const upY = cp;
@@ -590,7 +664,8 @@ export function createCam(ctx, shared) {
       const dist = sDist.x * (1 - push);
       // Frame the body (not the pivot, which sits above it): the body's centre lands at the framing height.
       const bodyY = p.y + (target.height > 0 ? target.height : 1.8) * 0.5;
-      const shift = frameShift(sFrame.x, dist, fov) - (sPy.x - bodyY) * cp;
+      // Locked on, the lock rig's shift takes over from the follow framing's (sLock springs across the switch).
+      const shift = (frameShift(sFrame.x, dist, fov) - (sPy.x - bodyY) * cp) * (1 - sLock.x) + lockShift * sLock.x;
       let cx = sPx.x - dirX * dist + upX * shift;
       let cy = sPy.x - dirY * dist + upY * shift;
       let cz = sPz.x - dirZ * dist + upZ * shift;

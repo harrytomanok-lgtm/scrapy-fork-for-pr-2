@@ -180,8 +180,10 @@ export function lockFraming(px, pz, tx, tz, side, portrait, out) {
   const base = CAM_MODES.lock.dist + (portrait ? CAM.portraitPullBack : 0);
   const w = sep <= 4 ? 0 : sep >= 34 ? 1 : (sep - 4) / 30;
   out.dist = base + w * (CAM.lockMaxDist - CAM_MODES.lock.dist);
-  // Turn less when far apart (both already fit), more when close (so the player never hides the target).
-  out.yaw = bearing + side * (14 - 6 * w) * D2R;
+  // Turn less when far apart (both already fit), more when close (so the player never hides the target): up to
+  // 28 degrees at 2 m, 14 at 8 m, 8 at 34 m.
+  const close = sep >= 8 ? 0 : (8 - (sep < 2 ? 2 : sep)) / 6;
+  out.yaw = bearing + side * (14 - 6 * w + 14 * close) * D2R;
   out.blend = sep < 1 ? 0 : Math.min(0.4, 2.5 / sep + 0.15);
   return out;
 }
@@ -232,6 +234,141 @@ export function lockPitch(pitch, elev, half, top, bottom) {
   const lo = elev - Math.atan(top * th);
   const hi = elev - Math.atan(bottom * th);
   return pitch < lo ? lo : pitch > hi ? hi : pitch;
+}
+
+/**
+ * Lock-on safe area in screen units from the centre (v up, u right, -1..1 at the edges): everything of the hero and
+ * the locked target stays inside it. `top` keeps clear of the HUD target frame, `bottom` of the touch deck (portrait:
+ * it fills the lower quarter; landscape: it sits at the sides). `heroV` and `heroU` are where the hero's body centre
+ * goes when nothing forces it elsewhere (portrait: the lower part of the middle third, just over the deck; the hero
+ * on one side and the target toward the other).
+ */
+export const LOCK_SAFE = Object.freeze({
+  portrait: { top: 0.62, bottom: -0.5, side: 0.8, heroV: -0.2, heroU: 0.12 },
+  landscape: { top: 0.62, bottom: -0.8, side: 0.7, heroV: -0.28, heroU: 0.2 },
+});
+
+/** Lock rig search: the nearest back distance (m, before the portrait pull-back), the farthest, the step. */
+const LOCK_B0 = 6;
+const LOCK_BMAX = 60;
+const LOCK_BSTEP = 0.5;
+/** The lowest camera, in metres above the hero's feet. */
+export const LOCK_CMIN = 0.6;
+/** Camera heights tried at each distance, as offsets (m per m of back distance) around the preferred one. */
+const LOCK_C_TRIES = Object.freeze([0, 0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.75, -0.75, 1.0, -1.0]);
+
+/**
+ * Elevation of a point seen from the camera, in the vertical plane of the view (exact for a pinhole camera: the
+ * point's sideways offset does not change its screen height).
+ * @param {number} s forward distance along the view's heading @param {number} dy height above the camera
+ */
+function elev(s, dy) {
+  return Math.atan2(dy, s);
+}
+
+/**
+ * Lock-on rig: where the camera goes so that the hero and the locked target are both inside {@link LOCK_SAFE},
+ * for any separation (2 m to 30 m and more) and height difference (a flyer above, an enemy below a ledge). The view
+ * heading is `yaw` (from {@link lockFraming}); the camera sits `back` metres behind the hero's feet along it,
+ * `height` metres above them and `lateral` metres to the right, and looks down at `pitch`. Pulls back only as far as
+ * needed; `pitchLo`..`pitchHi` is the pitch range that keeps everything inside at that place (look input may nudge
+ * within it). Positions are relative to the hero's feet; heights of the bodies in metres. No allocation.
+ * @param {number} tdx @param {number} tdy @param {number} tdz target feet minus hero feet (m)
+ * @param {number} heroH @param {number} targetH body heights (m) @param {number} yaw view heading (rad)
+ * @param {number} side -1 or 1 (the target's side of the screen) @param {number} vfovDeg @param {number} aspect width / height
+ * @param {{ back:number, height:number, lateral:number, pitch:number, pitchLo:number, pitchHi:number, fit:boolean }} out
+ */
+export function lockRig(tdx, tdy, tdz, heroH, targetH, yaw, side, vfovDeg, aspect, out) {
+  const portrait = aspect < 1;
+  const S = portrait ? LOCK_SAFE.portrait : LOCK_SAFE.landscape;
+  const tv = Math.tan((vfovDeg * D2R) / 2);
+  const th = tv * aspect;
+  const aTop = Math.atan(S.top * tv);
+  const aBot = Math.atan(S.bottom * tv);
+  const fx = Math.sin(yaw);
+  const fz = Math.cos(yaw);
+  // Screen right is (-cos yaw, 0, sin yaw) for a camera looking along (sin yaw, ., cos yaw).
+  const ts = tdx * fx + tdz * fz;
+  const tl = -tdx * fz + tdz * fx;
+  const rest = restPitch('lock', portrait);
+  const hc = heroH * 0.5;
+  const heroU = -side * S.heroU;
+  for (let B = LOCK_B0 + (portrait ? CAM.portraitPullBack : 0); B <= LOCK_BMAX; B += LOCK_BSTEP) {
+    // Preferred camera height: the hero's body centre at heroV with the rest pitch.
+    const eH = rest + Math.atan(S.heroV * tv);
+    const c0 = hc - B * Math.tan(eH);
+    for (let k = 0; k < LOCK_C_TRIES.length; k++) {
+      // Never under the hero's feet (the ground is there): a flyer high above is framed from farther back instead.
+      const C = Math.max(LOCK_CMIN, c0 + LOCK_C_TRIES[k] * B);
+      const st = ts + B;
+      if (st < 0.5) continue;
+      // The pitch range that keeps all four points (feet and head of both) between the bottom and top edges.
+      let lo = -1e9;
+      let hi = 1e9;
+      const e1 = elev(B, -C);
+      const e2 = elev(B, heroH - C);
+      const e3 = elev(st, tdy - C);
+      const e4 = elev(st, tdy + targetH - C);
+      lo = Math.max(lo, e1 - aTop, e2 - aTop, e3 - aTop, e4 - aTop);
+      hi = Math.min(hi, e1 - aBot, e2 - aBot, e3 - aBot, e4 - aBot);
+      if (lo > hi) continue;
+      // Prefer the hero at heroV, else the rest pitch, inside the range.
+      const want = elev(B, hc - C) - Math.atan(S.heroV * tv);
+      const pitch = want < lo ? lo : want > hi ? hi : want;
+      if (pitch < CAM.pitchMin || pitch > CAM.pitchMax) continue;
+      const cp = Math.cos(pitch);
+      const sp = Math.sin(pitch);
+      // Sideways: the hero toward its side (the camera shifts the other way), and the target must fit too.
+      const dH = B * cp + (hc - C) * sp;
+      const lateral = -heroU * dH * th;
+      const dT = st * cp + (tdy + targetH * 0.5 - C) * sp;
+      if (dT < 0.5) continue;
+      const uT = (tl - lateral) / (dT * th);
+      const uH = (0 - lateral) / (dH * th);
+      if (Math.abs(uT) > S.side || Math.abs(uH) > S.side) continue;
+      out.back = B;
+      out.height = C;
+      out.lateral = lateral;
+      out.pitch = pitch;
+      out.pitchLo = lo;
+      out.pitchHi = hi;
+      out.fit = true;
+      return out;
+    }
+  }
+  // Nothing fits (a target far out of reach): the farthest place, looking between them.
+  const B = LOCK_BMAX;
+  out.back = B;
+  out.height = Math.max(LOCK_CMIN, hc + tdy * 0.5);
+  out.lateral = 0;
+  out.pitch = elev(ts + B, tdy * 0.5 - out.height + hc);
+  out.pitchLo = out.pitch;
+  out.pitchHi = out.pitch;
+  out.fit = false;
+  return out;
+}
+
+/**
+ * Where a point lands on screen for the camera of {@link lockRig} (tests): u right and v up, -1..1 at the edges.
+ * @param {{ back:number, height:number, lateral:number }} rig @param {number} pitch @param {number} yaw
+ * @param {number} x @param {number} y @param {number} z the point relative to the hero's feet
+ * @param {number} vfovDeg @param {number} aspect @param {{ u:number, v:number, depth:number }} out
+ */
+export function lockProject(rig, pitch, yaw, x, y, z, vfovDeg, aspect, out) {
+  const fx = Math.sin(yaw);
+  const fz = Math.cos(yaw);
+  const s = x * fx + z * fz + rig.back;
+  const l = -x * fz + z * fx - rig.lateral;
+  const dy = y - rig.height;
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  const depth = s * cp + dy * sp;
+  const upc = -s * sp + dy * cp;
+  const tv = Math.tan((vfovDeg * D2R) / 2);
+  out.depth = depth;
+  out.v = upc / (depth * tv);
+  out.u = l / (depth * tv * aspect);
+  return out;
 }
 
 /**
