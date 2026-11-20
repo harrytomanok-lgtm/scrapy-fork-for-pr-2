@@ -121,7 +121,7 @@ export function createUi(ctx) {
     },
     /** Diagnostics for scenarios: HUD piece rectangles, the HUD mode, focus graph of the top screen. */
     debug() {
-      return { mode: hud.mode, pieces: hud.pieces(), focus: mgr.focusReport(), stack: mgr.stack.slice() };
+      return { mode: hud.mode, pieces: hud.pieces(), keepOut: hud.keepOut(), centre: hud.centre(), focus: mgr.focusReport(), stack: mgr.stack.slice() };
     },
     dispose() {
       mgr.closeAll();
@@ -224,6 +224,7 @@ export function createUi(ctx) {
     /** @param {any} p settings:changed */
     settings(p) {
       if (p.key === 'reducedMotion') dom.root.classList.toggle('ui-reduced', !!p.value);
+      if (p.key === 'photosensitive') dom.root.classList.toggle('ui-photo', !!p.value);
       if (p.key === 'textScale' || p.key === 'leftHanded') hud.markLayout();
     },
     loaded() {
@@ -251,12 +252,19 @@ export function createUi(ctx) {
     b.on('ui:banner', hud.on.banner, OWNER);
     b.on('ui:screen', on.screen, OWNER);
     b.on('rpg:levelUp', hud.on.levelUp, OWNER);
-    b.on('rpg:techLearned', hud.on.badge, OWNER);
+    b.on('rpg:techLearned', hud.on.techLearned, OWNER);
     b.on('shrine:claimed', hud.on.badge, OWNER);
     b.on('rpg:resonance', hud.on.resonance, OWNER);
     b.on('quest:started', hud.on.questStarted, OWNER);
     b.on('quest:completed', hud.on.questDone, OWNER);
-    b.on('quest:step', hud.on.questChanged, OWNER);
+    b.on('quest:step', hud.on.questStep, OWNER);
+    b.on('combat:combo', hud.on.combo, OWNER);
+    b.on('rpg:xp', hud.on.xp, OWNER);
+    b.on('rpg:shells', hud.on.shells, OWNER);
+    b.on('pickup:collected', hud.on.pickup, OWNER);
+    b.on('rpg:formUnlocked', hud.on.formUnlocked, OWNER);
+    b.on('boss:phase', hud.on.bossPhase, OWNER);
+    b.on('fx:impact', hud.on.impact, OWNER);
     b.on('quest:progress', hud.on.questChanged, OWNER);
     b.on('quest:tracked', hud.on.questChanged, OWNER);
     b.on('world:regionEnter', hud.on.region, OWNER);
@@ -286,6 +294,7 @@ export function createUi(ctx) {
   return { ui, system, wire, syncGlyphs, settingsInit() {
     const s = ctx.save && ctx.save.settings;
     if (s && s.reducedMotion) dom.root.classList.add('ui-reduced');
+    if (s && s.photosensitive) dom.root.classList.add('ui-photo');
     syncGlyphs();
   } };
 }
