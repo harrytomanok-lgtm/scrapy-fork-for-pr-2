@@ -181,7 +181,7 @@ float fogAmount(vec3 worldPos) {
   float h = abs(dy) > 1.0 ? (exp(-k * y0) - exp(-k * y1)) / (k * dy) : exp(-k * y0);
   h = max(h, 0.22);
   float fd = uFogDensity * dist;
-  float air = fd * 1.6;
+  float air = fd * 1.2;
   return clamp(1.0 - exp(-(fd * fd + air) * h), 0.0, 1.0);
 }
 vec3 fogTint(vec3 worldPos) {

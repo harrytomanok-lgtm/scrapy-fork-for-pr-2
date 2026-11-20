@@ -75,8 +75,8 @@ void main() {
   c += (uAmbSky * 0.5 + uSunColor * 0.15) * crest * 0.35;
   // sky sheen at grazing angles (Fresnel): toward the distance the water takes the horizon colour
   float fres = pow(1.0 - clamp(dot(v, wnrm), 0.0, 1.0), 4.0);
-  vec3 skyC = mix(uFogColor, uAmbSky, 0.55);
-  c = mix(c, skyC, clamp(fres * 0.7, 0.0, 0.6));
+  vec3 skyC = mix(uFogColor, uAmbSky, 0.7);
+  c = mix(c, skyC, clamp(fres * 0.5, 0.0, 0.42));
   // the sun's glint path: a broad sheen toward the sun when it is low, hashed sparkles near the camera
   vec3 rv = reflect(-v, wnrm);
   float sd = max(dot(rv, uSunDir), 0.0);
