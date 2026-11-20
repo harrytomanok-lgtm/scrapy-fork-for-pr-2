@@ -46,7 +46,7 @@ export function installWiring(ctx, audio, engine, music) {
   for (let i = 0; i < TRACK; i++) track.push({ entId: 0, techId: null, loop: 0, charge: 0 });
   const st = {
     gatherVoice: 0, gatherT: 0, gatherFull: false, windVoice: 0, ambVoice: 0, boss: false,
-    orbStep: 0, orbT: -10, healT: -10, beamT: -10, regionPalette: 'warm', checkT: 0, lastPalette: '', lastSettlement: false,
+    orbStep: 0, orbT: -10, healT: -10, beamT: -10, finT: -10, regionPalette: 'warm', checkT: 0, lastPalette: '', lastSettlement: false,
     siphonVoice: 0, siphonId: '', nearSiphon: '', nearSiphonD: Infinity, nearCamp: '', palette: 'warm',
   };
   const LOOP_AT = { x: 0, y: 0, z: 0, vol: 1 };
@@ -155,6 +155,14 @@ export function installWiring(ctx, audio, engine, music) {
         if (id === 'player_hurt') id = p.class === 'hurtHeavy' ? 'hit_heavy' : 'hit_light';
       }
       playPos(id, p.x, p.y, p.z, vol, pitch);
+      // the player's finisher lands with a short musical hit (at most one per 1.5 s)
+      if (p.class === 'finisher' && isPlayer(p.attackerId)) {
+        const t = now();
+        if (t - st.finT > 1.5) {
+          st.finT = t;
+          audio.stinger('finisher');
+        }
+      }
     },
     /** @param {any} p */
     techPhase(p) {

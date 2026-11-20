@@ -23,7 +23,7 @@ import { createStream } from '../../core/rng.js';
 export const PALETTES = {
   warm: { root: 62, scale: [0, 2, 4, 7, 9], bpm: 84, barsPerChord: 2, prog: [[0, 4, 7], [-3, 0, 4], [5, 9, 12], [0, 4, 7], [-3, 0, 4], [5, 9, 12], [7, 11, 14], [0, 4, 7]] },
   cold: { root: 59, scale: [0, 2, 3, 5, 7, 9, 10], bpm: 58, barsPerChord: 1, prog: [[0, 3, 7], [5, 9, 12], [0, 3, 7], [-2, 2, 5], [0, 3, 7], [5, 9, 12], [3, 7, 10], [-2, 2, 5]] },
-  corrupted: { root: 61, scale: [0, 2, 3, 6, 7, 8, 10], bpm: 64, barsPerChord: 2, prog: [[0, 3, 7], [-4, 0, 3], [0, 3, 7], [-6, -3, 0]] },
+  corrupted: { root: 61, scale: [0, 2, 3, 6, 7, 8, 10], bpm: 64, barsPerChord: 2, prog: [[0, 3, 7], [-4, 0, 3], [0, 3, 7], [-6, -2, 2]] },
 };
 
 /** Combat layer: same key as the palette, natural minor with the flat sixth for tension. */
@@ -64,8 +64,23 @@ const SLOW_RHYTHMS = [[[0, 4]], [[0, 2], [2, 2]], [[0, 3], [3, 1]]];
 const ARP = [[0, 1, 2, 1, 0, 1, 2, 1], [0, 2, 1, 2, 0, 2, 1, 2]];
 const BASS_PAT = [0, 0, 7, 0, 0, 7, 0, 12];
 const STABS = [[0, 2.5], [0, 2.5, 3.5]];
-const LYDIAN = [0, 2, 4, 6, 7, 9, 11];
+/** Zenith colour: the combat minor scale with its fourth raised (a "Lydian fourth" over the minor chords). */
+export const LYDIAN_FOURTH = [0, 2, 3, 6, 7, 8, 10];
 const ROOT_ONLY = [0];
+
+/** @param {number[]} chord @param {number} pc @returns {boolean} the chord holds pitch class `pc` (semitones from the root) */
+function hasPc(chord, pc) {
+  for (let i = 0; i < chord.length; i++) if ((((chord[i] - pc) % 12) + 12) % 12 === 0) return true;
+  return false;
+}
+
+/**
+ * Fold a key shift (Form plus boss phases) into -5..+6 semitones so modulations never walk the voices out of
+ * their ranges. @param {number} s @returns {number}
+ */
+export function foldShift(s) {
+  return ((((s + 5) % 12) + 12) % 12) - 5;
+}
 
 /** @returns {Note} */
 function note() {
@@ -233,14 +248,15 @@ export function createMusicGen(seed) {
             if (beat === 2 || beat === 0) k = nearestChordStep(P.scale, leadRoot, chord, k);
           }
           if (last && i === tpl.length - 1) {
-            ROOT_ONLY[0] = chord[0];
+            // resolve to the tonic when the chord holds it, else to the chord root
+            ROOT_ONLY[0] = hasPc(chord, 0) ? 0 : chord[0];
             k = nearestChordStep(P.scale, leadRoot, ROOT_ONLY, k);
           }
           const lo = P.scale.length * 0;
-          const hi = P.scale.length * 2 + 2;
+          const hi = P.scale.length * 2 - 1;
           if (k < lo) k += P.scale.length;
           if (k > hi) k -= P.scale.length;
-          if (sparse && i > 0 && rng.next() > 0.55 + 0.4 * d) continue;
+          if (sparse && i > 0 && !(last && i === tpl.length - 1) && rng.next() > 0.55 + 0.4 * d) continue;
           const t = beat + (i > 0 ? rng.range(-0.02, 0.03) : 0);
           push(t, len * (lead === 'bell' ? 1.6 : 0.95), lead, stepMidi(P.scale, leadRoot, k), (beat === 0 ? 0.72 : 0.6) + rng.range(-0.06, 0.06));
         }
@@ -261,7 +277,9 @@ export function createMusicGen(seed) {
       for (let i = 0; i < 8; i++) {
         if (rng.next() > 0.45 + 0.5 * d) continue;
         const c = ARP[pat][i];
-        push(i * 0.5, 0.9, 'lute', root - 12 + chord[c] + (i === 4 && pat === 1 ? 12 : 0), 0.42 + (i % 2 === 0 ? 0.08 : 0));
+        const lm = root - 12 + chord[c] + (i === 4 && pat === 1 ? 12 : 0);
+        // chords below the tonic fold up an octave: a lute string under C3 is mud on a phone
+        push(i * 0.5, 0.9, 'lute', lm < 48 ? lm + 12 : lm, 0.42 + (i % 2 === 0 ? 0.08 : 0));
       }
       parts++;
     }
@@ -319,7 +337,8 @@ export function createMusicGen(seed) {
     if (intensity >= 2 && parts < st.parts) {
       const beats = STABS[ci === 3 ? 1 : 0];
       for (let i = 0; i < beats.length; i++) {
-        push(beats[i], 0.45, 'brass', root - 12 + chord[0], 0.7);
+        const bm = root - 12 + chord[0];
+        push(beats[i], 0.45, 'brass', bm < 45 ? bm + 12 : bm, 0.7);
         push(beats[i] + 0.01, 0.45, 'brass', root + chord[1], 0.55);
       }
       parts++;
@@ -328,13 +347,17 @@ export function createMusicGen(seed) {
     // flute melody over the top
     if (intensity >= 3 && parts < st.parts) {
       let k = nearestChordStep(scale, root, chord, gen.step);
-      const sc = st.lydian ? LYDIAN : scale;
+      // the raised fourth only where the chord does not hold the natural fourth (no semitone clash)
+      const sc = st.lydian && !hasPc(chord, 5) ? LYDIAN_FOURTH : scale;
       const tpl = RHYTHMS[(gen.bar >> 1) % RHYTHMS.length];
       for (let i = 0; i < tpl.length; i++) {
         if (i > 0) k += rng.int(-2, 2);
+        // chord tones on the strong beats, as in the exploration phrases
+        if (tpl[i][0] === 0 || tpl[i][0] === 2) k = nearestChordStep(scale, root, chord, k);
         if (k < 3) k += 7;
-        if (k > 15) k -= 7;
-        push(tpl[i][0], tpl[i][1] * 0.9, 'flute', stepMidi(sc, root, k), 0.6);
+        if (k > 13) k -= 7;
+        const fm = stepMidi(sc, root, k);
+        push(tpl[i][0], tpl[i][1] * 0.9, 'flute', fm < 62 ? fm + 12 : fm, 0.6);
       }
       gen.step = k;
       parts++;
@@ -379,6 +402,12 @@ export function stingerNotes(id, root, out) {
     p(0.6, 3.5, 'pad', root - 12, 0.6); p(0.62, 3.5, 'pad', root - 8, 0.5); p(0.64, 3.5, 'pad', root - 5, 0.5);
     p(0.6, 3, 'bell', root + 12, 0.5);
     if (id === 'victory') { p(0, 0.5, 'drum', 45, 0.9); p(0.6, 0.5, 'drum', 45, 0.9); p(1.2, 2.5, 'flute', root + 12, 0.6); }
+  } else if (id === 'finisher') {
+    // a one-second hit: drum, open-fifth brass stab and a ringing octave-fifth bell (no third, so it sits on the
+    // minor combat layer and on the major exploration palettes alike)
+    p(0, 0.5, 'drum', 45, 1); p(0.12, 0.5, 'drum', 45, 0.7);
+    p(0, 0.5, 'brass', root - 12, 0.8); p(0.01, 0.5, 'brass', root - 5, 0.7);
+    p(0.02, 1.2, 'bell', root + 12, 0.55); p(0.03, 1.2, 'bell', root + 19, 0.45);
   } else if (id === 'death') {
     p(0, 4, 'pad', root - 12, 0.6); p(0.02, 4, 'pad', root - 9, 0.5); p(0.04, 4, 'pad', root - 5, 0.5);
     p(1.6, 3, 'bell', root + 6, 0.35); p(0, 2, 'bass', root - 24, 0.6);

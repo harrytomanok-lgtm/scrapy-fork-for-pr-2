@@ -7,7 +7,7 @@
  * @module audio/music
  */
 
-import { createMusicGen, stingerNotes, PALETTES, DENSITY, FORM_SHIFT } from './logic/music.js';
+import { createMusicGen, stingerNotes, foldShift, PALETTES, DENSITY, FORM_SHIFT } from './logic/music.js';
 import { INSTRUMENTS, sampleFor } from './logic/instruments.js';
 
 /** Scheduling horizon (s). */
@@ -205,7 +205,7 @@ export function createMusic(ctx, engine) {
       crossfade(nextBar, want);
     }
     const fight = st.mode === 'combat' || st.mode === 'boss';
-    st.keyShift = fight ? (req.formId && FORM_SHIFT[req.formId] !== undefined ? FORM_SHIFT[req.formId] : 0) + bossPhase * 3 : 0;
+    st.keyShift = fight ? foldShift((req.formId && FORM_SHIFT[req.formId] !== undefined ? FORM_SHIFT[req.formId] : 0) + bossPhase * 3) : 0;
     st.lydian = fight && req.formId === 'zenith';
     const spb = 60 / gen.bpm(st);
     const count = gen.next(st);
