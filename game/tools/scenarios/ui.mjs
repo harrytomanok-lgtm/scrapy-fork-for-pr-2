@@ -40,7 +40,10 @@ function hudProblems() {
     acts.push({ name: a, x: r.left, y: r.top, w: r.width, h: r.height });
   }
   for (const p of d.pieces) for (const a of acts) if (hit(p, a)) out.push(`${p.name} x control ${a.name}`);
-  return { problems: out, mode: d.mode, pieces: d.pieces.map((p) => p.name), controls: acts.length };
+  // Nothing in the centre covers the hero or the locked target (their projected screen boxes).
+  const centre = d.pieces.filter((p) => ['toast', 'pill', 'prompt', 'combo'].indexOf(p.name) >= 0).concat(d.centre || []);
+  for (const p of centre) for (const k of d.keepOut || []) if (hit(p, k)) out.push(`${p.name} covers the ${k.name}`);
+  return { problems: out, mode: d.mode, pieces: d.pieces.map((p) => p.name), controls: acts.length, held: d.held };
 }
 
 /** In the page: no horizontal overflow on the root, dir as expected, no [key] placeholders in the visible DOM. */
@@ -76,6 +79,10 @@ function hudState(g) {
   // A tutorial prompt and the interact pill take their slots too.
   g.ctx.bus.emit('tutorial:prompt', { action: 'attack', textKey: 'rpg.tut.attack' });
   g.ctx.bus.emit('interact:focus', { id: 'test', kind: 'npc', promptKey: 'rpg.prompt.talk' });
+  // A combo and a centre banner take their places too.
+  g.ctx.bus.emit('combat:combo', { count: 12, rank: 3, rankId: 'blaze', expired: false, best: 12 });
+  g.ctx.ui.banner('level', 'ui.banner.levelUp', { level: '7' });
+  g.step(2);
   g.render();
   return { target: g.ctx.combat.target(), tracked: g.ctx.quests.tracked };
 }
@@ -126,7 +133,7 @@ const promptScenario = {
 };
 
 const hudScenarios = [];
-for (const s of [...SIZES, { w: 844, h: 390 }, { w: 360, h: 640 }]) {
+for (const s of [...SIZES, { w: 844, h: 390 }, { w: 360, h: 640 }, { w: 320, h: 568 }, { w: 480, h: 854 }, { w: 915, h: 412 }]) {
   for (const lang of LANGS) {
     hudScenarios.push({
       name: `ui-hud-${s.w}x${s.h}-${lang}`,
@@ -139,7 +146,8 @@ for (const s of [...SIZES, { w: 844, h: 390 }, { w: 360, h: 640 }]) {
         assert.ok(st.target > 0, 'a target is locked');
         const r = await game(hudProblems);
         assert.ok(r.controls > 0, 'touch controls are shown');
-        for (const want of ['medallion', 'hp', 'ora', 'resonance', 'compass', 'pause', 'map', 'toast']) {
+        // On the smallest phones the toasts may wait (held) while nothing else fits beside the hero.
+        for (const want of ['medallion', 'hp', 'ora', 'resonance', 'compass', 'pause', 'map', ...(r.held.toasts ? [] : ['toast'])]) {
           assert.ok(r.pieces.indexOf(want) >= 0, want + ' is visible (' + r.pieces.join(',') + ')');
         }
         assert.ok(r.pieces.indexOf('target') >= 0 || r.pieces.indexOf('boss') >= 0, 'target frame visible');

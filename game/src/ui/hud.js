@@ -17,12 +17,19 @@ import { createRoll, setTarget as rollTo, advance as rollAdvance } from './logic
 import { placePip, tickPositions, compassYaw, PIP_RANGE } from './logic/compass.js';
 import { createSlotPool, acquire, release } from './logic/slotPool.js';
 import { hudMode } from './logic/layout.js';
+import { bodyBox, placeAround } from './logic/placement.js';
 
 const TEXT_PERIOD = 1 / 15;
 const TOAST_SECONDS = 3;
-const BANNER_SECONDS = 2.2;
-/** Combat call-out banners (Break!, Perfect!) are brief. */
+/** Banner hold (the 240 ms entrance and 260 ms exit come on top: under 2 s in all). */
+const BANNER_SECONDS = 1.5;
+/** Gap between two queued centre messages. */
+const BANNER_GAP = 0.3;
+/** Combat call-outs (Break!, Perfect!, Finisher!) are brief and sit beside the action. */
 const CALLOUT_SECONDS = 0.9;
+const CALLOUTS = Object.freeze({ break: 1, perfect: 1, danger: 1, finisher: 1 });
+const KICKERS = Object.freeze({ region: 'ui.banner.regionKicker', level: 'ui.banner.levelKicker', quest: 'ui.banner.questKicker',
+  tech: 'ui.banner.techKicker', form: 'ui.banner.formKicker', boss: 'ui.banner.bossKicker' });
 const DMG_LIFE = 0.7;
 const DMG_COUNT = 24;
 const PIP_COUNT = 10;
@@ -87,8 +94,10 @@ export function createHud(ctx, kit, ui) {
   const bars = kit.el('div', 'ui-bars', block);
   const hpBar = piece(kit.el('div', 'ui-bar ui-hp', bars), 'hp');
   const hpChip = kit.el('div', 'ui-fill ui-chipfill', hpBar);
+  const hpHeal = kit.el('div', 'ui-fill ui-healfill', hpBar);
   const hpFill = kit.el('div', 'ui-fill', hpBar);
   const oraBar = piece(kit.el('div', 'ui-bar ui-ora', bars), 'ora');
+  const oraSpent = kit.el('div', 'ui-fill ui-spentfill', oraBar);
   const oraFill = kit.el('div', 'ui-fill', oraBar);
   const oraTicks = kit.el('div', 'ui-ticks', oraBar);
   const res = piece(kit.el('div', 'ui-res', block), 'resonance');
@@ -197,6 +206,9 @@ export function createHud(ctx, kit, ui) {
   });
 
   // ---------------------------------------------------------------- toasts, banner, pill, prompt
+  // The centre lane: interact pill (lowest, nearest the thumb), tutorial prompt and, in portrait, the toasts. It is
+  // placed from the hero's projected screen box (logic/placement.js) so nothing ever covers the hero or the target.
+  const lane = kit.el('div', 'ui-lane', root);
   const toastBox = kit.el('div', 'ui-toasts', root);
   const toastPool = createSlotPool(3);
   /** @type {Array<{ node:HTMLElement, text:HTMLElement, until:number }>} */
@@ -206,14 +218,26 @@ export function createHud(ctx, kit, ui) {
     n.hidden = true;
     toasts.push({ node: n, text: kit.el('span', '', n), until: 0 });
   }
-  const banner = kit.el('div', 'ui-banner', root);
+  const bwrap = kit.el('div', 'ui-bwrap', root);
+  const banner = kit.el('div', 'ui-banner', bwrap);
   const bannerKicker = kit.el('div', 'ui-banner-kicker', banner);
   const bannerMain = kit.el('div', 'ui-banner-main', banner);
+  const bannerSub = kit.el('div', 'ui-banner-sub', banner);
+  bannerSub.hidden = true;
   let bannerUntil = 0;
-  /** @type {{ kind:string, key:string, args:any }|null} */
+  /** Clock time before which the next queued message waits (the exit of the last one). */
+  let bannerFree = 0;
+  let bannerHeld = false;
+  /** @typedef {{ kind:string, key:string, args:any, sub:string|null, subArgs:any }} BannerMsg */
+  /** @type {BannerMsg|null} */
   let bannerNow = null;
+  /** Centre messages wait their turn: one at a time, never stacked. @type {BannerMsg[]} */
+  const bannerQueue = [];
+  const cwrap = kit.el('div', 'ui-cwrap', root);
+  const callout = kit.el('div', 'ui-callout', cwrap);
+  let calloutUntil = 0;
 
-  const pill = /** @type {HTMLButtonElement} */ (piece(kit.el('button', 'ui-pill', root), 'pill'));
+  const pill = /** @type {HTMLButtonElement} */ (piece(kit.el('button', 'ui-pill', lane), 'pill'));
   pill.type = 'button';
   pill.hidden = true;
   const pillGlyph = kit.el('span', 'ui-glyph', pill);
@@ -223,7 +247,7 @@ export function createHud(ctx, kit, ui) {
     if (ctx.quests && ui.top() === 'hud') ctx.quests.use();
   });
 
-  const prompt = piece(kit.el('div', 'ui-prompt', root), 'prompt');
+  const prompt = piece(kit.el('div', 'ui-prompt', lane), 'prompt');
   prompt.hidden = true;
   const promptGlyph = kit.el('span', 'ui-glyph', prompt);
   const promptText = kit.el('span', '', prompt);
@@ -241,6 +265,98 @@ export function createHud(ctx, kit, ui) {
   let saveUntil = 0;
   const vignette = kit.el('div', 'ui-vignette', root);
 
+  // ---------------------------------------------------------------- moments: combo, gains, pickups, skip hint, flash
+  const combo = piece(kit.el('div', 'ui-combo', root), 'combo');
+  combo.hidden = true;
+  const comboNum = kit.num(combo, 'ui-combo-n');
+  const comboLbl = kit.el('div', 'ui-combo-l', combo, 'ui.combo.hits');
+  const comboRank = kit.el('div', 'ui-combo-r', combo);
+  let comboRankNow = 0;
+  let comboLast = -1;
+  let comboHideAt = 0;
+  let comboRankId = '';
+
+  const gain = kit.el('span', 'ui-gain', res);
+  const gainXp = kit.num(gain, 'ui-gain-xp');
+  const gainSh = kit.el('span', 'ui-gain-sh', gain);
+  gainSh.appendChild(icon(doc, 'shell'));
+  const gainShN = kit.num(gainSh, '');
+  let gainUntil = 0;
+  let xpAdd = 0;
+  let xpShown = 0;
+  let shAdd = 0;
+  let shShown = 0;
+  const lastGain = { xp: '', sh: '' };
+
+  const FLY = 6;
+  const flyNodes = [];
+  const flyT = new Float32Array(FLY);
+  let flyNext = 0;
+  for (let i = 0; i < FLY; i++) {
+    const n = kit.el('i', 'ui-fly', root);
+    n.hidden = true;
+    flyNodes.push(n);
+  }
+
+  const skip = piece(kit.el('div', 'ui-skip', overlay), 'skip');
+  skip.hidden = true;
+  skip.appendChild(icon(doc, 'next'));
+  const skipText = kit.el('span', '', skip);
+  const flash = kit.el('div', 'ui-flashfx', overlay);
+
+  /** Reward line of a quest from its definition (XP, Shells, TP, items, Forms, techniques). @param {string} questId */
+  function rewardText(questId) {
+    const def = ctx.defs.find('quest', questId);
+    const list = def && Array.isArray(def.rewards) ? def.rewards : [];
+    let out = '';
+    for (const r of list) {
+      let t = '';
+      if (r.op === 'giveXp') t = kit.t('ui.gain.xpLong', { n: formatInt(r.amount) });
+      else if (r.op === 'giveShells') t = kit.t('ui.gain.shellsLong', { n: formatInt(r.amount) });
+      else if (r.op === 'giveTp') t = kit.t('ui.gain.tp', { n: formatInt(r.amount) });
+      else if (r.op === 'giveItem' && ctx.i18n.has('item.' + r.item + '.name')) t = kit.t('item.' + r.item + '.name');
+      else if (r.op === 'unlockForm' && ctx.i18n.has('form.' + r.form + '.name')) t = kit.t('form.' + r.form + '.name');
+      else if (r.op === 'unlockTech' && ctx.i18n.has('tech.' + r.tech + '.name')) t = kit.t('tech.' + r.tech + '.name');
+      if (t) out += (out ? '  ·  ' : '') + t;
+    }
+    return out;
+  }
+
+  /** Count the XP and Shells tickers up (text rate). @param {number} d */
+  function frameGains(d) {
+    if (!gainUntil) return;
+    if (clock >= gainUntil) {
+      gainUntil = 0;
+      xpAdd = xpShown = shAdd = shShown = 0;
+      gain.classList.remove('ui-on');
+      return;
+    }
+    const k = Math.min(1, d * 6);
+    xpShown = xpAdd - xpShown < 1 ? xpAdd : xpShown + Math.max(1, (xpAdd - xpShown) * k);
+    shShown = shAdd - shShown < 1 ? shAdd : shShown + Math.max(1, (shAdd - shShown) * k);
+    const xt = xpAdd > 0 ? kit.t('ui.gain.xp', { n: formatInt(Math.round(xpShown)) }) : '';
+    if (xt !== lastGain.xp) {
+      lastGain.xp = xt;
+      gainXp.textContent = xt;
+      gainXp.hidden = !xt;
+    }
+    const st = shAdd > 0 ? '+' + formatInt(Math.round(shShown)) : '';
+    if (st !== lastGain.sh) {
+      lastGain.sh = st;
+      gainShN.textContent = st;
+      gainSh.hidden = !st;
+    }
+  }
+
+  /** Pickup dots fly from the hero to the ticker. @param {number} d */
+  function frameFly(d) {
+    for (let i = 0; i < FLY; i++) {
+      if (flyT[i] <= 0) continue;
+      flyT[i] -= d;
+      if (flyT[i] <= 0) flyNodes[i].hidden = true;
+    }
+  }
+
   // ---------------------------------------------------------------- damage numbers
   const dmgBox = kit.el('div', '', root);
   const dmgPool = createSlotPool(DMG_COUNT);
@@ -251,12 +367,44 @@ export function createHud(ctx, kit, ui) {
   const dmgZ = new Float32Array(DMG_COUNT);
   const dmgT = new Float32Array(DMG_COUNT);
   const dmgDx = new Float32Array(DMG_COUNT);
+  /** Scale of each number: bigger for strong hits and crits. */
+  const dmgS = new Float32Array(DMG_COUNT);
+  const dmgAmt = new Float32Array(DMG_COUNT);
+  const dmgWho = new Int32Array(DMG_COUNT);
   for (let i = 0; i < DMG_COUNT; i++) {
     const n = kit.el('div', 'ui-dmg', dmgBox);
     n.hidden = true;
     dmgNodes.push(n);
   }
   const proj = { x: 0, y: 0, visible: false, depth: 0 };
+  const proj2 = { x: 0, y: 0, visible: false, depth: 0 };
+
+  // ---------------------------------------------------------------- keep-out boxes and centre placement
+  const heroBox = { x: 0, y: 0, w: 0, h: 0, on: false };
+  const tgtBox = { x: 0, y: 0, w: 0, h: 0, on: false };
+  const keeps = [heroBox, tgtBox];
+  /** The combo counter also keeps clear of the lane and the toasts. */
+  const laneBox = { x: 0, y: 0, w: 0, h: 0, on: false };
+  const toastRect = { x: 0, y: 0, w: 0, h: 0, on: false };
+  const keeps2 = [heroBox, tgtBox, laneBox, toastRect];
+  let toastsHeld = false;
+  const laneBase = { x: 0, y: 0, w: 0, h: 0 };
+  const laneAt = { dx: 0, dy: 0 };
+  const bnrBase = { x: 0, y: 0, w: 0, h: 0 };
+  const bnrAt = { dx: 0, dy: 0 };
+  const comboBase = { x: 0, y: 0, w: 0, h: 0 };
+  const comboAt = { dx: 0, dy: 0 };
+  const toastBase = { x: 0, y: 0, w: 0, h: 0 };
+  const toastAt = { dx: 0, dy: 0 };
+  let comboDirty = true;
+  const placed = { dx: 0, dy: 0, moved: false, ok: true };
+  /** @type {{ minTop:number, minX:number, maxX:number, maxBottom?:number }} */
+  const lim = { minTop: 0, minX: 8, maxX: 0, maxBottom: undefined };
+  let laneDirty = true;
+  let laneDirtyT = true;
+  let bnrDirty = true;
+  /** Top of the free band under the top HUD rows (CSS px), measured on relayout. */
+  let topBand = 0;
 
   // ---------------------------------------------------------------- overlay: letterbox and fade
   const letterTop = kit.el('div', 'ui-letter ui-top', overlay);
@@ -283,6 +431,12 @@ export function createHud(ctx, kit, ui) {
   let fadeT = 0;
   let faded = false;
   let chipVal = 1;
+  /** Shown HP while healing: the fill grows to the new value behind a bright heal layer. */
+  let hpShown = 1;
+  /** Spent Ora: a bright segment that holds briefly where Ora was, then drains to the fill. */
+  let spentVal = 0;
+  let spentHold = 0;
+  let oraPrev = -1;
   let chipHold = 0;
   let tChipVal = 1;
   let tChipHold = 0;
@@ -299,7 +453,7 @@ export function createHud(ctx, kit, ui) {
   const roll = createRoll(0);
   let rollInit = false;
   let resFlashUntil = 0;
-  const last = { hp: -1, chip: -1, ora: -1, xp: -1, surge: -1, tick: -1, t: -1, tc: -1, tp: -1, burn: false, low: false, full: false, res: '' };
+  const last = { hp: -1, chip: -1, heal: -1, spent: -1, ora: -1, xp: -1, surge: -1, tick: -1, t: -1, tc: -1, tp: -1, burn: false, low: false, full: false, res: '' };
   let coarse = false;
   try {
     coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -333,6 +487,15 @@ export function createHud(ctx, kit, ui) {
       root.classList.toggle('ui-touch', touch);
     }
     compassW = compass.clientWidth || 200;
+    // Portrait: the toasts join the centre lane above the control deck; elsewhere they sit at the top centre.
+    if (mode === 'portrait') {
+      if (toastBox.parentNode !== lane) lane.appendChild(toastBox);
+    } else if (toastBox.parentNode !== root) root.insertBefore(toastBox, lane);
+    topBand = mode === 'portrait' ? compass.offsetTop + 60 : compass.offsetTop + 64;
+    laneDirty = true;
+    laneDirtyT = true;
+    bnrDirty = true;
+    comboDirty = true;
     renderPrompt();
     renderPill();
   }
@@ -355,6 +518,8 @@ export function createHud(ctx, kit, ui) {
     s.text.textContent = kit.t(key, args);
     s.node.className = 'ui-toast' + (kind === 'good' ? ' ui-good' : kind === 'warn' ? ' ui-warnk' : '');
     s.node.hidden = false;
+    laneDirty = true;
+    laneDirtyT = true;
     // Newest last in reading order.
     toastBox.appendChild(s.node);
     void s.node.offsetWidth;
@@ -363,24 +528,62 @@ export function createHud(ctx, kit, ui) {
     s.until = clock + TOAST_SECONDS + (bannerUntil > clock && root.classList.contains('ui-bnr') ? bannerUntil - clock : 0);
   }
 
-  /** @param {string} kind @param {string} key @param {any} args */
-  function showBanner(kind, key, args) {
-    bannerNow = { kind, key, args };
+  /**
+   * Queue a centre message (level, quest, region, new technique or Form, boss card). Call-outs go to their own slot.
+   * @param {string} kind @param {string} key @param {any} args @param {string|null} [sub] @param {any} [subArgs]
+   */
+  function showBanner(kind, key, args, sub, subArgs) {
+    if (CALLOUTS[kind]) {
+      showCallout(kind, key, args);
+      return;
+    }
+    if (bannerQueue.length >= 4) bannerQueue.shift();
+    bannerQueue.push({ kind, key, args: args || null, sub: sub || null, subArgs: subArgs || null });
+  }
+  /** Start the next queued message when the centre is free and the HUD shows. */
+  function nextBanner() {
+    if (bannerNow || clock < bannerFree || !bannerQueue.length) return;
+    const m = /** @type {BannerMsg} */ (bannerQueue.shift());
+    bannerNow = m;
     renderBanner();
-    banner.className = 'ui-banner ui-k-' + kind;
+    banner.className = 'ui-banner ui-k-' + m.kind;
+    bwrap.className = 'ui-bwrap ui-bk-' + m.kind;
+    bwrap.style.transform = '';
+    bnrAt.dx = 0;
+    bnrAt.dy = 0;
+    bnrDirty = true;
     void banner.offsetWidth;
     banner.classList.add('ui-on');
-    // Big banners share the top band with the toasts outside portrait: the toasts wait out of sight meanwhile.
-    root.classList.toggle('ui-bnr', kind !== 'break' && kind !== 'perfect' && kind !== 'danger');
-    bannerUntil = clock + (kind === 'break' || kind === 'perfect' || kind === 'danger' ? CALLOUT_SECONDS : BANNER_SECONDS);
+    if (m.kind === 'level') {
+      med.classList.remove('ui-burst');
+      void med.offsetWidth;
+      med.classList.add('ui-burst');
+    }
+    // Big messages share the top band with the toasts outside portrait: the toasts wait out of sight meanwhile.
+    root.classList.add('ui-bnr');
+    bannerUntil = clock + BANNER_SECONDS + (m.kind === 'boss' ? 0.3 : 0);
   }
   function renderBanner() {
     if (!bannerNow) return;
     const k = bannerNow.kind;
-    const kickerKey = k === 'region' ? 'ui.banner.regionKicker' : k === 'level' ? 'ui.banner.levelKicker' : k === 'quest' ? 'ui.banner.questKicker' : '';
+    const kickerKey = KICKERS[k] || '';
     bannerKicker.textContent = kickerKey ? kit.t(kickerKey) : '';
     bannerKicker.hidden = !kickerKey;
     bannerMain.textContent = kit.t(bannerNow.key, bannerNow.args);
+    const sub = bannerNow.sub;
+    bannerSub.hidden = !sub;
+    bannerSub.textContent = !sub ? '' : sub.indexOf('@q:') === 0 ? rewardText(sub.slice(3)) : kit.t(sub, bannerNow.subArgs);
+    // A boss whose title is its name (as in Hebrew) shows it once.
+    if (sub && bannerSub.textContent === bannerMain.textContent) bannerSub.hidden = true;
+  }
+  /** @param {string} kind @param {string} key @param {any} args */
+  function showCallout(kind, key, args) {
+    callout.textContent = kit.t(key, args);
+    callout.className = 'ui-callout ui-k-' + kind;
+    cwrap.className = 'ui-cwrap ui-ck-' + kind;
+    void callout.offsetWidth;
+    callout.classList.add('ui-on');
+    calloutUntil = clock + CALLOUT_SECONDS;
   }
 
   // ---------------------------------------------------------------- pill and prompt
@@ -398,14 +601,20 @@ export function createHud(ctx, kit, ui) {
   }
   function renderPill() {
     if (!focusKey) {
+      if (!pill.hidden) laneDirty = true;
+      laneDirtyT = true;
       pill.hidden = true;
       return;
     }
     glyphInto(pillGlyph, 'interact');
     pillText.textContent = kit.t(focusKey);
     pill.hidden = false;
+    laneDirty = true;
+    laneDirtyT = true;
   }
   function renderPrompt() {
+    laneDirty = true;
+    laneDirtyT = true;
     if (!tutKey && !tutAction) {
       prompt.hidden = true;
       ghost.hidden = true;
@@ -481,7 +690,9 @@ export function createHud(ctx, kit, ui) {
   function frameBars(p, dt) {
     const st = p.stats;
     const hpK = st.hp / (st.hpMax > 0 ? st.hpMax : 1);
-    scale(hpFill, 'hp', hpK);
+    hpShown = hpK < hpShown ? hpK : Math.min(hpK, hpShown + dt * 0.7);
+    scale(hpFill, 'hp', hpShown);
+    scale(hpHeal, 'heal', hpK);
     if (hpK < chipVal) {
       chipHold += dt;
       if (chipHold > CHIP_DELAY) chipVal = Math.max(hpK, chipVal - dt * 0.9);
@@ -495,8 +706,24 @@ export function createHud(ctx, kit, ui) {
       last.low = low;
       hpBar.classList.toggle('ui-low', low);
       vignette.classList.toggle('ui-on', low);
+      med.classList.toggle('ui-lowhp', low);
     }
-    scale(oraFill, 'ora', st.ora / (st.oraMax > 0 ? st.oraMax : 1));
+    const oraK = st.ora / (st.oraMax > 0 ? st.oraMax : 1);
+    scale(oraFill, 'ora', oraK);
+    if (oraPrev >= 0 && oraK < oraPrev - 0.04) {
+      // A chunk of Ora was spent: the segment flashes where it was.
+      spentVal = Math.max(spentVal, oraPrev);
+      spentHold = 0;
+      oraSpent.classList.remove('ui-on');
+      void oraSpent.offsetWidth;
+      oraSpent.classList.add('ui-on');
+    }
+    oraPrev = oraK;
+    if (spentVal > oraK) {
+      spentHold += dt;
+      if (spentHold > 0.25) spentVal = Math.max(oraK, spentVal - dt * 1.6);
+    } else spentVal = oraK;
+    scale(oraSpent, 'spent', spentVal);
     if (last.tick !== st.oraMax) {
       last.tick = st.oraMax;
       oraTicks.style.setProperty('--tick', ((25 / Math.max(25, st.oraMax)) * 100).toFixed(3) + '%');
@@ -696,9 +923,147 @@ export function createHud(ctx, kit, ui) {
         continue;
       }
       const u = t / DMG_LIFE;
-      const pop = u < 0.15 ? 0.6 + (u / 0.15) * 0.55 : 1.15 - Math.min(0.15, (u - 0.15) * 0.6);
+      const pop = (u < 0.15 ? 0.6 + (u / 0.15) * 0.55 : 1.15 - Math.min(0.15, (u - 0.15) * 0.6)) * dmgS[i];
       n.style.opacity = u < 0.6 ? '1' : (1 - (u - 0.6) / 0.4).toFixed(2);
       n.style.transform = 'translate(' + (proj.x + dmgDx[i]).toFixed(1) + 'px,' + (proj.y - u * 28).toFixed(1) + 'px) translate(-50%,-50%) scale(' + pop.toFixed(2) + ')';
+    }
+  }
+
+  /**
+   * Keep-out boxes: the hero and the locked target, from their projected feet and heads (text rate).
+   * @param {any} p
+   */
+  function frameKeep(p) {
+    const r = ctx.render;
+    heroBox.on = false;
+    tgtBox.on = false;
+    if (!r || typeof r.project !== 'function') return;
+    r.project(p.pos.x, p.pos.y, p.pos.z, proj);
+    r.project(p.pos.x, p.pos.y + (p.height || 1.8), p.pos.z, proj2);
+    if (proj.visible || proj2.visible) bodyBox(proj.x, proj.y, proj2.x, proj2.y, heroBox);
+    const c = ctx.combat;
+    const id = c && typeof c.target === 'function' ? c.target() : 0;
+    const e = id ? ctx.ents.get(id) : null;
+    if (e && e.alive) {
+      r.project(e.pos.x, e.pos.y, e.pos.z, proj);
+      r.project(e.pos.x, e.pos.y + (e.height || 1.8), e.pos.z, proj2);
+      if (proj.visible || proj2.visible) bodyBox(proj.x, proj.y, proj2.x, proj2.y, tgtBox);
+    }
+    // A body filling most of the screen (camera pressed in, a towering boss) cannot be kept clear: no keep-out.
+    if (heroBox.h > viewH * 0.6) heroBox.on = false;
+    if (tgtBox.h > viewH * 0.6) tgtBox.on = false;
+  }
+
+  /** Move the centre lane and the banner off the keep-out boxes (transform writes only, on change). */
+  function placeCentre() {
+    lim.maxX = viewW - 8;
+    if (laneDirty) {
+      laneDirty = false;
+      laneBase.w = lane.offsetWidth;
+      laneBase.h = lane.offsetHeight;
+      laneBase.x = lane.offsetLeft - laneBase.w * 0.5;
+      laneBase.y = lane.offsetTop;
+    }
+    lim.minTop = topBand;
+    if (mode !== 'portrait' && toastBox.childElementCount && !toastBox.hidden) {
+      const tb = toastBox.offsetTop + toastBox.offsetHeight + 6;
+      if (tb > lim.minTop) lim.minTop = tb;
+    }
+    placeAround(laneBase, keeps, lim, placed);
+    if (!placed.ok && !toastsHeld && toastBox.parentNode === lane && toastPool.live > 0) {
+      // No clear place for the whole lane: the toasts wait until they expire, the lane shrinks, try again.
+      toastsHeld = true;
+      lane.classList.add('ui-holdt');
+      laneDirty = true;
+      return;
+    }
+    if (toastsHeld && toastPool.live === 0) {
+      toastsHeld = false;
+      lane.classList.remove('ui-holdt');
+      laneDirty = true;
+    }
+    laneBox.on = laneBase.h > 0;
+    laneBox.x = laneBase.x + placed.dx;
+    laneBox.y = laneBase.y + placed.dy;
+    laneBox.w = laneBase.w;
+    laneBox.h = laneBase.h;
+    if (Math.abs(placed.dx - laneAt.dx) > 2 || Math.abs(placed.dy - laneAt.dy) > 2) {
+      laneAt.dx = placed.dx;
+      laneAt.dy = placed.dy;
+      lane.style.transform = 'translate(calc(-50% + ' + Math.round(placed.dx) + 'px),' + Math.round(placed.dy) + 'px)';
+    }
+    // Outside portrait the toasts sit at the top centre: they step aside from a target that rises into them.
+    if (mode !== 'portrait' && toastPool.live > 0) {
+      if (laneDirtyT) {
+        laneDirtyT = false;
+        toastBase.w = toastBox.offsetWidth;
+        toastBase.h = toastBox.offsetHeight;
+        toastBase.x = toastBox.offsetLeft - toastBase.w * 0.5;
+        toastBase.y = toastBox.offsetTop;
+      }
+      // Never up into the target frame: down or aside only.
+      lim.minTop = toastBase.y;
+      lim.maxBottom = viewH * 0.6;
+      placeAround(toastBase, keeps, lim, placed);
+      lim.maxBottom = undefined;
+      toastRect.on = true;
+      toastRect.x = toastBase.x + placed.dx;
+      toastRect.y = toastBase.y + placed.dy;
+      toastRect.w = toastBase.w;
+      toastRect.h = toastBase.h;
+      if (Math.abs(placed.dx - toastAt.dx) > 2 || Math.abs(placed.dy - toastAt.dy) > 2) {
+        toastAt.dx = placed.dx;
+        toastAt.dy = placed.dy;
+        toastBox.style.translate = Math.round(placed.dx) + 'px ' + Math.round(placed.dy) + 'px';
+      }
+    } else if (toastAt.dx || toastAt.dy || toastRect.on) {
+      toastRect.on = false;
+      toastAt.dx = 0;
+      toastAt.dy = 0;
+      toastBox.style.translate = '';
+    }
+    if (!combo.hidden) {
+      if (comboDirty) {
+        comboDirty = false;
+        comboBase.x = combo.offsetLeft;
+        comboBase.y = combo.offsetTop;
+        comboBase.w = combo.offsetWidth;
+        comboBase.h = combo.offsetHeight;
+      }
+      lim.minTop = topBand - 20;
+      lim.maxBottom = viewH * 0.66;
+      placeAround(comboBase, keeps2, lim, placed);
+      lim.maxBottom = undefined;
+      if (Math.abs(placed.dx - comboAt.dx) > 2 || Math.abs(placed.dy - comboAt.dy) > 2) {
+        comboAt.dx = placed.dx;
+        comboAt.dy = placed.dy;
+        // The independent `translate` property, so the counter's own pop and fade transforms stay untouched.
+        combo.style.translate = Math.round(placed.dx) + 'px ' + Math.round(placed.dy) + 'px';
+      }
+    }
+    if (!bannerNow) return;
+    if (bnrDirty) {
+      bnrDirty = false;
+      bnrBase.w = banner.offsetWidth;
+      bnrBase.h = banner.offsetHeight;
+      bnrBase.x = bwrap.offsetLeft + banner.offsetLeft;
+      bnrBase.y = bwrap.offsetTop + banner.offsetTop;
+    }
+    lim.minTop = topBand - 20;
+    // Never up onto the target frame or the boss bar.
+    if (!target.hidden) lim.minTop = Math.max(lim.minTop, target.offsetTop + target.offsetHeight + 6);
+    lim.maxBottom = viewH * 0.62;
+    placeAround(bnrBase, keeps, lim, placed);
+    lim.maxBottom = undefined;
+    // With no clear place the message holds back (its time still runs) rather than cover the hero or target.
+    if (placed.ok === bannerHeld) {
+      bannerHeld = !placed.ok;
+      banner.classList.toggle('ui-held', bannerHeld);
+    }
+    if (Math.abs(placed.dx - bnrAt.dx) > 2 || Math.abs(placed.dy - bnrAt.dy) > 2) {
+      bnrAt.dx = placed.dx;
+      bnrAt.dy = placed.dy;
+      bwrap.style.transform = 'translate(' + Math.round(placed.dx) + 'px,' + Math.round(placed.dy) + 'px)';
     }
   }
 
@@ -734,6 +1099,30 @@ export function createHud(ctx, kit, ui) {
     },
     get mode() {
       return mode;
+    },
+    /** The hero's and the locked target's screen boxes that centre pieces keep clear of (scenarios). */
+    keepOut() {
+      const out = [];
+      if (heroBox.on) out.push({ name: 'hero', x: heroBox.x, y: heroBox.y, w: heroBox.w, h: heroBox.h });
+      if (tgtBox.on) out.push({ name: 'target', x: tgtBox.x, y: tgtBox.y, w: tgtBox.w, h: tgtBox.h });
+      return out;
+    },
+    /** Pieces held back because no place clear of the hero and target was found (scenarios). */
+    held() {
+      return { toasts: toastsHeld, banner: bannerHeld };
+    },
+    /** Transient centre messages on show: the banner and the call-out (scenarios). */
+    centre() {
+      const out = [];
+      if (bannerNow && !bannerHeld) {
+        const r = banner.getBoundingClientRect();
+        out.push({ name: 'banner', kind: bannerNow.kind, x: r.left, y: r.top, w: r.width, h: r.height, queued: bannerQueue.length });
+      }
+      if (calloutUntil) {
+        const r = callout.getBoundingClientRect();
+        out.push({ name: 'callout', x: r.left, y: r.top, w: r.width, h: r.height });
+      }
+      return out;
     },
     /** Rectangles of every visible HUD piece (scenarios). */
     pieces() {
@@ -778,14 +1167,25 @@ export function createHud(ctx, kit, ui) {
           release(toastPool, i);
           s.node.classList.remove('ui-on');
           s.node.hidden = true;
+          laneDirty = true;
+          laneDirtyT = true;
         }
       }
       if (bannerUntil && bannerUntil <= clock) {
         bannerUntil = 0;
         bannerNow = null;
+        bannerFree = clock + BANNER_GAP;
         banner.classList.remove('ui-on');
+        banner.classList.remove('ui-held');
+        bannerHeld = false;
+        med.classList.remove('ui-burst');
         root.classList.remove('ui-bnr');
       }
+      if (calloutUntil && calloutUntil <= clock) {
+        calloutUntil = 0;
+        callout.classList.remove('ui-on');
+      }
+      if (show) nextBanner();
       if (saveUntil && saveUntil <= clock) {
         saveUntil = 0;
         saveIco.classList.remove('ui-on');
@@ -796,14 +1196,27 @@ export function createHud(ctx, kit, ui) {
       frameTarget(p, d);
       frameDamage(d);
       if (rollAdvance(roll, d)) textAcc = TEXT_PERIOD;
+      frameFly(d);
+      if (comboHideAt && clock >= comboHideAt) {
+        comboHideAt = 0;
+        combo.hidden = true;
+        root.classList.remove('ui-cmb');
+        combo.classList.remove('ui-out');
+        comboLast = -1;
+        comboRankNow = 0;
+      }
       textAcc += d;
       if (textAcc < TEXT_PERIOD && dt > 0) return;
+      const tt = textAcc > 0 ? textAcc : d;
       textAcc = 0;
+      frameGains(tt);
       if (ghostRetry > 0 && !prompt.hidden) {
         ghostRetry--;
         placeGhost();
       }
       framePips(p);
+      frameKeep(p);
+      placeCentre();
       const surge = p.combat ? Math.min(1, p.combat.surge / BALANCE.surge.max) : 0;
       if (last.surge !== surge) {
         last.surge = surge;
@@ -867,15 +1280,41 @@ export function createHud(ctx, kit, ui) {
         const s = ctx.save && ctx.save.settings;
         if (s && s.damageNumbers === false) return;
         if (!(e.amount > 0) && !e.blocked) return;
+        const hurt = !!(p && e.targetId === p.id);
+        // Rapid hits on one target fold into one growing number instead of a wall of numbers.
+        let j = -1;
+        if (!e.blocked && !e.crit) {
+          for (let k = 0; k < DMG_COUNT; k++) {
+            if (dmgPool.busy[k] && dmgWho[k] === e.targetId && dmgT[k] < 0.3 && dmgAmt[k] > 0) j = k;
+          }
+        }
+        const te = ctx.ents.get(e.targetId);
+        const hpMax = te && te.stats && te.stats.hpMax > 0 ? te.stats.hpMax : 100;
+        if (j >= 0) {
+          dmgAmt[j] += e.amount;
+          dmgT[j] = 0.02;
+          const r = dmgAmt[j] / hpMax;
+          dmgS[j] = Math.min(1.6, Math.max(dmgS[j], 1 + r * 2));
+          dmgNodes[j].textContent = formatCompact(dmgAmt[j]);
+          return;
+        }
         const i = acquire(dmgPool);
+        dmgWho[i] = e.targetId;
+        dmgAmt[i] = e.blocked ? 0 : e.amount;
+        const ratio = e.amount / hpMax;
+        dmgS[i] = hurt ? 1 : Math.min(1.6, 1 + ratio * 2 + (e.crit ? 0.15 : 0));
         dmgX[i] = e.x;
         dmgY[i] = e.y;
         dmgZ[i] = e.z;
         dmgT[i] = 0;
         dmgDx[i] = ((dmgPool.serial * 37) % 41) - 20;
         const n = dmgNodes[i];
-        const hurt = !!(p && e.targetId === p.id);
-        n.className = 'ui-dmg' + (hurt ? ' ui-hurt' : e.blocked ? ' ui-blocked' : e.crit ? ' ui-crit' : '');
+        n.className = 'ui-dmg' + (hurt ? ' ui-hurt' : e.blocked ? ' ui-blocked' : e.crit ? ' ui-crit' : ratio >= 0.12 ? ' ui-strong' : '');
+        if (hurt && e.amount > 0) {
+          hpBar.classList.remove('ui-hit');
+          void hpBar.offsetWidth;
+          hpBar.classList.add('ui-hit');
+        }
         n.textContent = e.amount > 0 ? formatCompact(e.amount) : '0';
         n.style.opacity = '0';
         n.hidden = false;
@@ -890,9 +1329,109 @@ export function createHud(ctx, kit, ui) {
       },
       /** @param {any} p rpg:levelUp */
       levelUp(p) {
-        showBanner('level', 'ui.banner.levelUp', { level: formatInt(p.level) });
-        if (p.statPoints > 0 && ctx.store.state.player.autoStyle === 'manual') showToast(p.statPoints === 1 ? 'ui.toast.pointsOne' : 'ui.toast.points', { n: formatInt(p.statPoints) }, 'good');
+        const manual = p.statPoints > 0 && ctx.store.state.player.autoStyle === 'manual';
+        // The stat points call-out rides on the level banner; with an automatic style the points are already spent.
+        showBanner('level', 'ui.banner.levelUp', { level: formatInt(p.level) },
+          manual ? (p.statPoints === 1 ? 'ui.toast.pointsOne' : 'ui.toast.points') : p.tp > 0 ? 'ui.gain.tp' : null,
+          manual ? { n: formatInt(p.statPoints) } : { n: formatInt(p.tp) });
         hud.on.badge();
+      },
+      /** @param {any} p combat:combo */
+      combo(p) {
+        if (p.expired || p.count < 2) {
+          if (!combo.hidden && !comboHideAt) {
+            combo.classList.add('ui-out');
+            comboHideAt = clock + 0.35;
+          }
+          return;
+        }
+        comboHideAt = clock + 6;
+        combo.classList.remove('ui-out');
+        if (combo.hidden) {
+          combo.hidden = false;
+          root.classList.add('ui-cmb');
+          combo.classList.remove('ui-in');
+          void combo.offsetWidth;
+          combo.classList.add('ui-in');
+        }
+        if (p.count !== comboLast) {
+          comboLast = p.count;
+          comboNum.textContent = formatInt(p.count);
+          comboDirty = true;
+          comboNum.classList.remove('ui-pop');
+          void comboNum.offsetWidth;
+          comboNum.classList.add('ui-pop');
+        }
+        if (p.rankId !== comboRankId) {
+          comboRankId = p.rankId || '';
+          comboRank.textContent = comboRankId ? kit.t('combat.rank.' + comboRankId) : '';
+          combo.dataset.rank = String(p.rank || 0);
+          comboDirty = true;
+        }
+        if (p.rank > comboRankNow) {
+          combo.classList.remove('ui-rankup');
+          void combo.offsetWidth;
+          combo.classList.add('ui-rankup');
+        }
+        comboRankNow = p.rank || 0;
+      },
+      /** @param {any} p rpg:xp */
+      xp(p) {
+        if (!(p.amount > 0)) return;
+        xpAdd += p.amount;
+        gainUntil = clock + 2.2;
+        gain.classList.add('ui-on');
+      },
+      /** @param {any} p rpg:shells */
+      shells(p) {
+        if (!(p.amount > 0)) return;
+        shAdd += p.amount;
+        gainUntil = clock + 2.2;
+        gain.classList.add('ui-on');
+      },
+      /** @param {any} p pickup:collected */
+      pickup(p) {
+        if (root.hidden || !heroBox.on) return;
+        const to = (p.kind === 'shells' ? gainSh : p.kind === 'xp' ? gainXp : med).getBoundingClientRect();
+        const n = flyNodes[flyNext];
+        flyT[flyNext] = 0.6;
+        flyNext = (flyNext + 1) % FLY;
+        n.className = 'ui-fly ui-fly-' + (p.kind === 'shells' ? 'sh' : p.kind === 'item' ? 'item' : 'ora');
+        n.hidden = false;
+        n.style.transition = 'none';
+        n.style.transform = 'translate(' + Math.round(heroBox.x + heroBox.w * 0.5) + 'px,' + Math.round(heroBox.y + heroBox.h * 0.45) + 'px) scale(1.4)';
+        void n.offsetWidth;
+        n.style.transition = '';
+        n.style.transform = 'translate(' + Math.round(to.left + Math.min(to.width, 24) * 0.5) + 'px,' + Math.round(to.top + to.height * 0.5) + 'px) scale(.6)';
+      },
+      /** @param {any} p rpg:techLearned */
+      techLearned(p) {
+        hud.on.badge();
+        if (p.techId && p.rank <= 1 && ctx.i18n.has('tech.' + p.techId + '.name')) showBanner('tech', 'tech.' + p.techId + '.name', null);
+      },
+      /** @param {any} p rpg:formUnlocked */
+      formUnlocked(p) {
+        if (ctx.i18n.has('form.' + p.formId + '.name')) showBanner('form', 'form.' + p.formId + '.name', null);
+      },
+      /** @param {any} p boss:phase */
+      bossPhase(p) {
+        void p;
+        target.classList.remove('ui-phase');
+        void target.offsetWidth;
+        target.classList.add('ui-phase');
+      },
+      /** @param {any} p fx:impact (pooled: read now) */
+      impact(p) {
+        if (p.classId !== 'finisher') return;
+        flash.classList.remove('ui-on');
+        void flash.offsetWidth;
+        flash.classList.add('ui-on');
+        showCallout('finisher', 'ui.callout.finisher', null);
+      },
+      /** @param {any} p quest:step */
+      questStep(p) {
+        trackerDirty = true;
+        if (p.index > 0) showToast('ui.toast.questStep', { title: kit.t('quest.' + p.questId + '.title') }, 'good');
       },
       badge() {
         const rpg = ctx.rpg;
@@ -918,8 +1457,9 @@ export function createHud(ctx, kit, ui) {
         showToast('ui.toast.questStarted', { title: kit.t('quest.' + p.questId + '.title') }, 'info');
         trackerDirty = true;
       },
-      questDone() {
-        showBanner('quest', 'ui.banner.questDone', null);
+      /** @param {any} p quest:completed */
+      questDone(p) {
+        showBanner('quest', 'quest.' + p.questId + '.title', null, '@q:' + p.questId);
         trackerDirty = true;
       },
       questChanged() {
@@ -974,18 +1514,24 @@ export function createHud(ctx, kit, ui) {
       },
       /** @param {any} p cine:start */
       cineStart(p) {
-        if (p.id === 'title' || p.id === 'dialogue') return;
+        if (p.id === 'title' || p.id === 'dialogue' || p.id === 'title_end' || p.id === 'ui_char') return;
+        skip.hidden = !p.skippable;
+        if (p.skippable) skipText.textContent = kit.t(touch || coarse ? 'ui.skip.tap' : 'ui.skip.key', { key: ctx.input.glyph('skip').label || '' });
         cineHidden = true;
         hud.letterbox(true);
       },
       /** @param {any} p cine:end */
       cineEnd(p) {
-        if (p.id === 'title' || p.id === 'dialogue') return;
+        skip.hidden = true;
+        if (p.id === 'title' || p.id === 'dialogue' || p.id === 'title_end' || p.id === 'ui_char') return;
         cineHidden = false;
         hud.letterbox(false);
       },
-      bossStart() {
+      /** @param {any} p boss:start */
+      bossStart(p) {
         tId = 0;
+        const k = 'boss.' + p.bossId + '.name';
+        if (ctx.i18n.has(k)) showBanner('boss', k, null, ctx.i18n.has('boss.' + p.bossId + '.title') ? 'boss.' + p.bossId + '.title' : null);
       },
       device() {
         layoutDirty = true;
@@ -1009,6 +1555,9 @@ export function createHud(ctx, kit, ui) {
         lastLevel = -1;
         trackerDirty = true;
         chipVal = 1;
+        hpShown = 1;
+        oraPrev = -1;
+        spentVal = 0;
         fadeT = 0;
         hud.on.badge();
         hint.reset();

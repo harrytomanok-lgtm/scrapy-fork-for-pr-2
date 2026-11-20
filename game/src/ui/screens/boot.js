@@ -11,6 +11,7 @@ import { BALANCE } from '../../core/balance.js';
 import { icon } from '../icons.js';
 import { shell, chips } from './common.js';
 import { formatPct } from '../logic/format.js';
+import { APP_VERSION } from '../../core/store.js';
 
 const TIPS = 8;
 const TIP_SECONDS = 4;
@@ -114,6 +115,32 @@ export function registerBootScreens(ctx, kit, ui, reg) {
   reg('title', () => {
     const root = kit.el('div', 'ui-scr ui-clear ui-title', null);
     const logo = kit.el('div', 'ui-logo', root);
+    // The ring emblem behind the name: a kite-paper ring of light, turning slowly, with eight vein ticks.
+    const NS = 'http://www.w3.org/2000/svg';
+    const emb = doc.createElementNS(NS, 'svg');
+    emb.setAttribute('viewBox', '0 0 200 200');
+    emb.setAttribute('class', 'ui-logo-ring');
+    emb.setAttribute('aria-hidden', 'true');
+    const g = doc.createElementNS(NS, 'g');
+    for (const [r, w, cls] of [[86, 3, 'a'], [70, 1.5, 'b']]) {
+      const c = doc.createElementNS(NS, 'circle');
+      c.setAttribute('cx', '100');
+      c.setAttribute('cy', '100');
+      c.setAttribute('r', String(r));
+      c.setAttribute('stroke-width', String(w));
+      c.setAttribute('class', cls);
+      g.appendChild(c);
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const l = doc.createElementNS(NS, 'path');
+      const r0 = i % 2 ? 74 : 62;
+      l.setAttribute('d', 'M' + (100 + Math.sin(a) * r0).toFixed(1) + ' ' + (100 - Math.cos(a) * r0).toFixed(1) + 'L' + (100 + Math.sin(a) * 94).toFixed(1) + ' ' + (100 - Math.cos(a) * 94).toFixed(1));
+      l.setAttribute('class', 't');
+      g.appendChild(l);
+    }
+    emb.appendChild(g);
+    logo.appendChild(emb);
     kit.el('h1', 'ui-logo-main', logo, 'core.game.title');
     kit.el('div', 'ui-logo-sub', logo, 'core.game.subtitle');
     const alt = kit.el('div', 'ui-logo-alt', logo);
@@ -128,7 +155,8 @@ export function registerBootScreens(ctx, kit, ui, reg) {
     kit.button(menu, 'ui.title.newGame', () => ui.open('newgame', {}), 'ui-full ui-ghostbtn');
     kit.button(menu, 'core.save.restoreCode', () => ui.open('savecode', { tab: 'restore' }), 'ui-full ui-ghostbtn', 'restore');
     kit.button(menu, 'ui.pause.settings', () => ui.open('settings', {}), 'ui-full ui-ghostbtn', 'gear');
-    const pill = kit.el('div', 'ui-langpill', menu);
+    const small = kit.el('div', 'ui-row ui-titlerow', menu);
+    const pill = kit.el('div', 'ui-langpill', small);
     const he = /** @type {HTMLButtonElement} */ (kit.el('button', '', pill, 'ui.lang.short.he'));
     const en = /** @type {HTMLButtonElement} */ (kit.el('button', '', pill, 'ui.lang.short.en'));
     he.type = 'button';
@@ -137,6 +165,8 @@ export function registerBootScreens(ctx, kit, ui, reg) {
     kit.attr(en, 'aria-label', 'core.lang.en');
     he.addEventListener('click', () => setLang(ctx, 'he'));
     en.addEventListener('click', () => setLang(ctx, 'en'));
+    const cred = kit.button(small, 'ui.credits.title', () => ui.open('credits', {}), 'ui-sm ui-ghostbtn', 'scroll');
+    cred.dataset.open = 'credits';
     root.addEventListener('pointerdown', () => {
       const a = ctx.audio;
       if (a && typeof a.unlock === 'function') {
@@ -353,6 +383,34 @@ export function registerBootScreens(ctx, kit, ui, reg) {
     const col = kit.el('div', 'ui-menu', root);
     const go = kit.button(col, 'ui.ending.continue', () => ui.closeAll(), 'ui-full', 'play');
     return { el: root, modal: false, onOpen() {}, onClose() {}, initialFocus: () => go };
+  });
+
+  // ------------------------------------------------------------------ credits and licences
+  reg('credits', () => {
+    const { root, body } = shell(kit, { ribbon: 'ui.credits.title', ribbonIcon: 'scroll', size: '', cls: 'ui-menuscr' });
+    // Back sits at the top, so the page opens at its start with the focus on it (a long licence text follows).
+    const back = kit.button(body, 'ui.common.back', () => ui.close('credits'), 'ui-ghostbtn ui-sm', 'back');
+    back.style.alignSelf = 'flex-start';
+    const head = kit.el('div', 'ui-credhead', body);
+    kit.el('div', 'ui-credname', head, 'core.game.title');
+    kit.el('div', 'ui-logo-sub', head, 'core.game.subtitle');
+    kit.el('div', 'ui-small', head, 'ui.credits.version', { v: APP_VERSION });
+    kit.el('p', 'ui-p', body, 'ui.credits.made');
+    kit.el('h3', 'ui-h3', body, 'ui.credits.libs');
+    const lib = kit.el('div', 'ui-card ui-col', body);
+    kit.el('div', 'ui-li-title', lib, 'ui.credits.three');
+    kit.el('div', 'ui-small', lib, 'ui.credits.threeCopy');
+    kit.el('p', 'ui-legal', lib, 'ui.credits.mit');
+    kit.el('h3', 'ui-h3', body, 'ui.credits.fonts');
+    const fonts = kit.el('div', 'ui-card ui-col', body);
+    kit.el('div', 'ui-p', fonts, 'ui.credits.secular');
+    kit.el('div', 'ui-p', fonts, 'ui.credits.rubik');
+    kit.el('p', 'ui-small', fonts, 'ui.credits.fontsNote');
+    kit.el('p', 'ui-small', body, 'ui.credits.legalNote');
+    return { el: root, onOpen() {
+      const b = root.querySelector('.ui-pbody');
+      if (b) b.scrollTop = 0;
+    }, onClose() {}, initialFocus: () => back };
   });
 
   // ------------------------------------------------------------------ fatal

@@ -64,10 +64,27 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
     syncs.push(() => {
       for (const l of Object.keys(langBtns)) langBtns[l].classList.toggle('ui-accent', S().lang === l);
     });
-    // Graphics
-    const q = chips(kit, pages.gfx, ['auto', 'low', 'high'].map((id) => ({ id, key: 'ui.set.quality.' + id })), (id) => set('quality', id));
-    kit.el('p', 'ui-small', pages.gfx, 'ui.set.quality.desc');
-    syncs.push(() => q.set(S().quality));
+    // Graphics: a plain choice wired to the renderer's tiers and shadow map. Smooth = phone tier without shadows,
+    // Balanced = the automatic choice for this device, Sharp = the desktop tier.
+    const LOOK = { smooth: 'low', balanced: 'auto', sharp: 'high' };
+    const q = chips(kit, pages.gfx, ['smooth', 'balanced', 'sharp'].map((id) => ({ id, key: 'ui.set.gfx.' + id })), (id) => {
+      set('quality', LOOK[id]);
+      if (id === 'smooth') setShadows(ctx, false);
+      syncAll();
+    });
+    const lookDesc = kit.el('p', 'ui-small', pages.gfx);
+    const shadowRow = switchRow(kit, pages.gfx, 'ui.set.shadows', () => shadowsOn(ctx), (v) => setShadows(ctx, v));
+    const shadowNote = kit.el('p', 'ui-small', pages.gfx, 'ui.set.shadowsNote');
+    syncs.push(() => {
+      const ql = S().quality;
+      const id = ql === 'low' ? 'smooth' : ql === 'high' ? 'sharp' : 'balanced';
+      q.set(id);
+      lookDesc.textContent = kit.t('ui.set.gfx.' + id + '.desc');
+      const can = shadowsPossible(ctx);
+      shadowRow.row.hidden = !can;
+      shadowNote.hidden = !can;
+      shadowRow.sync();
+    });
     // Device report: how the game runs on this device, as text the player can screenshot or copy and send back.
     kit.el('h3', 'ui-h3', pages.gfx, 'ui.set.device');
     kit.el('p', 'ui-small', pages.gfx, 'ui.set.deviceHint');
@@ -112,8 +129,9 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
     for (const [k, key] of [['damageNumbers', 'ui.set.damageNumbers'], ['shortTransform', 'ui.set.shortTransform']]) {
       syncs.push(switchRow(kit, pages.play, key, () => S()[k], (v) => set(k, v)).sync);
     }
-    const back = kit.button(body, 'ui.common.back', () => ui.close('settings'), 'ui-ghostbtn', 'back');
-    void back;
+    const foot = kit.el('div', 'ui-row', body);
+    kit.button(foot, 'ui.common.back', () => ui.close('settings'), 'ui-ghostbtn', 'back');
+    kit.button(foot, 'ui.credits.title', () => ui.open('credits', {}), 'ui-ghostbtn', 'scroll').dataset.open = 'credits';
     function show(id) {
       for (const k of Object.keys(pages)) pages[k].hidden = k !== id;
     }
@@ -568,6 +586,49 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
       },
     };
   });
+}
+
+/** Storage key of the player's shadow choice (a session option of the renderer, kept per device). */
+const SHADOW_KEY = 'kethra.ui.shadows';
+
+/** @param {any} ctx @returns {boolean} the renderer can draw a shadow map on this tier */
+function shadowsPossible(ctx) {
+  const r = ctx.render;
+  return !!(r && typeof r.setShadows === 'function' && r.caps && r.caps.shadowSize > 0);
+}
+
+/** @param {any} ctx @returns {boolean} */
+function shadowsOn(ctx) {
+  const r = ctx.render;
+  try {
+    const q = r && typeof r.quality === 'function' ? r.quality() : null;
+    return !!(q && q.shadowAllowed);
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Allow or forbid the shadow map and remember the choice on this device. @param {any} ctx @param {boolean} on */
+export function setShadows(ctx, on) {
+  const r = ctx.render;
+  if (r && typeof r.setShadows === 'function') r.setShadows(!!on);
+  try {
+    ctx.dom.safeStorage.set(SHADOW_KEY, on ? '1' : '0');
+  } catch (e) {
+    // storage is optional
+  }
+}
+
+/** Apply a stored shadow choice (boot). @param {any} ctx */
+export function applyStoredShadows(ctx) {
+  let v = null;
+  try {
+    v = ctx.dom.safeStorage.get(SHADOW_KEY);
+  } catch (e) {
+    v = null;
+  }
+  const r = ctx.render;
+  if ((v === '0' || v === '1') && r && typeof r.setShadows === 'function') r.setShadows(v === '1');
 }
 
 /**
