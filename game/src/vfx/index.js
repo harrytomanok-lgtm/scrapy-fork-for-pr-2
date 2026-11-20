@@ -15,6 +15,8 @@ export const pkg = {
     ctx.systems.add(updateSystem);
     const bus = ctx.bus;
     bus.on('combat:hit', auto.hit);
+    bus.on('combat:techStart', auto.techStart);
+    bus.on('combat:techPhase', auto.techPhase);
     bus.on('projectile:spawned', auto.projectileSpawned);
     bus.on('projectile:removed', auto.projectileRemoved);
     bus.on('combat:telegraph', auto.telegraph);

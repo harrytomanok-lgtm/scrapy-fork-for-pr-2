@@ -155,12 +155,17 @@ export function createVfx(ctx) {
       ox = ux * r * rnd(); oy = uy * r * rnd(); oz = uz * r * rnd();
     }
     const sp = (L.sp[0] + (L.sp[1] - L.sp[0]) * rnd()) * (sc > 1 ? Math.sqrt(sc) : sc);
-    pool.px[i] = x + ox; pool.py[i] = y + oy; pool.pz[i] = z + oz;
-    pool.vx[i] = vx * sp; pool.vy[i] = vy * sp; pool.vz[i] = vz * sp;
+    let py = y + oy;
+    // gnd: dust that starts on the ground under an airborne burst
+    if (L.gnd && ctx.world) py = ctx.world.heightAt(x + ox, z + oz) + 0.25;
+    pool.px[i] = x + ox; pool.py[i] = py; pool.pz[i] = z + oz;
+    pool.vx[i] = vx * sp; pool.vy[i] = vy * sp + (L.lift || 0) * (0.6 + 0.4 * rnd()); pool.vz[i] = vz * sp;
     pool.life[i] = L.life[0] + (L.life[1] - L.life[0]) * rnd();
     const sj = 0.8 + 0.4 * rnd();
-    pool.s0[i] = L.sz[0] * sc * sj;
-    pool.s1[i] = L.sz[1] * sc * sj;
+    // cap: a white core scaled up by a big caller never swallows the hero standing in it
+    const cap = L.cap || 1e9;
+    pool.s0[i] = Math.min(cap, L.sz[0] * sc * sj);
+    pool.s1[i] = Math.min(cap, L.sz[1] * sc * sj);
     pool.rot[i] = sh === 'still' && L.cell !== CELL.star && !L.rr ? 0 : rnd() * TAU;
     pool.rotV[i] = L.rv || 0;
     tokenColor(L.col, cTok);
@@ -171,6 +176,13 @@ export function createVfx(ctx) {
     pool.drag[i] = L.dr || 0;
     pool.core[i] = L.k || 0;
     pool.stretch[i] = L.m === 1 ? L.st || 0 : 0;
+    if (L.tail) {
+      // a fixed-length tail behind the burst direction (a comet), centred half a tail back
+      const tl = L.tail * Math.min(2, sc);
+      pool.px[i] = x - dx * tl * 0.5; pool.py[i] = y - dy * tl * 0.5; pool.pz[i] = z - dz * tl * 0.5;
+      pool.vx[i] = dx * 0.01; pool.vy[i] = dy * 0.01; pool.vz[i] = dz * 0.01;
+      pool.stretch[i] = -tl;
+    }
     pool.fadeIn[i] = L.fi || 0;
     pool.mat[i] = L.m;
     pool.cell[i] = L.cell;
@@ -204,7 +216,7 @@ export function createVfx(ctx) {
   for (let i = 0; i < MAX_EMITTERS; i++) {
     emitters.push({
       id: 0, R: /** @type {any} */ (null), entId: 0, socket: 'chest', color: -1, dying: false, fade: 0, fadeTotal: 0,
-      acc: new Float32Array(4), lx: 0, ly: 0, lz: 0, has: false, ttl: 0, t: 0, spin: 0, sizeMul: 1, lifeMul: 1, trail: false,
+      acc: new Float32Array(4), lx: 0, ly: 0, lz: 0, has: false, ttl: 0, t: 0, spin: 0, sizeMul: 1, lifeMul: 1, trail: false, full: false,
     });
   }
   /** @param {any} ent @param {string} socket @param {any} out */
@@ -285,6 +297,7 @@ export function createVfx(ctx) {
     b.radius = b.baseRadius;
     b.intensity = 1;
     b.ringT = 0;
+    b.power = 0;
     b.mat.uniforms.uColor.value.setHex(color);
     fringeOf(b.mat.uniforms.uColor.value, b.mat.uniforms.uFringe.value);
     b.mat.uniforms.uPulse.value = kind === 2 ? 1 : kind === 1 ? 0 : 0.35;
@@ -389,7 +402,14 @@ export function createVfx(ctx) {
       if (!built) return;
       const R = recipeOf(recipeId);
       const o = /** @type {any} */ (opts || EMPTY);
-      const sc = typeof o.scale === 'number' && o.scale > 0 ? o.scale : 1;
+      let sc = typeof o.scale === 'number' && o.scale > 0 ? o.scale : 1;
+      if (R.sigil) {
+        // the Ringfall sigil is carved in the air between the hero hanging at the peak and the ground he dives to
+        // (the caller places it on the ground), at its authored size
+        const p = ctx.player;
+        if (p && Math.abs(p.pos.x - x) < 4 && Math.abs(p.pos.z - z) < 4 && p.pos.y > y + 4) y += (p.pos.y - y) * 0.45;
+        sc = Math.min(sc, 1);
+      }
       const low = isLow();
       const hdrMul = low ? 0.8 : 1;
       let dx = o.dirX || 0;
@@ -433,7 +453,8 @@ export function createVfx(ctx) {
         tokenColor(R.pillar.col, cTmp);
         const b = startBeam(cTmp.getHex(), R.pillar.w * 0.5 * sc, 1);
         if (b) {
-          b.handle.set(x, y - 0.5, z, x, y + R.pillar.h * sc, z, R.pillar.w * 0.5 * sc, 1);
+          const y0 = R.pillar.y0 ? y + R.pillar.y0 : y - 0.5;
+          b.handle.set(x, y0, z, x, y + R.pillar.h * sc, z, R.pillar.w * 0.5 * sc, 1);
           b.timed = R.pillar.t;
         }
       }
@@ -464,6 +485,7 @@ export function createVfx(ctx) {
       e.sizeMul = 1;
       e.lifeMul = 1;
       e.trail = false;
+      e.full = false;
       return id;
     },
 
@@ -481,7 +503,12 @@ export function createVfx(ctx) {
     /** @param {{ color?:number, radius?:number, ownerId?:number }} [opts] */
     beam(opts) {
       const b = startBeam(opts && typeof opts.color === 'number' ? opts.color : PALETTE.ora, opts && opts.radius ? opts.radius : 0.35, 0);
-      return b ? b.handle : NULL_BEAM;
+      if (!b) return NULL_BEAM;
+      // the owner's released charge (0..1) sets how thick and loud the beam looks
+      const owner = opts && opts.ownerId ? ctx.ents.get(opts.ownerId) : null;
+      b.power = owner && owner === ctx.player && owner.combat ? Math.max(0, Math.min(1, owner.combat.charge)) : 1;
+      b.splashAcc = 0;
+      return b.handle;
     },
 
     /**
@@ -585,7 +612,8 @@ export function createVfx(ctx) {
       u.uT.value = 0;
       const color = typeof o.color === 'number' ? o.color : k === 0 ? PALETTE.scorch : k === 1 ? PALETTE.ink : k === 5 ? PALETTE.ora : k === 4 ? PALETTE.paper : PALETTE.telegraph.white;
       u.uColor.value.setHex(color);
-      u.uColor2.value.setHex(PALETTE.scorchRim);
+      // the cooling rim of a scorch glows; on big craters a full-strength rim floods the screen orange
+      u.uColor2.value.setHex(PALETTE.scorchRim).multiplyScalar(k === 0 ? (radius > 6 ? 0.42 : 0.7) : 1);
       u.uStyle.value = color === PALETTE.telegraph.red ? 1 : color === PALETTE.telegraph.violet ? 2 : 0;
       if (k >= 2) u.uColor.value.multiplyScalar(k === 2 || k === 3 ? 1.25 : 1.4);
       const r = radius > 0 ? radius : 1;
@@ -841,13 +869,24 @@ export function createVfx(ctx) {
         }
       }
       if (R.ringSpin) {
-        const g = Math.min(1, e.t / 2);
+        // the charge ring grows with the owner's real charge (0..1), else with time held
+        const cs = ent.combat;
+        const g = cs && cs.charge > 0 ? Math.min(1, cs.charge) : Math.min(1, e.t / 2);
         e.spin += dt * TAU * (1 + 5 * g);
         const s = (0.5 + 0.6 * g) * 2 * (e.dying ? k : 1);
-        const h = 1.6 * hdrMul;
-        parts.sprite(0, v1.x, v1.y, v1.z, s, 0, CELL.ring, cBody.r * h, cBody.g * h, cBody.b * h, 0.9 * k, 0.5, 0, 0, 0, 0);
+        const h = (1.4 + 0.6 * g) * hdrMul;
+        const throb = g >= 1 ? 1 + 0.12 * Math.sin(e.t * 26) : 1;
+        parts.sprite(0, v1.x, v1.y, v1.z, s * throb, 0, CELL.ring, cBody.r * h, cBody.g * h, cBody.b * h, 0.9 * k, 0.5, 0, 0, 0, 0);
         parts.sprite(0, v1.x, v1.y, v1.z, s * 0.85, e.spin, CELL.glyph, 1.4, 1.4, 1.4, 0.7 * k, 0.3, 0, 0, 0, 0);
-        parts.sprite(0, v1.x, v1.y, v1.z, s * 0.7, 0, CELL.dot, cBody.r * h, cBody.g * h, cBody.b * h, 0.6 * k, 1, 0, 0, 0, 0);
+        parts.sprite(0, v1.x, v1.y, v1.z, s * (0.5 + 0.5 * g), 0, CELL.dot, cBody.r * h, cBody.g * h, cBody.b * h, (0.5 + 0.4 * g) * k, 1, 0, 0, 0, 0);
+        // a soft halo around the whole body grows with the charge
+        parts.sprite(0, v1.x, v1.y, v1.z, 1.2 + 2.2 * g, 0, CELL.dot, cBody.r, cBody.g, cBody.b, 0.25 * g * k, 0.2, 0, 0, 0, 0);
+        if (g >= 1 && !e.full && !e.dying) {
+          // fully charged: a ring pulse and sparks, once
+          e.full = true;
+          tmpOpts.dirX = 0; tmpOpts.dirY = 1; tmpOpts.dirZ = 0; tmpOpts.scale = 0.7; tmpOpts.color = cBody.getHex(); tmpOpts.count = undefined;
+          vfx.burst('perfect', v1.x, v1.y, v1.z, tmpOpts);
+        }
       }
       e.lx = v1.x; e.ly = v1.y; e.lz = v1.z;
     }
@@ -896,14 +935,18 @@ export function createVfx(ctx) {
         b.mesh.visible = false;
         continue;
       }
-      b.radius = b.baseRadius * (b.ending ? 0.3 + 0.7 * k : 1);
+      // a Dawn Lance reads its charge: thinner when loosed early, full width (and brighter pulses) when charged
+      const pw = b.kind === 0 ? b.power : 1;
+      b.radius = b.baseRadius * (b.kind === 0 ? 0.62 + 0.38 * pw : 1) * (b.ending ? 0.3 + 0.7 * k : 1);
+      b.mat.uniforms.uPulse.value = b.kind === 2 ? 1 : b.kind === 1 ? 0 : 0.5 + 0.7 * pw;
       const len = mfx.placeBeam(b);
       if (len <= 0) continue;
       const grow = b.kind === 0 ? Math.min(1, (b.t * 400) / len) : Math.min(1, b.t * 8);
       const u = b.mat.uniforms;
       u.uGrow.value = grow;
-      u.uIntensity.value = (1.0 + 0.7 * Math.min(1.5, b.intensity)) * (low ? 0.8 : 1);
-      u.uAlpha.value = Math.min(1, b.intensity) * k;
+      // no bloom on low: the beam body itself carries the glow, so it is not dimmed there
+      u.uIntensity.value = (1.0 + 0.7 * Math.min(1.5, b.intensity)) * (b.kind === 0 ? 1 + 0.25 * pw : low ? 0.8 : 1);
+      u.uAlpha.value = Math.min(1, b.intensity * (b.kind === 0 ? 1.25 : 1)) * k;
       const col = u.uColor.value;
       const dx = (b.bx - b.ax) / len;
       const dy = (b.by - b.ay) / len;
@@ -917,11 +960,48 @@ export function createVfx(ctx) {
       const ia = Math.min(1, b.intensity) * k;
       if (b.kind === 0) {
         // the ring the beam leaves through, glow sprites at both ends, end cap
+        // the ring the beam leaves through stays a hand-sized ring (1-2 m), never a screen-sized glyph
         b.ringT += dt * 9;
-        parts.sprite(0, b.ax, b.ay, b.az, rr * 7, b.ringT, CELL.glyph, col.r * h, col.g * h, col.b * h, 0.8 * ia, 0.4, 0, 0, 0, 0);
-        parts.sprite(0, b.ax, b.ay, b.az, rr * 5.5, 0, CELL.dot, col.r * h, col.g * h, col.b * h, 0.9 * ia, 1, 0, 0, 0, 0);
-        parts.sprite(0, tx, ty, tz, rr * 7, 0, CELL.dot, col.r * h, col.g * h, col.b * h, 0.9 * ia, 1, 0, 0, 0, 0);
-        parts.sprite(0, tx, ty, tz, rr * 6, b.t * 4, CELL.star, 1.6, 1.6, 1.6, 0.8 * ia, 1, 0, 0, 0, 0);
+        const ringS = Math.min(rr * 3.2, 1.1 + 0.9 * pw);
+        parts.sprite(0, b.ax, b.ay, b.az, ringS, b.ringT, CELL.glyph, col.r * h, col.g * h, col.b * h, 0.85 * ia, 0.4, 0, 0, 0, 0);
+        parts.sprite(0, b.ax, b.ay, b.az, ringS * 0.8, 0, CELL.dot, col.r * h, col.g * h, col.b * h, 0.9 * ia, 1, 0, 0, 0, 0);
+        // the impact splash where the beam ends: a hot core, a spinning star and sparks thrown back
+        parts.sprite(0, tx, ty, tz, rr * 3.4, 0, CELL.dot, col.r * h, col.g * h, col.b * h, 0.9 * ia, 1, 0, 0, 0, 0);
+        parts.sprite(0, tx, ty, tz, rr * 3.2, b.t * 4, CELL.star, 1.6, 1.6, 1.6, 0.85 * ia, 1, 0, 0, 0, 0);
+        if (grow >= 1 && !b.ending && dt > 0) {
+          b.splashAcc += (low ? 30 : 50) * dt;
+          let ns = Math.floor(b.splashAcc);
+          b.splashAcc -= ns;
+          if (ns > 4) ns = 4;
+          for (let q = 0; q < ns; q++) {
+            const pi = pool.alloc();
+            if (pi < 0) break;
+            let ux = rnd() * 2 - 1 - dx * 1.6;
+            let uy = rnd() * 2 - 1 - dy * 1.6 + 0.4;
+            let uz = rnd() * 2 - 1 - dz * 1.6;
+            const ul = Math.sqrt(ux * ux + uy * uy + uz * uz) || 1;
+            const sp = 7 + rnd() * 8;
+            ux /= ul; uy /= ul; uz /= ul;
+            pool.px[pi] = tx; pool.py[pi] = ty; pool.pz[pi] = tz;
+            pool.vx[pi] = ux * sp; pool.vy[pi] = uy * sp; pool.vz[pi] = uz * sp;
+            pool.life[pi] = 0.14 + rnd() * 0.1; pool.s0[pi] = 0.12; pool.s1[pi] = 0.04; pool.rot[pi] = 0; pool.rotV[pi] = 0;
+            pool.cr[pi] = 2; pool.cg[pi] = 2; pool.cb[pi] = 2; pool.ca[pi] = 1;
+            pool.grav[pi] = 6; pool.drag[pi] = 4; pool.core[pi] = 1; pool.stretch[pi] = 0.05; pool.fadeIn[pi] = 0;
+            pool.mat[pi] = 1; pool.cell[pi] = CELL.streak; pool.frames[pi] = 1;
+          }
+        }
+        // travelling pulses: bright knots racing from the hand to the tip (all tiers; glow sprites, no draw call)
+        if (tip > 2) {
+          const np = low ? 4 : 6;
+          const pspd = 34 + 20 * pw;
+          for (let q = 0; q < np; q++) {
+            let s = (b.t * pspd + (q * tip) / np) % tip;
+            if (s < 0) s += tip;
+            const f = s / tip;
+            const a = Math.min(1, f * 6) * Math.min(1, (1 - f) * 6) * ia;
+            parts.sprite(0, b.ax + dx * s, b.ay + dy * s, b.az + dz * s, rr * (2.2 + 0.8 * pw), 0, CELL.dot, col.r * h, col.g * h, col.b * h, 0.7 * a, 1, 0, 0, 0, 0);
+          }
+        }
         if (!low) {
           let m = 0;
           for (let s = 4; s < tip - 1 && m < 24; s += 4, m++) {
@@ -1188,7 +1268,8 @@ export function createVfx(ctx) {
       const form = a.style >= 2 && a.style <= 4;
       const cs = ent.combat;
       const transforming = !!(cs && cs.state === 'transform');
-      const gathering = a.style === 1 && !!(cs && cs.gathering);
+      // the player's Gather and charge (Dawn Lance, Breaker) both wear the flame: the shell egg is for enemies
+      const gathering = a.style === 1 && !!(cs && (cs.gathering || (cs.charge > 0 && cs.state === 'windup' && ent === c.player)));
       if (cur <= 0.01) {
         s.mesh.visible = false;
         auraGlowOff(a);
@@ -1586,10 +1667,15 @@ export function createVfx(ctx) {
       const col = p.color;
       const h = low ? 1.4 : 2;
       const sz = Math.max(0.25, (ent.radius || 0.3));
-      // glow sprite, elongated core, small fringe halo
-      parts.sprite(0, v1.x, v1.y, v1.z, sz * 4.2, 0, CELL.dot, col.r * h, col.g * h, col.b * h, 0.85, 0.3, 0, 0, 0, 0);
-      parts.sprite(1, v1.x - dx * 0.25, v1.y - dy * 0.25, v1.z - dz * 0.25, sz * 1.3, 0, CELL.streak, 2.2, 2.2, 2.2, 1, 1, sz * 3.4, dx, dy, dz);
-      parts.sprite(0, v1.x, v1.y, v1.z, sz * 2.2, 0, CELL.dot, p.fringe.r, p.fringe.g, p.fringe.b, 0.6, 0, 0, 0, 0, 0);
+      // soft halo, fringe, bright elongated core and a short trail (three-layer rule; the trail on every tier)
+      parts.sprite(0, v1.x, v1.y, v1.z, sz * 4.8, 0, CELL.dot, col.r * h, col.g * h, col.b * h, 0.75, 0.3, 0, 0, 0, 0);
+      parts.sprite(0, v1.x, v1.y, v1.z, sz * 2.6, 0, CELL.dot, p.fringe.r * 1.4, p.fringe.g * 1.4, p.fringe.b * 1.4, 0.6, 0, 0, 0, 0, 0);
+      parts.sprite(1, v1.x - dx * 0.25, v1.y - dy * 0.25, v1.z - dz * 0.25, sz * 1.5, 0, CELL.streak, 2.4, 2.4, 2.4, 1, 1, sz * 3.8, dx, dy, dz);
+      if (p.has) {
+        const tl = Math.min(3.2, 1.2 + sz * 4);
+        parts.sprite(1, v1.x - dx * tl * 0.55, v1.y - dy * tl * 0.55, v1.z - dz * tl * 0.55, sz * 1.6, 0, CELL.streak,
+          col.r * h, col.g * h, col.b * h, 0.6, 0.3, tl, dx, dy, dz);
+      }
       if (!low && p.has) {
         const pi = pool.alloc();
         if (pi >= 0) {
@@ -1790,6 +1876,30 @@ export function createVfx(ctx) {
     const e = ctx.ents.get(entId);
     return e && e.team === 2 ? PALETTE.hostile : PALETTE.ora;
   }
+  /** The Ora colour of an actor: its Form colour, else Ora (hostile for team 2). @param {any} ent @returns {number} */
+  function formColor(ent) {
+    const fid = ent.combat ? ent.combat.formId : null;
+    if (fid) {
+      const f = ctx.defs.find('form', fid);
+      if (f && typeof f.color === 'number') return f.color;
+    }
+    return ent.team === 2 ? PALETTE.hostile : PALETTE.ora;
+  }
+  let strikeN = 0;
+  /**
+   * A short ribbon of light behind a limb for `seconds`.
+   * @param {number} entId @param {string} socket @param {number} color @param {number} seconds @param {number} width multiplier
+   */
+  function limbTrail(entId, socket, color, seconds, width) {
+    tmpOpts.color = color;
+    const h = vfx.attach('limb_trail', entId, socket, tmpOpts);
+    for (let i = 0; i < emitters.length; i++) {
+      const em = emitters[i];
+      if (em.id !== h) continue;
+      em.ttl = seconds;
+      em.sizeMul = width;
+    }
+  }
   /** @param {number} dx @param {number} dy @param {number} dz @param {number} scale @param {number|undefined} color */
   function bopts(dx, dy, dz, scale, color) {
     tmpOpts.dirX = dx; tmpOpts.dirY = dy; tmpOpts.dirZ = dz; tmpOpts.scale = scale; tmpOpts.color = color; tmpOpts.count = undefined;
@@ -1826,6 +1936,37 @@ export function createVfx(ctx) {
         vfx.decal('crack', e.x, e.z, 1.7, decalOpts);
         waveOpts.radius = 3.6; waveOpts.seconds = 0.3; waveOpts.color = color; waveOpts.sphere = false; waveOpts.ground = true;
         vfx.shockwave(e.x, gy, e.z, waveOpts);
+      }
+    },
+    /** @param {any} e combat:techStart */
+    techStart(e) {
+      if (e.techId === 'strike_string') strikeN = 0;
+    },
+    /**
+     * Technique moments the combat package leaves to vfx: the Nova Ring wall of light, limb trails on strong strikes,
+     * the Pursuit and Ringfall comet trails.
+     * @param {any} e combat:techPhase
+     */
+    techPhase(e) {
+      const ent = ctx.ents.get(e.entId);
+      if (!ent || !ent.alive || ent.team === 2) return;
+      const id = e.techId;
+      const ph = e.phase;
+      const color = formColor(ent);
+      if (id === 'nova_ring' && ph === 'active') {
+        vfx.burst('nova', ent.pos.x, ent.pos.y + 1, ent.pos.z, bopts(0, 1, 0, 1.35, color));
+      } else if (id === 'strike_string' && ph === 'active') {
+        const n = strikeN++;
+        if (n >= 2) limbTrail(ent.id, n === 2 ? 'handR' : n === 3 ? 'handL' : 'feet', color, 0.24, 1);
+      } else if (id === 'breaker' && ph === 'active') {
+        limbTrail(ent.id, 'handR', color, 0.3, 1.3);
+      } else if (id === 'meteor_heel' && ph === 'windup') {
+        limbTrail(ent.id, 'feet', color, 0.55, 1.4);
+      } else if (id === 'pursuit' && ph === 'active') {
+        limbTrail(ent.id, 'chest', color, 0.3, 2.2);
+      } else if (id === 'ringfall') {
+        if (ph === 'windup') limbTrail(ent.id, 'chest', color, 1.1, 1.6);
+        else if (ph === 'active') limbTrail(ent.id, 'chest', color, 0.45, 2.6);
       }
     },
     /** @param {any} e projectile:spawned (pooled) */

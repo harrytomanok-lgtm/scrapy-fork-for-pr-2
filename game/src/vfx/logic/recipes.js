@@ -37,9 +37,10 @@ export const RECIPES = {
     { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [0.9, 0.4], col: 'body', sh: 'still', hdr: 1.6, k: 0.8 },
   ] },
   bolt_hit: { body: 'ora', layers: [
-    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [1.0, 1.6], col: 'core', sh: 'still', hdr: 2.2, rv: 3 },
-    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.16, 0.16], sz: [1.2, 0.3], col: 'body', sh: 'still', hdr: 1.5 },
-    { m: 1, cell: streak, n: 6, lo: 4, sp: [7, 12], life: [0.12, 0.22], sz: [0.06, 0.02], col: 'core', sh: 'sphere', st: 0.04, dr: 6, hdr: 2, k: 1 },
+    { m: 0, cell: star, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [1.4, 2.2], col: 'core', sh: 'still', hdr: 2.4, rv: 3 },
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.16, 0.16], sz: [1.8, 0.5], col: 'body', sh: 'still', hdr: 1.7, k: 0.5 },
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [0.16, 0.16], sz: [0.4, 2.0], col: 'body', sh: 'still', hdr: 1.8 },
+    { m: 1, cell: streak, n: 6, lo: 5, sp: [7, 12], life: [0.12, 0.22], sz: [0.09, 0.03], col: 'core', sh: 'sphere', st: 0.045, dr: 6, hdr: 2, k: 1 },
     { m: 2, cell: smoke, n: 2, lo: 1, sp: [0.4, 1], life: [0.35, 0.5], sz: [0.4, 0.9], col: 'paper', a: 0.35, sh: 'sphere', fb: 4, dr: 2 },
   ] },
   muzzle: { body: 'ora', layers: [
@@ -48,8 +49,8 @@ export const RECIPES = {
     { m: 1, cell: streak, n: 3, lo: 3, sp: [5, 9], life: [0.1, 0.16], sz: [0.04, 0.02], col: 'core', sh: 'dir', dir: 1, st: 0.04, hdr: 2, k: 1 },
   ] },
   beam_charge: { body: 'ora', ringSpin: true, layers: [
-    { m: 1, cell: streak, rate: 34, lo: 16, sp: [3, 5], life: [0.18, 0.28], sz: [0.04, 0.02], col: 'core', sh: 'inward', r: 1.0, st: 0.06, hdr: 2, k: 1 },
-    { m: 0, cell: spark, rate: 14, lo: 6, sp: [0.3, 0.8], life: [0.2, 0.4], sz: [0.14, 0.02], col: 'body', sh: 'sphere', r: 0.5, hdr: 1.8 },
+    { m: 1, cell: streak, rate: 40, lo: 24, sp: [4, 6], life: [0.18, 0.28], sz: [0.07, 0.03], col: 'core', sh: 'inward', r: 1.3, st: 0.06, hdr: 2, k: 1 },
+    { m: 0, cell: spark, rate: 14, lo: 8, sp: [0.3, 0.8], life: [0.2, 0.4], sz: [0.2, 0.03], col: 'body', sh: 'sphere', r: 0.5, hdr: 1.8 },
   ] },
   beam_hit: { body: 'ora', layers: [
     { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.12, 0.12], sz: [1.8, 1.0], col: 'body', sh: 'still', hdr: 1.8, k: 0.6 },
@@ -57,12 +58,14 @@ export const RECIPES = {
     { m: 1, cell: streak, n: 3, lo: 1, sp: [5, 9], life: [0.15, 0.25], sz: [0.05, 0.02], col: 'fringe', sh: 'hemi', st: 0.05, dr: 5, hdr: 1.4 },
     { m: 2, cell: smoke, n: 1, lo: 1, sp: [0.5, 1.5], life: [0.4, 0.6], sz: [0.6, 1.4], col: 'smoke', a: 0.4, sh: 'hemi', fb: 4, dr: 2, hi: true },
   ] },
-  nova: { body: 'ora', shock: { r: 7, t: 0.28, sphere: true, ground: true, col: 'body' }, layers: [
-    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.18, 0.18], sz: [3.5, 6], col: 'core', sh: 'still', hdr: 2.4, k: 1 },
-    { m: 1, cell: streak, n: 28, lo: 14, sp: [18, 28], life: [0.2, 0.32], sz: [0.09, 0.03], col: 'body', sh: 'ring', st: 0.05, dr: 4, hdr: 2, k: 0.6 },
-    { m: 1, cell: streak, n: 12, lo: 6, sp: [12, 20], life: [0.2, 0.3], sz: [0.07, 0.03], col: 'fringe', sh: 'sphere', st: 0.05, dr: 4, hdr: 1.4 },
-    { m: 2, cell: chip, n: 14, lo: 8, sp: [6, 12], life: [0.5, 0.8], sz: [0.22, 0.12], col: 'path', sh: 'hemi', g: 18, rv: 9 },
-    { m: 2, cell: smoke, n: 14, lo: 0, sp: [6, 9], life: [0.5, 0.8], sz: [0.9, 1.8], col: 'paper', a: 0.4, sh: 'ring', fb: 4, dr: 3, hi: true },
+  nova: { body: 'ora', shock: { r: 7, t: 0.3, sphere: true, ground: false, col: 'body' }, layers: [
+    { m: 0, cell: dot, n: 1, lo: 1, sp: [0, 0], life: [0.16, 0.16], sz: [3.5, 5], col: 'core', sh: 'still', hdr: 2.4, k: 1, cap: 5 },
+    { m: 0, cell: ring, n: 2, lo: 2, sp: [0, 0], life: [0.22, 0.3], sz: [1, 9], col: 'body', sh: 'still', hdr: 2, rr: true },
+    { m: 1, cell: streak, n: 32, lo: 22, sp: [18, 28], life: [0.22, 0.34], sz: [0.16, 0.05], col: 'body', sh: 'ring', r: 0.6, st: 0.05, dr: 4, hdr: 2.2, k: 0.6 },
+    { m: 1, cell: streak, n: 24, lo: 16, sp: [12, 18], life: [0.25, 0.4], sz: [0.14, 0.04], col: 'core', sh: 'ring', r: 1.2, st: 0.05, dr: 3, hdr: 2, k: 1, lift: 7 },
+    { m: 1, cell: streak, n: 12, lo: 6, sp: [12, 20], life: [0.2, 0.3], sz: [0.1, 0.03], col: 'fringe', sh: 'sphere', st: 0.05, dr: 4, hdr: 1.5 },
+    { m: 2, cell: chip, n: 14, lo: 10, sp: [6, 12], life: [0.5, 0.8], sz: [0.26, 0.14], col: 'path', sh: 'hemi', g: 18, rv: 9 },
+    { m: 2, cell: smoke, n: 16, lo: 12, sp: [7, 11], life: [0.5, 0.85], sz: [1.0, 2.2], col: 'paper', a: 0.5, sh: 'ring', r: 0.8, fb: 4, dr: 3, gnd: true },
   ] },
   ult_rise: { body: 'ora', layers: [
     { m: 1, cell: streak, n: 30, lo: 15, rate: 60, sp: [10, 18], life: [0.3, 0.5], sz: [0.1, 0.03], col: 'body', sh: 'up', st: 0.06, hdr: 2, k: 0.5 },
@@ -70,18 +73,20 @@ export const RECIPES = {
     { m: 2, cell: smoke, n: 10, lo: 5, sp: [5, 9], life: [0.5, 0.9], sz: [1.0, 2.2], col: 'paper', a: 0.4, sh: 'ring', fb: 4, dr: 3 },
   ] },
   ult_sigil: { body: 'ora', sigil: true, layers: [
-    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [1.0, 1.0], sz: [28, 28], col: 'body', sh: 'still', hdr: 1.8, rv: 1.2, fi: 0.25 },
-    { m: 0, cell: glyph, n: 1, lo: 0, sp: [0, 0], life: [1.0, 1.0], sz: [20, 20], col: 'core', sh: 'still', hdr: 1.6, rv: -1.8, fi: 0.3 },
-    { m: 0, cell: ring, n: 1, lo: 0, sp: [0, 0], life: [1.0, 1.0], sz: [12, 12], col: 'fringe', sh: 'still', hdr: 1.6, rv: 2.6, fi: 0.35 },
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [1.0, 1.0], sz: [16, 16], col: 'body', sh: 'still', hdr: 2, rv: 1.2, fi: 0.25 },
+    { m: 0, cell: glyph, n: 1, lo: 1, sp: [0, 0], life: [1.0, 1.0], sz: [12, 12], col: 'core', sh: 'still', hdr: 1.6, rv: -1.8, fi: 0.3 },
+    { m: 0, cell: ring, n: 1, lo: 1, sp: [0, 0], life: [1.0, 1.0], sz: [7, 7], col: 'fringe', sh: 'still', hdr: 1.8, rv: 2.6, fi: 0.35 },
     { m: 0, cell: spark, n: 24, lo: 12, sp: [1, 3], life: [0.6, 1.0], sz: [0.4, 0.1], col: 'core', sh: 'ring', r: 7, hdr: 2 },
   ] },
   ult_dive: { body: 'ora', layers: [
-    { m: 1, cell: streak, n: 24, lo: 12, rate: 80, sp: [2, 6], life: [0.3, 0.6], sz: [0.3, 0.1], col: 'body', sh: 'sphere', r: 0.8, st: 0.2, hdr: 2, k: 0.6 },
+    { m: 1, cell: streak, n: 24, lo: 16, rate: 80, sp: [2, 6], life: [0.3, 0.6], sz: [0.3, 0.1], col: 'body', sh: 'sphere', r: 0.8, st: 0.2, hdr: 2, k: 0.6 },
+    { m: 1, cell: streak, n: 1, lo: 1, sp: [0, 0], life: [0.35, 0.35], sz: [1.4, 0.6], col: 'core', sh: 'still', hdr: 2.2, k: 1, tail: 14 },
     { m: 0, cell: dot, n: 2, lo: 1, rate: 20, sp: [0, 0.5], life: [0.2, 0.3], sz: [3, 1.5], col: 'core', sh: 'still', hdr: 2.4, k: 1 },
   ] },
   ult_impact: { body: 'ora', light: { r: 40, i: 3, t: 1.5 }, shock: { r: 30, t: 0.6, sphere: true, ground: true, col: 'body' },
-    pillar: { h: 60, w: 1.2, t: 0.7, col: 'body' }, decal: { kind: 'scorch', r: 18, t: 14 }, layers: [
-      { m: 0, cell: dot, n: 2, lo: 1, sp: [0, 0], life: [0.3, 0.45], sz: [6, 12], col: 'core', sh: 'still', hdr: 2.2, k: 1 },
+    pillar: { h: 60, w: 0.9, t: 0.6, col: 'body', y0: 2.4 }, decal: { kind: 'scorch', r: 18, t: 14 }, layers: [
+      { m: 0, cell: dot, n: 2, lo: 1, sp: [0, 0], life: [0.25, 0.4], sz: [5, 9], col: 'core', sh: 'still', hdr: 2.2, k: 1, cap: 9, fi: 0.15 },
+      { m: 0, cell: ring, n: 2, lo: 2, sp: [0, 0], life: [0.35, 0.5], sz: [3, 26], col: 'body', sh: 'still', hdr: 2, rr: true, cap: 34 },
       { m: 1, cell: streak, n: 60, lo: 30, sp: [30, 55], life: [0.3, 0.6], sz: [0.25, 0.06], col: 'body', sh: 'hemi', st: 0.05, dr: 3, hdr: 2.2, k: 0.5 },
       { m: 1, cell: streak, n: 30, lo: 12, sp: [20, 35], life: [0.3, 0.5], sz: [0.2, 0.05], col: 'fringe', sh: 'ring', st: 0.05, dr: 3, hdr: 1.6 },
       { m: 2, cell: chip, n: 40, lo: 20, sp: [10, 22], life: [0.8, 1.4], sz: [0.6, 0.3], col: 'path', sh: 'hemi', g: 20, rv: 8 },
@@ -279,6 +284,9 @@ export const RECIPES = {
   debris: { body: 'path', layers: [
     { m: 2, cell: chip, n: 16, lo: 8, sp: [5, 10], life: [0.6, 1.0], sz: [0.3, 0.16], col: 'body', sh: 'hemi', g: 18, rv: 9 },
     { m: 2, cell: smoke, n: 8, lo: 4, sp: [1.5, 3], life: [0.6, 1.0], sz: [0.8, 1.8], col: 'paper', a: 0.55, sh: 'hemi', fb: 4, dr: 2 },
+  ] },
+  limb_trail: { body: 'ora', layers: [
+    { m: 1, cell: streak, rate: 90, lo: 60, sp: [0, 0.2], life: [0.16, 0.16], sz: [0.34, 0.04], col: 'body', sh: 'still', st: 0.0, hdr: 1.8, k: 0.5, trail: true },
   ] },
   trail: { body: 'ora', layers: [
     { m: 1, cell: streak, rate: 40, lo: 20, sp: [0, 0.3], life: [0.25, 0.25], sz: [0.3, 0.05], col: 'body', sh: 'still', st: 0.0, hdr: 1.4, trail: true },

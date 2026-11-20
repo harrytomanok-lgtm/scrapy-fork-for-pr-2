@@ -6,7 +6,7 @@
  * and the draw calls of a fight within 120.
  * Run with `node tools/scenarios.mjs fx [--only name]`. Single shots go to tools/out/shots/fx-<name>.png.
  */
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { OUT_SHOTS } from '../lib/harness.mjs';
 
@@ -114,8 +114,8 @@ const EFFECTS = [
     g.use('meteor_heel', { force: true }); fx.run(16);
   } },
   { name: 'pursuit', label: 'Pursuit (dash to target)', fn: (g, P, fx) => {
-    const id = fx.dummy(P, 14); fx.cam(P, 1.3, -0.1, 9); g.step(2);
-    g.use('pursuit', { force: true, targetId: id }); fx.run(5);
+    const id = fx.dummy(P, 2.6); fx.cam(P, 1.3, -0.1, 10); g.step(2);
+    g.use('breaker', { force: true, charge: 1, targetId: id }); fx.run(12); g.press('dash'); fx.run(5);
   } },
   { name: 'guard', label: 'Guard shell', fn: (g, P, fx) => {
     fx.cam(P, 2.4, -0.1, 5); g.step(2);
@@ -140,7 +140,7 @@ const EFFECTS = [
   } },
   { name: 'gather', wait: 0.6, label: 'Gather (charging Ora)', fn: (g, P, fx) => {
     fx.cam(P, 2.6, -0.08, 5); g.setOra(10); g.step(2);
-    g.hold('gather', true); fx.run(90);
+    g.hold('gather', true); for (let i = 0; i < 6; i++) { g.setOra(10); fx.run(40); }
   } },
   // ---------------------------------------------------------------- Ora energy
   { name: 'bolt-flight', label: 'Ora Bolt in flight', fn: (g, P, fx) => {
@@ -166,11 +166,11 @@ const EFFECTS = [
     fx.run(Math.max(10, Math.round(mx * 60) - 4));
   } },
   { name: 'lance-beam-0', label: 'Dawn Lance beam, uncharged', fn: (g, P, fx) => {
-    fx.dummy(P, 16); fx.cam(P, 0.75, -0.08, 7); g.step(2);
+    fx.dummy(P, 16); fx.cam(P, 1.35, -0.1, 9); g.step(2);
     g.use('dawn_lance', { force: true, charge: 0 }); fx.run(24);
   } },
   { name: 'lance-beam-1', label: 'Dawn Lance beam, full charge', fn: (g, P, fx) => {
-    fx.dummy(P, 16); fx.cam(P, 0.75, -0.08, 7); g.step(2);
+    fx.dummy(P, 16); fx.cam(P, 1.35, -0.1, 9); g.step(2);
     g.use('dawn_lance', { force: true, hold: true });
     fx.run(Math.round(g.ctx.defs.find('technique', 'dawn_lance').charge.max * 60) + 22);
   } },
@@ -378,6 +378,18 @@ async function waitFlame(page, min) {
   }
 }
 
+/**
+ * A screenshot with a longer timeout than the harness shot: a full-screen effect under SwiftShader on a loaded
+ * machine can take more than 30 s to present. @param {any} page @param {string} name @returns {Promise<string>}
+ */
+async function snap(page, name) {
+  await page.evaluate(() => window.__GAME__.screenshotReady());
+  mkdirSync(OUT_SHOTS, { recursive: true });
+  const path = join(OUT_SHOTS, name + '.png');
+  await page.screenshot({ path, timeout: 120000 });
+  return path;
+}
+
 /** The low-tier fight budget (perf-budget). */
 const FIGHT_DRAWS = 120;
 
@@ -387,7 +399,7 @@ export const scenarios = [
     width: 412,
     height: 915,
     query: 'res=1',
-    async run({ page, game, assert, shot }) {
+    async run({ page, game, assert }) {
       const p = await game((g) => g.player());
       assert.ok(p, 'the player exists after boot');
       const only = process.env.FX_ONLY ? process.env.FX_ONLY.split(',') : null;
@@ -427,7 +439,7 @@ export const scenarios = [
         maxP = Math.max(maxP, st.particles);
         maxDraw = Math.max(maxDraw, st.drawCalls);
         if (e.wait) await waitFlame(page, e.wait);
-        const file = await shot('fx-' + e.name);
+        const file = await snap(page, 'fx-' + e.name);
         done.push({ name: e.name, label: e.label, file });
         console.log(`    ${e.name}: ${st.particles} particles, ${st.drawCalls} dc`);
         assert.equal(st.programs, prog0, `${e.name}: no program linked`);
@@ -449,7 +461,7 @@ export const scenarios = [
         const s = g.stats();
         return { drawCalls: s.drawCalls, particles: s.particles, programs: s.programs };
       }, P);
-      await shot('fx-fight');
+      await snap(page, 'fx-fight');
       console.log(`    fight: ${fight.drawCalls} dc, ${fight.particles} particles; gallery max ${maxDraw} dc`);
       assert.ok(fight.drawCalls <= FIGHT_DRAWS, `fight draw calls <= ${FIGHT_DRAWS} (${fight.drawCalls})`);
       assert.equal(fight.programs, prog0, 'no program linked in the fight');
