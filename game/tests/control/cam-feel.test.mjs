@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { lockPitch, recentreStep, LOCK_BAND } from '../../src/control/logic/camMath.js';
 import { stickResponse, STICK } from '../../src/control/logic/gesture.js';
+import { touchLayout, hitTest, layoutProblems } from '../../src/control/logic/touchLayout.js';
 
 const D2R = Math.PI / 180;
 /** Screen offset (+ up, -1..1) of a point at elevation `elev` for a camera pitched `pitch` with half-FOV `half`. */
@@ -43,6 +44,17 @@ test('recentre: eases in after the delay, slows near the heading, lands exactly,
     prev = d;
   }
   assert.ok(d < 1e-6, 'reaches the heading in time');
+});
+
+test('portrait: a stick thumb landing just above the deck starts the stick, not a camera turn', () => {
+  for (const [w, h] of [[400, 860], [360, 640], [412, 915]]) {
+    const L = touchLayout({ w, h });
+    const deckTop = L.deck.y;
+    assert.equal(hitTest(L, 60, deckTop - 20), 'move', `${w}x${h} 20 px above the deck`);
+    assert.equal(hitTest(L, Math.round(w * 0.58), deckTop - 20), 'look', 'the right half above the deck still looks');
+    assert.equal(hitTest(L, 60, deckTop - 80), 'look', 'higher up is the camera');
+    assert.deepEqual(layoutProblems(L, {}), []);
+  }
 });
 
 test('stick: dead zone, a wide walking band, full speed before the rim', () => {

@@ -433,6 +433,18 @@ export function createCam(ctx, shared) {
               const rate = 140 * D2R * dt;
               st.yaw = wrapAngle(st.yaw + clamp(angleDelta(st.yaw, want), -rate, rate));
               framed = true;
+            } else if (idle > 0.35) {
+              // Flank: a close enemy straight ahead hides behind the hero, so the view eases a little to the side
+              // it is already on (the lock framing does the same on thirds).
+              const fdx = t.pos.x - target.pos.x;
+              const fdz = t.pos.z - target.pos.z;
+              if (fdx * fdx + fdz * fdz < CAM.flankRange * CAM.flankRange && Math.abs(off) < CAM.flankAngle) {
+                if (Math.abs(off) > 2 * D2R) st.lockSide = off > 0 ? 1 : -1;
+                const want = bearing - st.lockSide * CAM.flankAngle;
+                const rate = 60 * D2R * dt;
+                st.yaw = wrapAngle(st.yaw + clamp(angleDelta(st.yaw, want), -rate, rate));
+                framed = true;
+              }
             }
           } else {
             st.threatT = 0;

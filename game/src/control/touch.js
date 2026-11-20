@@ -12,14 +12,20 @@
  */
 
 import { touchLayout, TOUCH_BUTTONS } from './logic/touchLayout.js';
-import { isFlick } from './logic/gesture.js';
+import { isFlick, stickResponse } from './logic/gesture.js';
+import { BALANCE } from '../core/balance.js';
 
 const ID = 'touch';
 const LOOK_DEG_PER_PX = 0.25;
-const DEAD_ZONE = 0.1;
 const TAP_PX = 12;
 const TAP_MS = 280;
 const LONG_MS = 450;
+/** Attack held this long becomes Breaker (GDD 5.1); the charge ring shows the arming, then the charge. */
+const HEAVY_HOLD = BALANCE.tech.breaker.holdSeconds;
+/** A hold shows its charge ring only after this many seconds, so a tap never flashes it. */
+const RING_AFTER = 0.1;
+/** Buttons with a hold-to-charge ring. */
+const CHARGE_BUTTONS = Object.freeze(['attack', 'tech1', 'tech2']);
 /** Buttons whose long press sends another action instead of the tap action. */
 const LONG_ACTIONS = { form: 'formNext', item: 'itemNext' };
 /** Form colours (palette tokens of ART_UX 7.1 / core palette). */
@@ -81,6 +87,11 @@ const CSS = `
   box-sizing:border-box;border-radius:10px;background:#1B1626;border:1.5px solid rgba(243,235,221,.7);color:#F3EBDD;
   font:700 12px/17px system-ui,sans-serif;text-align:center}
 .ctl-btn.ctl-small svg{inline-size:52%;block-size:52%}
+.ctl-btn .ctl-chg{position:absolute;inset:-8px;inline-size:calc(100% + 16px);block-size:calc(100% + 16px);transform:rotate(-90deg);
+  opacity:0;transition:opacity .08s}
+.ctl-btn .ctl-chg circle{fill:none;stroke:#FFB547;stroke-width:3.5;stroke-linecap:round;filter:drop-shadow(0 0 3px rgba(255,181,71,.7))}
+.ctl-btn.ctl-charging .ctl-chg{opacity:1}
+.ctl-btn.ctl-charged .ctl-chg circle{stroke:#FFF3D6}
 `;
 
 /**
@@ -119,7 +130,7 @@ export function createTouch(ctx, shared) {
     + 'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
   root.append(probe);
 
-  /** @type {Record<string, { el:HTMLElement, pointer:number, downAt:number, longSent:boolean, cd:SVGCircleElement|null, count:HTMLElement|null, shown:boolean }>} */
+  /** @type {Record<string, { el:HTMLElement, pointer:number, downAt:number, longSent:boolean, cd:SVGCircleElement|null, count:HTMLElement|null, shown:boolean, chg:SVGCircleElement|null, chgShown:number }>} */
   const btns = {};
   const SVGNS = 'http://www.w3.org/2000/svg';
   for (const action of TOUCH_BUTTONS) {
@@ -149,8 +160,19 @@ export function createTouch(ctx, shared) {
       count.className = 'ctl-count';
       el.append(count);
     }
+    /** @type {SVGCircleElement|null} */
+    let chg = null;
+    if (CHARGE_BUTTONS.indexOf(action) >= 0) {
+      const ring = document.createElementNS(SVGNS, 'svg');
+      ring.setAttribute('viewBox', '0 0 36 36');
+      ring.setAttribute('class', 'ctl-chg');
+      ring.setAttribute('aria-hidden', 'true');
+      ring.innerHTML = '<circle cx="18" cy="18" r="16" pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="100"/>';
+      el.append(ring);
+      chg = /** @type {any} */ (ring.querySelector('circle'));
+    }
     root.append(el);
-    btns[action] = { el, pointer: -1, downAt: 0, longSent: false, cd, count, shown: false };
+    btns[action] = { el, pointer: -1, downAt: 0, longSent: false, cd, count, shown: false, chg, chgShown: 0 };
   }
 
   /** @type {Array<[EventTarget, string, any, any]>} */
@@ -240,14 +262,10 @@ export function createTouch(ctx, shared) {
       place(base, stick.ox, stick.oy, L.stickBase);
     }
     place(knob, stick.ox + dx, stick.oy + dy, L.stickKnob);
-    const n = len / T;
-    let ax = 0;
-    let ay = 0;
-    if (n > DEAD_ZONE && len > 0) {
-      const m = (n - DEAD_ZONE) / (1 - DEAD_ZONE);
-      ax = (dx / len) * m;
-      ay = (-dy / len) * m;
-    }
+    // Dead zone and response curve (logic/gesture.js): half the travel is a walk, full speed before the rim.
+    const m = len > 0 ? stickResponse(len / T) : 0;
+    const ax = m > 0 ? (dx / len) * m : 0;
+    const ay = m > 0 ? (-dy / len) * m : 0;
     input().setAxis('moveX', ax, ID);
     input().setAxis('moveY', ay, ID);
   }
@@ -533,6 +551,37 @@ export function createTouch(ctx, shared) {
     cooldown('tech2', tech2, p);
   }
 
+  /**
+   * Charge rings on held buttons: Attack fills a third while arming Breaker (0.35 s), then with the Breaker's
+   * charge; Tech 1 and 2 fill with the charge of a hold-to-charge technique. Attribute writes only on change.
+   * @param {any} p
+   */
+  function chargeRings(p) {
+    const c = p && p.combat ? p.combat : null;
+    const now = performance.now();
+    for (let i = 0; i < CHARGE_BUTTONS.length; i++) {
+      const action = CHARGE_BUTTONS[i];
+      const b = btns[action];
+      if (!b.chg) continue;
+      let frac = 0;
+      const held = b.pointer >= 0 ? (now - b.downAt) / 1000 : 0;
+      if (held > RING_AFTER && c) {
+        if (action === 'attack') {
+          const heavy = c.techId === 'breaker' || c.techId === 'meteor_heel';
+          frac = held < HEAVY_HOLD || !heavy ? Math.min(1, held / HEAVY_HOLD) * 0.34 : 0.34 + 0.66 * (c.charge || 0);
+        } else if (c.state === 'windup' && c.charge > 0) {
+          frac = c.charge;
+        }
+      }
+      const q = Math.round(frac * 40) / 40;
+      if (q === b.chgShown) continue;
+      b.chgShown = q;
+      b.chg.setAttribute('stroke-dashoffset', String(100 - q * 100));
+      b.el.classList.toggle('ctl-charging', q > 0);
+      b.el.classList.toggle('ctl-charged', q >= 1);
+    }
+  }
+
   /** @param {string} action @param {string|null} techId @param {any} p */
   function cooldown(action, techId, p) {
     const b = btns[action];
@@ -602,6 +651,7 @@ export function createTouch(ctx, shared) {
         latched = on;
         btns.dash.el.classList.toggle('ctl-latched', on);
       }
+      chargeRings(pl);
       slowT += dt > 0 ? dt : 1 / 60;
       sizeCheckT += dt > 0 ? dt : 1 / 60;
       if (sizeCheckT >= 1) {

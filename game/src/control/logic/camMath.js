@@ -53,6 +53,9 @@ export const CAM = Object.freeze({
   shakeMetres: 0.45,
   shakeRollDeg: 2.5,
   threatOffscreen: 1.0,
+  /** Group combat: an enemy closer than flankRange (m) within flankAngle of the view centre is eased to the side. */
+  flankRange: 9,
+  flankAngle: 20 * D2R,
 });
 
 /**
@@ -215,7 +218,7 @@ export function easeToward(pitch, rest, seconds, dt) {
  * below `top` (the HUD target frame sits at the top centre) and above `bottom` (the hero and, in portrait, the
  * control deck fill the lower part).
  */
-export const LOCK_BAND = Object.freeze({ top: 0.42, bottom: -0.3, topPortrait: 0.36, bottomPortrait: -0.12 });
+export const LOCK_BAND = Object.freeze({ top: 0.3, bottom: -0.3, topPortrait: 0.36, bottomPortrait: -0.12 });
 
 /**
  * Pitch that keeps a point at elevation `elev` (radians, seen from the camera) inside the band [bottom, top] of a
