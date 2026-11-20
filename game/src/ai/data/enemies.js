@@ -69,6 +69,18 @@ function roster() {
   });
 }
 
+/**
+ * Camp elites (the experience pass): one member of every camp is an elite, its leader (the member with the most HP).
+ * Larger and ringed in the rare-loot colour, tougher, with one extra move, and a better reward (rpg: XP and the
+ * elite loot table). Multipliers apply to the base enemy at its level.
+ */
+export const ELITE = Object.freeze({ hp: 2.4, dmg: 1.2, poise: 1.6, scale: 1.25, xp: 3, color: PALETTE.rarity.rare });
+/** The elite's extra move per enemy. */
+export const ELITE_MOVE = Object.freeze({
+  tusk_boar: 'elite_quake', bramble_boar: 'elite_quake', choir_acolyte: 'elite_quake', scuttlecrab: 'elite_quake', rust_golem: 'elite_quake',
+  choir_vanguard: 'elite_quake', ember_wisp: 'elite_fan', choir_caster: 'elite_fan', frost_harrier: 'elite_fan',
+});
+
 /** Phase technique tables of the five bosses (GDD 7.3). */
 const BOSS_PHASES = {
   durn: [

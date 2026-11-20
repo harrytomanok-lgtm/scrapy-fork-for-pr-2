@@ -17,6 +17,7 @@ import { createDirector } from './logic/director.js';
 import { createBrain, createSense, techEntries, think, started } from './logic/brain.js';
 import { pickEntry, enemyLevel, campAvailable, phaseFor, createPendingBoss } from './logic/spawning.js';
 import { registerAiScripts } from './scripts.js';
+import { ELITE, ELITE_MOVE } from './data/enemies.js';
 
 const BODY_SECONDS = 1.5;
 /** Seconds of boss intro left after the player skips the intro shot (a beat to get the guard up). */
@@ -258,10 +259,22 @@ export function createAi(ctx) {
       ent.stats.hp = Math.max(1, Math.round(ent.stats.hp * o.hpMult));
       ent.stats.hpMax = ent.stats.hp;
     }
-    ctx.actors.create(ent, def.specId, {});
+    const elite = !!o.elite && def.tier !== 'boss';
+    if (elite) {
+      ent.tags |= TAG.ELITE;
+      ent.nameKey = 'enemy.' + enemyId + '.elite';
+      ent.stats.hp = Math.max(1, Math.round(ent.stats.hp * ELITE.hp));
+      ent.stats.hpMax = ent.stats.hp;
+      ent.stats.poiseMax = Math.round(ent.stats.poiseMax * ELITE.poise);
+      ent.stats.poise = ent.stats.poiseMax;
+      ent.stats.dmgMult *= ELITE.dmg;
+    }
+    ctx.actors.create(ent, def.specId, elite ? { scale: ELITE.scale } : {});
+    if (elite && ctx.actors.rimGlow) ctx.actors.rimGlow(ent, ELITE.color, 0.6);
     ctx.move.initActor(ent, { canFly: flyer, mode: flyer ? 'fly' : 'ground' });
     ctx.combat.initActor(ent);
-    const techs = techEntries(def.techs, (id) => ctx.defs.find('technique', id));
+    const techIds = elite && ELITE_MOVE[enemyId] ? def.techs.concat([ELITE_MOVE[enemyId]]) : def.techs;
+    const techs = techEntries(techIds, (id) => ctx.defs.find('technique', id));
     const b = createBrain(def.brain, params, techs, { x, y: yy, z }, {
       passive: !!o.passive, aggro: !!o.aggro, leash: typeof o.leash === 'number' ? o.leash : undefined, flyer, seed: ent.id, hover: HOVER_RULE,
     });
@@ -288,6 +301,17 @@ export function createAi(ctx) {
     let total = 0;
     for (const m of g.members) if (!allow || allow(m.enemy)) total += m.count;
     let i = 0;
+    // A camp's leader (the member with the most HP) is its elite.
+    let leader = null;
+    if (origin === ORIGIN.camp) {
+      let best = -1;
+      for (const m of g.members) {
+        if (allow && !allow(m.enemy)) continue;
+        const d = ctx.defs.find('enemy', m.enemy);
+        const hp = d && d.mult ? d.mult.hp : 0;
+        if (hp > best) { best = hp; leader = m.enemy; }
+      }
+    }
     for (const m of g.members) {
       if (allow && !allow(m.enemy)) continue;
       const def = ctx.defs.find('enemy', m.enemy);
@@ -296,7 +320,8 @@ export function createAi(ctx) {
         let px = x + Math.sin(a) * radius;
         let pz = z + Math.cos(a) * radius;
         if (ctx.world && ctx.world.findSpot && ctx.world.findSpot(px, pz, 6, SPOT, {})) { px = SPOT.x; pz = SPOT.z; }
-        const so = { aggro: !!o.aggro, questTag: o.questTag, campId: o.campId };
+        const so = { aggro: !!o.aggro, questTag: o.questTag, campId: o.campId, elite: leader === m.enemy };
+        if (leader === m.enemy) leader = null;
         if (typeof o.level === 'number') so.level = def ? enemyLevel(o.level + (m.levelOffset || 0), o.clamp ? def.levels : [1, 99]) : o.level;
         const e = spawnInternal(m.enemy, px, ctx.world ? ctx.world.heightAt(px, pz) : 0, pz, so, undefined, origin);
         if (e) res.push(e.id);

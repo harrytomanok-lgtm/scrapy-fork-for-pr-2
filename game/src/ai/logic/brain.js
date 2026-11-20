@@ -22,6 +22,8 @@
 export const HOVER_RULE = { height: 12, seconds: 6 };
 /** A target this far above a ground-only enemy is out of its reach (throw instead). */
 const OUT_OF_REACH = 2.5;
+/** Extra distance (m) a ranged enemy keeps while it has allies near (behind the melee line). */
+const BACKLINE = 4;
 
 /**
  * @typedef {{ id:string, min:number, max:number, weight:number, cooldown:number, token:'melee'|'ranged',
@@ -342,7 +344,9 @@ export function think(b, s, api) {
         break;
       }
       if (b.kind === 'ranged') {
-        const mid = (b.preferMin + b.preferMax) * 0.5;
+        // With melee allies in front, a ranged enemy hangs back behind their line: the player has to cut through or
+        // fly over to reach it first.
+        const mid = (b.preferMin + b.preferMax) * 0.5 + (s.allies > 0 ? BACKLINE : 0);
         orbit(b, s, mid, 0.7);
       } else if (b.kind === 'diver') {
         orbit(b, s, b.engage, 0.8);

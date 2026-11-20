@@ -221,6 +221,23 @@ export function enemyTechniques() {
       hits: [hit({ shape: 'ring', f: 0, radius: 3.5, power: ET.vanguard_smash.power, poise: 24, knock: { kind: 'smash', speed: 26 }, feel: 'heavyHit', maxTargets: 2 })],
       ai: { minRange: 0, maxRange: 6, weight: 2, cooldown: 6, vsAir: true },
     }),
+    // Camp elites' extra move (one per elite, see ELITE_MOVE in ai/data/enemies.js). A ground elite stamps a wide
+    // red ring that the player jumps or flies over; a flying or hovering elite fans five bolts the player guards or
+    // weaves through.
+    etech('elite_quake', 'red', {
+      cooldown: 7, timeline: { windup: 1.1, active: 0.15, recover: 1.0, cancelFrom: -1 },
+      anim: { windup: 'charge_windup', active: 'slam', recover: 'idle' },
+      telegraph: { kind: 'red', shape: 'circle', radius: 7, atTarget: false },
+      hits: [hit({ shape: 'ring', f: 0, u: 0.3, radius: 7, power: 1.4, poise: 24, knock: { kind: 'launch', up: 9 }, feel: 'heavyHit', maxTargets: 4 })],
+      ai: { minRange: 0, maxRange: 5.5, weight: 2, cooldown: 7 },
+    }),
+    etech('elite_fan', 'white', {
+      rating: 'ora', cooldown: 6, timeline: { windup: 0.9, active: 0.2, recover: 0.7, cancelFrom: -1 },
+      anim: { windup: 'cast', active: 'ranged', recover: 'idle' }, move: { lock: 'slow', turn: true, air: true, ground: true },
+      telegraph: { kind: 'white', shape: 'line', radius: 30, atTarget: false },
+      projectiles: [shot({ count: 5, spreadDeg: 44, speed: 26, homing: 0.3, power: 0.7 })],
+      ai: { minRange: 5, maxRange: 30, weight: 2, cooldown: 6, token: 'ranged', vsAir: true },
+    }),
     // Ground-only enemies against a flyer (GDD 6.6): a thrown rock.
     etech('enemy_rock', 'white', {
       cooldown: 3, timeline: { windup: 0.8, active: 0.12, recover: 0.6, cancelFrom: -1 },

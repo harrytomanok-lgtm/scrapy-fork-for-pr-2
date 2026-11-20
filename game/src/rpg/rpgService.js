@@ -8,6 +8,7 @@
 
 import { BALANCE } from '../core/balance.js';
 import * as F from '../core/formulas.js';
+import { TAG } from '../core/ents.js';
 import * as P from './logic/progression.js';
 import * as I from './logic/inventory.js';
 import { gearPool, rollLoot } from './logic/loot.js';
@@ -15,6 +16,8 @@ import { gearPool, rollLoot } from './logic/loot.js';
 const PICKUP_LIFE = 120;
 const PICKUP_SPEED = 16;
 const COLLECT_RADIUS = 1.4;
+/** XP multiplier of a camp elite. */
+const ELITE_XP = 3;
 /**
  * Flying pickups up: in flight the magnet reaches further and pulls faster than the flight speed, and the pickup is
  * taken within a wider radius, so a pass at speed collects what it brushes (Ora shards in the air, drops in a fight).
@@ -716,10 +719,14 @@ export function createRpg(ctx) {
       // Bosses use xpMult 6 (GDD 4.1); applied here unless the boss's enemy def already carries it.
       const ownMult = def.mult && typeof def.mult.xp === 'number' ? def.mult.xp : 1;
       if ((p.kind === 'boss' || def.tier === 'boss') && ownMult < BALANCE.bossRules.xpMult) xp = Math.round(xp * BALANCE.bossRules.xpMult / ownMult);
+      // A camp elite (ai tags it ELITE) pays more and drops from the elite table.
+      const ent = ctx.ents.get(p.entId);
+      const elite = p.kind === 'enemy' && def.tier !== 'elite' && !!ent && (ent.tags & TAG.ELITE) !== 0;
+      if (elite) xp *= ELITE_XP;
       rpg.grantXp(xp, 'kill');
       const bd = p.kind === 'boss' ? ctx.defs.find('boss', p.defId) : null;
       const bi = bd && BALANCE.bosses[bd.id] ? BALANCE.bosses[bd.id].index : 1;
-      dropFrom(def.lootTable, p.level, p.x, p.y, p.z, def, bi);
+      dropFrom(elite && ctx.defs.find('lootTable', 'elite') ? 'elite' : def.lootTable, p.level, p.x, p.y, p.z, def, bi);
     },
     playerDied() {
       S().stats.deaths++;
