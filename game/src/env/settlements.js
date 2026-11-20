@@ -15,6 +15,8 @@ import { FOOTPRINT, REQUIRED_SPOTS } from './data/settlements.js';
 import { dressVillage } from './village.js';
 
 const SOLID = 1;
+/** The five main settlements that get houses filled in around their square (env/village). */
+const MAIN_VILLAGES = Object.freeze(['sparkstead', 'haven_aster', 'copperwatch', 'ridgerest', 'tide_beacon']);
 /** Settlements farther than this from the camera are hidden (fog has eaten them). */
 const HIDE_DIST = 2400;
 const KITE_COLORS = PALETTE.structure.kites;
@@ -152,6 +154,11 @@ export function createSettlements(ctx) {
     B.add(prim.disc(0.95, 10), f.m(0, y0 + 1.1, dz, 0, -lean), SLOT.TERRA);
     B.add(prim.disc(0.8, 10), f.m(0, y0 + 1.1, dz + 0.03, 0, -lean), SLOT.CURTAIN);
     B.add(prim.box(1.6, 0.18, 0.7), f.m(0, y0 - 0.1, dz + 0.25), SLOT.STONE, undefined, 0);
+    if (kind !== 'house_s' && !stilts) {
+      // a porch: two posts and a shallow copper canopy over the door
+      for (const sx of [-0.95, 0.95]) B.add(prim.box(0.12, 2.15, 0.12), f.m(sx, y0 - 0.1, dz + 1.35), SLOT.WOOD);
+      B.add(prim.cbox(2.4, 0.08, 1.7), f.m(0, y0 + 2.15, dz + 0.7, 0, 0.2), SLOT.COPPER);
+    }
     // two round windows (lit at night)
     for (const side of [-1.85, 1.85, Math.PI]) {
       if (kind === 'house_s' && side === Math.PI) continue;
@@ -533,12 +540,23 @@ export function createSettlements(ctx) {
         exits.push(l);
       }
     }
+    /** A house added around the square by the village plan; false where the ground will not take it. */
+    const infillHouse = (B2, x, z, yaw, kind) => {
+      const r = FOOTPRINT[kind];
+      const g = footprintGround(x, z, r * 1.1);
+      if (g.lo < 0.8 || g.hi - g.lo > 3) return false;
+      const floor = plinth(B2, x, z, r, style === 'mountain' ? SLOT.STONE : SLOT.TERRA);
+      const top = house(B2, frame(x, floor, z, yaw), kind, style);
+      addCollider({ shape: 'disc', x, y: floor - 0.3, z, r: HOUSE[kind][0] * (style === 'outpost' ? 1.15 : 1.0), h: top + 0.3 });
+      keep(x, z, r + 1.2, true);
+      return true;
+    };
     {
       dressVillage(B, {
-        x: lm.x, z: lm.z, plazaR: style === 'town' ? 18 : 14, style, banner, seed: id.length * 131 + id.charCodeAt(0),
+        x: lm.x, z: lm.z, plazaR: style === 'town' ? 14 : 11, style, banner, seed: id.length * 131 + id.charCodeAt(0),
         buildings: list.filter((bl) => bl.kind !== 'jetty').map((bl) => ({ kind: bl.kind, x: lm.x + bl.dx, z: lm.z + bl.dz, yaw: bl.yaw || 0 })),
         spots: given0.map((sp) => ({ x: lm.x + sp.dx, z: lm.z + sp.dz })),
-        exits, heightAt: (x, z) => w.heightAt(x, z), addCollider, keepClear: keep, lantern: lanternPost,
+        exits, heightAt: (x, z) => w.heightAt(x, z), addCollider, keepClear: keep, lantern: lanternPost, house: MAIN_VILLAGES.includes(id) ? infillHouse : null,
       });
     }
     if (!B.empty) {

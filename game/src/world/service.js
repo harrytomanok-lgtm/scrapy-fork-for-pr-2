@@ -258,7 +258,7 @@ export function createWorld(ctx) {
         clearSet.n = 0;
         bareSet.n = 0;
         for (const l of landmarks) {
-          if (l.type === 'settlement') addClear(bareSet, l.x, l.z, l.id === 'haven_aster' ? 21 : 17);
+          if (l.type === 'settlement') addClear(bareSet, l.x, l.z, 8);
           if (l.type === 'spire') continue;
           const r = l.stamp && l.stamp.radius ? l.stamp.radius : 24;
           addClear(clearSet, l.x, l.z, l.type === 'settlement' ? r + 10 : l.type === 'arena' ? r * 0.85 : r * 0.7);
