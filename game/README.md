@@ -64,7 +64,7 @@ title at 3.3-3.6 s (world bake about 2.3-2.8 s of it, `render.compile` 0.3-0.6 s
 
 | Command | What it does |
 |---------|--------------|
-| `npm run build` | Generates the package registry, bundles `src/main.js` into `dist/game.js` (minified) and writes `dist/index.html`, `dist/artifact.html` (an HTML fragment) and `dist/artifact-inline.html` (the fragment with the bundle inlined). Fails above 1.6 MB, warns above 1.2 MB. `node tools/build.mjs --sizes` prints the bundle bytes per source folder. |
+| `npm run build` | Generates the package registry, bundles `src/main.js` into `dist/game.js` (minified) and writes `dist/index.html`, `dist/artifact.html` (an HTML fragment) and `dist/artifact-inline.html` (the fragment with the bundle inlined). Fails above 2.2 MB, warns above 1.2 MB. `node tools/build.mjs --sizes` prints the bundle bytes per source folder. |
 | `npm run serve` | Serves `dist/` at <http://127.0.0.1:5173/> (`PORT` overrides). |
 | `npm run dev` | Unminified build with source maps, rebuilds on every change in `src/`, and serves `dist/`. |
 | `npm run gen` | Only regenerates `src/game/registry.gen.js`. |
@@ -87,8 +87,10 @@ Workers, and with audio unlocked by the first tap. The only external reference i
 | `npm run check` | lint, unit tests, build and smoke: the gate for every merge. |
 
 Scenario suites (`node tools/scenarios.mjs <id>`): `foundation` (the smoke list, including the sandboxed-iframe and
-phone-platform checks), `world`, `env`, `audio`, `gfx`, `actors`, `control`, `combat`, `ai`, `rpg`, `ui` and `perf`
-(budgets: draw calls, triangles, programs). Run one browser job at a time: SwiftShader is slow and a second job
+phone-platform checks), `world`, `env`, `audio`, `gfx`, `actors`, `control`, `combat`, `ai`, `rpg`, `ui`, `play`
+(the opening minutes and the main path from the title to the ending), `balance` and `perf` (budgets: draw calls,
+triangles, programs). Galleries for judging the picture by eye, at phone sizes: `look`, `picture`, `places`, `cast`,
+`fx` and `screens` (every screen in Hebrew, portrait and landscape). Run one browser job at a time: SwiftShader is slow and a second job
 makes the first one time out. Screenshots go to `tools/out/shots/<name>.png` and one log per scenario to
 `tools/out/logs/<name>.log`. Each scenario fails when `__GAME__.errors` or the console collected an error, when the
 page makes a network request other than Google Fonts, or when it opens `alert`, `confirm` or `prompt`.
@@ -161,6 +163,14 @@ Ultimate, R3 lock-on, D-pad up interact, down quick item, right next item, left 
 Touch: a floating stick on the left half, camera drag on the right half, and the action buttons on the right
 (Attack, Bolt, Jump, Dash and the contextual ones). Touch controls are never mirrored; a left-handed layout setting
 swaps the sides.
+
+## Other tools
+
+| Command | What it does |
+| --- | --- |
+| `node tools/audio-qa.mjs` | Renders every sound, music case, loop and ambience bed through the real audio engine offline and measures level, loudness, clicks, DC, the share a phone speaker can play, and the stacked mix. Exits 1 when anything is flagged. |
+| `node tools/reward-cadence.mjs` | Prints the reward timeline of the main path with the gaps marked. |
+| `node tools/gen-shards.mjs` | Regenerates the Ora shard table (`src/rpg/data/shardTable.js`); a unit test checks that the shipped table matches and that every shard is reachable. |
 
 ## Checking phones
 
