@@ -1298,7 +1298,9 @@ export function createVfx(ctx) {
       const grow = 1 + flare * 0.25;
       // Forms and the player's Gather wear the flame aura instead of the shell (lead decision, overriding ART_UX
       // 2.3's 'no shell at rest'); beam charge and the enemy aura keep the cheap shell.
-      const flameOn = form || gathering;
+      // the player's aura is always the flame (also while it fades out after a Gather, a charge or a Form): the
+      // shell egg is only for enemies and test actors
+      const flameOn = form || gathering || (ent === c.player && a.style !== 5);
       if (flameOn) {
         s.mesh.visible = false;
         const attacking = !!(cs && (cs.state === 'windup' || cs.state === 'active'));
