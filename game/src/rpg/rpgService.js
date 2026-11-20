@@ -18,6 +18,8 @@ const PICKUP_SPEED = 16;
 const COLLECT_RADIUS = 1.4;
 /** XP multiplier of a camp elite. */
 const ELITE_XP = 3;
+/** A repeated boss rematch's kill: this share of the boss XP and these Shells, no boss loot (the first clear pays all). */
+const REMATCH_REPEAT = Object.freeze({ xp: 0.15, shells: 60 });
 /**
  * Flying pickups up: in flight the magnet reaches further and pulls faster than the flight speed, and the pickup is
  * taken within a wider radius, so a pass at speed collects what it brushes (Ora shards in the air, drops in a fight).
@@ -734,7 +736,16 @@ export function createRpg(ctx) {
       const ent = ctx.ents.get(p.entId);
       const elite = p.kind === 'enemy' && def.tier !== 'elite' && !!ent && (ent.tags & TAG.ELITE) !== 0;
       if (elite) xp *= ELITE_XP;
+      // A repeated boss rematch (its first clear already won): a small share of the XP and a few Shells, no boss
+      // loot. The first clear of each rematch pays in full; the medals are the reward that keeps counting.
+      const rm = trialRetry ? trialRetry.rematch : null;
+      const repeat = p.kind === 'boss' && !!rm && rm.bossId === p.defId && !rm.first;
+      if (repeat) xp = Math.round(xp * REMATCH_REPEAT.xp);
       rpg.grantXp(xp, 'kill');
+      if (repeat) {
+        rpg.addShells(REMATCH_REPEAT.shells, 'rematch');
+        return;
+      }
       const bd = p.kind === 'boss' ? ctx.defs.find('boss', p.defId) : null;
       const bi = bd && BALANCE.bosses[bd.id] ? BALANCE.bosses[bd.id].index : 1;
       dropFrom(elite && ctx.defs.find('lootTable', 'elite') ? 'elite' : def.lootTable, p.level, p.x, p.y, p.z, def, bi);
@@ -768,6 +779,7 @@ export function createRpg(ctx) {
       if (!p.defeated) return;
       const w = S().world;
       if (w.bosses.indexOf(p.bossId) < 0) w.bosses.push(p.bossId);
+      S().quests.flags['beaten.' + p.bossId] = true;
       retryBoss = null;
       bossSnapshot = null;
     },
@@ -817,10 +829,8 @@ export function createRpg(ctx) {
     for (const d of ctx.defs.all('technique')) {
       const lv = d.unlock && typeof d.unlock.level === 'number' ? d.unlock.level : 0;
       if (!lv || p.level < lv || p.techs.indexOf(d.id) >= 0 || ctx.defs.find('techNode', d.id + '_r1')) continue;
-      if (announce) {
-        rpg.unlockTech(d.id);
-        ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.newTech', args: { name: ctx.i18n.t('tech.' + d.id + '.name') } });
-      }
+      // rpg:techLearned (unlockTech) is the announcement: the HUD turns it into its new-technique card.
+      if (announce) rpg.unlockTech(d.id);
       else p.techs.push(d.id);
     }
   }
@@ -865,7 +875,7 @@ export function createRpg(ctx) {
     }));
   }
 
-  /** @param {{ available:boolean, run:()=>boolean, clear:()=>void }} r the challenge trials' retry */
+  /** @param {{ available:boolean, run:()=>boolean, clear:()=>void, rematch:{ bossId:string, first:boolean } }} r the challenges' retry and rematch state */
   function setTrialRetry(r) {
     trialRetry = r || null;
   }

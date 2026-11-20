@@ -9,7 +9,7 @@
 
 import { BALANCE } from '../core/balance.js';
 import { PALETTE } from '../core/palette.js';
-import { REMATCH, TRIALS, TRIAL_REWARDS, TRIAL_LEASH, RINGSTONES } from './data/challenges.js';
+import { REMATCH, TRIALS, TRIAL_REWARDS, TRIAL_LEASH, TRIAL_SPAWN_WAIT, RINGSTONES } from './data/challenges.js';
 import { medalFor } from './logic/activity.js';
 
 const ORDER = ['bronze', 'silver', 'gold'];
@@ -38,10 +38,25 @@ export function recordMedal(ctx, key, seconds, medal, rewards) {
 
 /**
  * Register the challenge scripts on the quests service.
- * @param {any} ctx @param {{ travel:(id:string)=>boolean, raceStart:(id:string)=>boolean }} host
+ * @param {any} ctx @param {{ travel:(id:string)=>boolean, raceStart:(id:string)=>boolean, busyReason?:()=>string|null }} host
  */
 export function registerChallenges(ctx, host) {
   const Q = ctx.quests;
+  /** The running rematch (rpg reads it for the kill's reward): its boss, and whether it is the first clear. */
+  const rematch = { bossId: '', first: false };
+  /** The activity that another one cancels when it starts (a rematch). */
+  const active = { cancel: /** @type {null|(() => void)} */ (null) };
+  /** A choice refused now (a race, a boss, a fight): says why in a toast. @param {any} c @returns {boolean} */
+  const refused = (c) => {
+    const why = host.busyReason ? host.busyReason() : null;
+    if (why) c.bus.emit('ui:toast', { key: why, args: null, kind: 'warn' });
+    return !!why;
+  };
+  const cancelActive = () => {
+    const f = active.cancel;
+    active.cancel = null;
+    if (f) f();
+  };
   /** The trial fight the player just died in (its Retry runs it again), until another respawn. */
   const lastTrial = { id: '' };
 
@@ -50,7 +65,10 @@ export function registerChallenges(ctx, host) {
     Q.registerScript('rematch_' + bossId, (c, api) => {
       const bd = c.defs.find('boss', bossId);
       const p = pl(c);
-      if (!bd || !p || !c.ai || c.ai.boss) return api.done();
+      if (!bd || !p || !c.ai) return api.done();
+      if (refused(c)) return api.done();
+      if (c.store.state.world.bosses.indexOf(bossId) < 0) return api.done();
+      cancelActive();
       const level = Math.min(REMATCH.levelCap, Math.max(bd.level, c.rpg.level) + REMATCH.levelAbove);
       const lm = c.world.landmark(bd.arena.landmarkId);
       if (lm) {
@@ -61,24 +79,64 @@ export function registerChallenges(ctx, host) {
       }
       c.combat.heal(p, p.stats.hpMax);
       c.combat.addOra(p, p.stats.oraMax);
+      rematch.bossId = bossId;
+      rematch.first = !(c.store.state.quests.flags['rematch.' + bossId]);
       c.ai.startBoss(bossId, { level });
       c.bus.emit('ui:toast', { key: 'rpg.toast.rematch', args: { level }, kind: 'warn' });
+      // One attempt: a death waits for the death screen. Retry restarts the fight and the clock; Rise, leaving the
+      // arena, travelling or starting another activity cancels it for good (the boss is not left pending).
       let t = 0;
+      let down = false;
+      let over = false;
+      const cancel = () => {
+        if (over) return;
+        over = true;
+        if (c.ai) c.ai.cancelBoss(bossId);
+        api.done();
+      };
+      api.cleanup(() => {
+        if (!over) {
+          over = true;
+          if (c.ai) c.ai.cancelBoss(bossId);
+        }
+        if (rematch.bossId === bossId) rematch.bossId = '';
+        if (active.cancel === cancel) active.cancel = null;
+      });
+      active.cancel = cancel;
       api.onTick((dt) => {
-        t += dt;
+        if (!down) t += dt;
+      });
+      api.onEvent('player:died', () => {
+        down = true;
+      });
+      api.onEvent('player:respawned', (e) => {
+        if (!down) return;
+        down = false;
+        if (e.retry) t = 0;
+        else cancel();
       });
       api.onEvent('boss:end', (e) => {
-        if (e.bossId !== bossId) return;
-        if (!e.defeated) return;
+        if (e.bossId !== bossId || over) return;
+        if (!e.defeated) {
+          // The fight was reset: by the player's death (Retry may follow), else the player left the arena.
+          const me = c.player;
+          if (down || !me || !me.alive || (me.combat && me.combat.state === 'dead')) {
+            down = true;
+            return;
+          }
+          cancel();
+          return;
+        }
+        over = true;
         const par = REMATCH.bosses[bossId];
-        const s = Math.round(t * 10) / 10;
-        const medal = s <= par.gold ? 'gold' : s <= par.silver ? 'silver' : 'bronze';
-        recordMedal(c, 'rematch.' + bossId, s, medal, REMATCH.rewards);
-        c.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.medal.' + medal, args: { seconds: s } });
-        api.done();
+        const sec = Math.round(t * 10) / 10;
+        const medal = sec <= par.gold ? 'gold' : sec <= par.silver ? 'silver' : 'bronze';
+        recordMedal(c, 'rematch.' + bossId, sec, medal, REMATCH.rewards);
+        c.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.medal.' + medal, args: { seconds: sec } });
+        // The script ends once the boss is down for good (Durn runs for a moment before he falls): the kill reads
+        // rematch.first for its reward.
+        api.wait(4).then(() => api.done());
       });
-      // A death ends the rematch here (the boss's own retry still offers another go).
-      api.onEvent('player:died', () => api.done());
     });
   }
 
@@ -87,15 +145,21 @@ export function registerChallenges(ctx, host) {
     const tr = TRIALS[trialId];
     if (tr.kind === 'race') {
       Q.registerScript(trialId, (c, api) => {
+        cancelActive();
         const course = c.defs.find('course', tr.course);
         const p = pl(c);
-        if (course && p) {
+        // The race starts first: when it is refused (a race already on) the player stays where they are.
+        if (!course || !p || refused(c)) {
+          api.done();
+          return;
+        }
+        if (!host.raceStart(tr.course)) c.bus.emit('ui:toast', { key: 'rpg.toast.busyRace', args: null, kind: 'warn' });
+        else {
           const g0 = course.gates[0];
           const y = c.world.heightAt(course.start.x, course.start.z) + 30;
           c.move.teleport(p, course.start.x, y, course.start.z, Math.atan2(g0.x - course.start.x, g0.z - course.start.z));
           c.move.setMode(p, 'fly');
           if (c.cam) c.cam.setOrbit(Math.atan2(g0.x - course.start.x, g0.z - course.start.z), 0.1);
-          host.raceStart(tr.course);
         }
         api.done();
       });
@@ -103,7 +167,8 @@ export function registerChallenges(ctx, host) {
     }
     Q.registerScript(trialId, (c, api) => {
       const p = pl(c);
-      if (!p || !c.ai) return api.done();
+      if (!p || !c.ai || refused(c)) return api.done();
+      cancelActive();
       const at = tr.at;
       c.move.teleport(p, at.x, c.world.heightAt(at.x, at.z), at.z + 12, Math.PI);
       c.move.setMode(p, 'ground');
@@ -114,8 +179,15 @@ export function registerChallenges(ctx, host) {
       let wave = 0;
       let t = 0;
       let over = false;
+      /** Seconds a wave has failed to spawn (the cap of live enemies, no ground): retried, then the trial ends. */
+      let stuck = -1;
       const spawnWave = () => {
-        c.ai.spawnGroup(tr.waves[wave], at.x, at.z - 6, { level, questTag: tag, aggro: true, radius: 9 });
+        const ids = c.ai.spawnGroup(tr.waves[wave], at.x, at.z - 6, { level, questTag: tag, aggro: true, radius: 9 });
+        if (!Array.isArray(ids) || ids.length === 0) {
+          if (stuck < 0) stuck = 0;
+          return;
+        }
+        stuck = -1;
         if (c.vfx) c.vfx.shockwave(at.x, c.world.heightAt(at.x, at.z) + 0.5, at.z - 6, { radius: 12, color: PALETTE.hostile, seconds: 0.6, ground: true });
         if (tr.waves.length > 1) c.bus.emit('ui:toast', { key: 'rpg.toast.trialWave', args: { n: wave + 1, total: tr.waves.length }, kind: 'warn' });
         else c.bus.emit('ui:toast', { key: 'rpg.toast.trialGo', args: null, kind: 'warn' });
@@ -150,6 +222,13 @@ export function registerChallenges(ctx, host) {
         t += dt;
         const e = pl(c);
         if (e && Math.hypot(e.pos.x - at.x, e.pos.z - at.z) > TRIAL_LEASH) return end(false);
+        if (stuck >= 0) {
+          // A wave that did not spawn is not a cleared wave: try again twice a second, give up cleanly.
+          stuck += dt;
+          if (stuck > TRIAL_SPAWN_WAIT) return end(false);
+          if (Math.floor(stuck * 2) !== Math.floor((stuck - dt) * 2)) spawnWave();
+          return;
+        }
         const list = c.ents.list('enemy');
         let alive = 0;
         for (let i = 0; i < list.length; i++) if (list[i].alive && list[i].questTag === tag && (!list[i].combat || list[i].combat.state !== 'dead')) alive++;
@@ -163,6 +242,10 @@ export function registerChallenges(ctx, host) {
 
   // ---- Retry of a lost trial: the death screen's Retry (rpg.respawn retry) starts it again on the Ledge.
   const retry = {
+    /** The running rematch: { bossId ('' when none), first } (rpg pays a repeat kill a share, see rpgService). */
+    get rematch() {
+      return rematch;
+    },
     get available() {
       return lastTrial.id !== '';
     },

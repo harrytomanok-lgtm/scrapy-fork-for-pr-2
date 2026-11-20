@@ -63,7 +63,8 @@ export const DIALOGUES = [
         { text: 'rpg.choice.train', next: 'train' },
         { text: 'rpg.choice.skipTut', next: null, actions: [{ op: 'script', script: 'skip_tutorial' }] },
       ] },
-      train: { speaker: S, text: 'mq1.l01', next: null },
+      train: { speaker: S, text: 'mq1.l01', next: 'train2' },
+      train2: { speaker: T, text: 'mq1.l02', next: null },
     },
   },
   seq('mq1_wake', [[S, 'mq1.l04'], [T, 'mq1.l05'], [S, 'mq1.l06']]),
@@ -128,7 +129,7 @@ export const DIALOGUES = [
         { text: 'landmark.' + id + '.name', next: null, if: { flag: 'attuned.ringstone_' + id }, actions: [{ op: 'script', script: 'travel_' + id }] }))
         .concat([{ text: 'rpg.choice.back', next: 'n1' }]) },
       rematch: { speaker: 'system', text: 'rpg.rs.rematchPick', next: null, choices: Object.keys(REMATCH.bosses).map((id) => (
-        { text: 'enemy.' + id + '.name', next: null, actions: [{ op: 'script', script: 'rematch_' + id }] }))
+        { text: 'enemy.' + id + '.name', next: null, if: { flag: 'beaten.' + id }, actions: [{ op: 'script', script: 'rematch_' + id }] }))
         .concat([{ text: 'rpg.choice.back', next: 'n1' }]) },
       trials: { speaker: 'system', text: 'rpg.rs.trialPick', next: null, choices: Object.keys(TRIALS).map((id) => (
         { text: 'rpg.' + id, next: null, actions: [{ op: 'script', script: id }] }))

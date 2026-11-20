@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { defaultState } from '../../src/core/store.js';
 import { createQuestEngine } from '../../src/rpg/logic/questEngine.js';
 import { createDialogueRunner } from '../../src/rpg/logic/dialogue.js';
+import { createBarkQueue } from '../../src/rpg/logic/barks.js';
 import { medalFor, siphonOpen } from '../../src/rpg/logic/activity.js';
 import { QUESTS } from '../../src/rpg/data/quests.js';
 
@@ -295,4 +296,32 @@ test('activities: medals and the Siphon core cycle (4 s open in every 8 s)', () 
   assert.equal(open, 400);
   assert.equal(siphonOpen(1, 8, 4), false);
   assert.equal(siphonOpen(5, 8, 4), true);
+});
+
+test('the Ringstone menu offers a rematch only for a beaten boss', async () => {
+  const { DIALOGUES } = await import('../../src/rpg/data/dialogues.js');
+  const menu = DIALOGUES.find((d) => d.id === 'ringstone_menu');
+  for (const c of menu.nodes.rematch.choices) {
+    const a = (c.actions || []).find((x) => x.script && x.script.startsWith('rematch_'));
+    if (!a) continue;
+    assert.deepEqual(c.if, { flag: 'beaten.' + a.script.slice('rematch_'.length) });
+  }
+});
+
+test('barks: two sequences queue (never interleave) and every line is said, one per gap', () => {
+  const q = createBarkQueue(2.6);
+  const said = [];
+  const show = (n) => said.push([n, Math.round(t * 10) / 10]);
+  let t = 0;
+  q.push('a1');
+  q.push('a2');
+  q.push('b1');
+  q.push('b2');
+  for (; t < 12; t += 0.1) q.tick(0.1, show);
+  assert.deepEqual(said.map((x) => x[0]), ['a1', 'a2', 'b1', 'b2']);
+  for (let i = 1; i < said.length; i++) assert.ok(said[i][1] - said[i - 1][1] >= 2.5, 'one line per gap');
+  q.push('c');
+  q.clear();
+  q.tick(5, show);
+  assert.equal(said.length, 4, 'a world change drops the queue');
 });

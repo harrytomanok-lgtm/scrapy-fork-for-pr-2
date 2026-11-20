@@ -32,6 +32,8 @@ export const TRIALS = Object.freeze({
 export const TRIAL_REWARDS = Object.freeze({ bronze: 150, silver: 350, gold: 700 });
 /** A trial fight is lost when the player strays this far from its centre (m). */
 export const TRIAL_LEASH = 140;
+/** Seconds a trial waits for a wave that fails to spawn before it ends (not counted as cleared). */
+export const TRIAL_SPAWN_WAIT = 5;
 
 /** The Spire Circuit: twelve gates on a ring around the Wellspring Spire, rising and dipping (alt above ground). */
 export function spireCircuit() {

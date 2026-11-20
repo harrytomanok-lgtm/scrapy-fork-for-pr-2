@@ -907,7 +907,8 @@ export function createAi(ctx) {
     const g = c.defs.find('group', groupId);
     if (!g) return;
     const before = addIds.length;
-    spawnGroupAt(g, ent.pos.x, ent.pos.z, { level: bossDef ? bossDef.level : ent.level, aggro: true, radius: 10 }, ORIGIN.add, undefined, addIds);
+    // At the boss's own level: a rematch's raised level (ai.startBoss opts.level) carries to its adds.
+    spawnGroupAt(g, ent.pos.x, ent.pos.z, { level: ent.level || (bossDef ? bossDef.level : 1), aggro: true, radius: 10 }, ORIGIN.add, undefined, addIds);
     for (let i = before; i < addIds.length; i++) {
       const a = c.ents.get(addIds[i]);
       if (a && a.brain) a.brain.leash = 400;
@@ -1035,6 +1036,19 @@ export function createAi(ctx) {
       hzN = 0;
       if (was) endBoss(false);
       clearBossFog();
+    },
+
+    /**
+     * Cancel a boss fight completely (a rematch abandoned): the boss and its adds go, it is no longer pending (walking
+     * into its arena later starts nothing) and its rematch level is cleared. boss:end { defeated: false } is emitted
+     * when the fight was on. No-op for a boss that is neither spawned nor pending.
+     * @param {string} id
+     */
+    cancelBoss(id) {
+      const e = bossEnt();
+      if (e && bossDef && bossDef.id === id) ai.resetBoss();
+      pending.defeat(id);
+      bossLevels.delete(id);
     },
 
     get boss() {

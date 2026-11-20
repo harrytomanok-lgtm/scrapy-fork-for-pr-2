@@ -11,7 +11,8 @@ import * as F from '../core/formulas.js';
 import { TAG } from '../core/ents.js';
 import { PALETTE } from '../core/palette.js';
 import { medalFor, gatePassed, siphonOpen } from './logic/activity.js';
-import { placeShards, shardRewards, SHARD_XP } from './data/shards.js';
+import { shardRewards, SHARD_XP } from './data/shards.js';
+import { SHARD_TABLE } from './data/shardTable.js';
 
 /** The Ringstone prop stands ahead of its POI so a journey (or respawn) never starts inside the stone (11). */
 const RS_DX = 4;
@@ -91,6 +92,8 @@ export function createActivities(ctx, host) {
     // Every attuned stone carries its flag (the Ringstone menu's travel choices read it; older journeys and the
     // tutorial=0 shortcut only had the list).
     for (const id of W().ringstones) flags()['attuned.' + id] = true;
+    // Likewise every beaten boss (the menu offers a rematch only for those).
+    for (const id of W().bosses) flags()['beaten.' + id] = true;
     for (const poi of w.pois('ringstone')) buildRingstone(poi);
     for (const poi of w.pois('shrine')) buildShrine(poi);
     for (const poi of w.pois('chest')) buildChest(poi, poi.data && poi.data.table ? poi.data.table : 'chest_t1');
@@ -99,7 +102,8 @@ export function createActivities(ctx, host) {
     for (const poi of w.pois('siphon')) buildSiphon(poi);
     for (const poi of w.pois('race')) buildRaceStart(poi);
     for (const l of ctx.defs.all('landmark')) if (l.tag !== 'P1') discover.push({ id: l.id, type: 'landmark', x: l.x, z: l.z });
-    shards = placeShards((x, z) => w.heightAt(x, z), (x, z) => w.regionAt(x, z), ctx.defs.all('region'), ctx.defs.all('landmark'));
+    // The shards are fixed data (tools/gen-shards.mjs): the same ids at the same spots on every grid.
+    shards = SHARD_TABLE.slice();
     shardReward = shardRewards(shards.length);
     for (const poi of w.pois()) discover.push({ id: poi.id, type: poi.type, x: poi.x, z: poi.z });
     // Where the journey (re)starts is known already: no XP and no event for it.
@@ -145,6 +149,17 @@ export function createActivities(ctx, host) {
   }
 
   /**
+   * Why the player cannot leave for another activity now (travel, a rematch, a trial): an i18n toast key, or null.
+   * @returns {string|null}
+   */
+  function busyReason() {
+    if (race.active) return 'rpg.toast.busyRace';
+    if (ctx.ai && ctx.ai.boss) return 'rpg.toast.busyBoss';
+    if (ctx.combat && ctx.combat.inCombat) return 'rpg.toast.busyFight';
+    return null;
+  }
+
+  /**
    * Travel to an attuned Ringstone (the Ringstone menu, and the map screen through ctx.quests.travel): not during a
    * boss fight, a race, a fight or a dialogue. The player arrives beside the stone on foot, healed like a touch.
    * @param {string} id ringstone POI id @returns {boolean}
@@ -153,7 +168,11 @@ export function createActivities(ctx, host) {
     const r = byId.get(id);
     const p = ctx.player;
     if (!r || r.kind !== 'ringstone' || W().ringstones.indexOf(id) < 0 || !p || !p.alive) return false;
-    if (race.active || (ctx.ai && ctx.ai.boss) || (ctx.combat && ctx.combat.inCombat)) return false;
+    const why = busyReason();
+    if (why) {
+      ctx.bus.emit('ui:toast', { key: why, args: null, kind: 'warn' });
+      return false;
+    }
     if (ctx.vfx) ctx.vfx.shockwave(p.pos.x, p.pos.y + 1, p.pos.z, { radius: 6, color: PALETTE.structure.ringstone, seconds: 0.4, sphere: true });
     ctx.move.teleport(p, r.x, ground(r.x, r.z), r.z, Math.atan2(RS_DX, RS_DZ));
     ctx.move.setMode(p, 'ground');
@@ -698,6 +717,7 @@ export function createActivities(ctx, host) {
     },
 
     travel,
+    busyReason,
 
     /** @param {any} p pickup:collected */
     pickupCollected(p) {

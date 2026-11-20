@@ -420,6 +420,10 @@ export const scenarios = [
         log.push(at());
         const awake = g.state().player.awakened;
         const res1 = g.ctx.rpg.resonance();
+        // Both lines of the Awakening bark are said (queued behind the earlier barks), though the step ended with the first.
+        g.step(60 * 12);
+        const said = (k) => g.events(['ui:toast']).some((e) => e.payload.key === 'rpg.bark' && e.payload.args && e.payload.args.line === g.ctx.i18n.t(k));
+        const awakeLines = [said('mq1.l11'), said('mq1.l12')];
         const xp0 = g.ctx.rpg.level * 100000 + g.ctx.rpg.xp;
         for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.defId === 'tusk_boar')) g.kill(e.id);
         d(g);
@@ -433,7 +437,7 @@ export const scenarios = [
         g.step(12);
         d(g);
         g.step(2);
-        return { log, canFly, awake, res0, res1, lvl, done: Q.state('mq1'), mq2: Q.state('mq2'), techs: g.state().player.techs };
+        return { log, canFly, awake, res0, res1, lvl, done: Q.state('mq1'), mq2: Q.state('mq2'), techs: g.state().player.techs, awakeLines };
       }, drainSrc.toString());
       assert.equal(r.log[0], 's1');
       assert.equal(r.log[1], 's2', 'reaching the post completes the move beat');
@@ -443,6 +447,7 @@ export const scenarios = [
       assert.ok(r.awake, 'the Ora Awakening');
       assert.ok(r.res1 >= r.res0 * 4, 'Resonance rolls up (' + r.res0 + ' -> ' + r.res1 + ')');
       assert.equal(r.log[6], 's7');
+      assert.deepEqual(r.awakeLines, [true, true], 'both Awakening lines are said');
       assert.equal(r.log[7], 's8', 'the boars are calmed');
       assert.ok(r.lvl >= 2, 'step 7 XP lands level 2');
       assert.equal(r.done, 'done', 'touching the Ringstone completes MQ1');
@@ -513,7 +518,23 @@ export const scenarios = [
         // Approach the sky shard in flight from 120 m and look at its light column.
         g.teleport(sky.x - 120, sky.z, { alt: sky.y - g.heightAt(sky.x - 120, sky.z), fly: true, yaw: Math.PI / 2 });
         g.step(25);
-        return { total: s0.total, regions: s0.regions.map((r) => r.id + ':' + r.total), kinds: [...new Set(s0.list.map((s) => s.kind))], view, sky, tp0: g.state().player.tp };
+        // Every shard clear of the world's colliders as the browser has them (structures, places, props).
+        const inside = [];
+        const out = [];
+        for (const s of s0.list) {
+          const n = g.ctx.world.queryColliders(s.x, s.z, 4, out);
+          for (let i = 0; i < n; i++) {
+            const c = out[i];
+            if (!c || !(c.flags & 1)) continue;
+            const dh = Math.hypot(s.x - c.x, s.z - c.z);
+            const r = (c.r || Math.max(c.hx || 0, c.hz || 0)) + 0.4;
+            const y0 = c.shape === 'sphere' ? c.y - r : c.y;
+            const y1 = c.shape === 'sphere' ? c.y + r : c.y + (c.h || 0) + (c.shape === 'capsule' ? c.r : 0);
+            const hit = c.shape === 'sphere' ? Math.hypot(dh, s.y - c.y) < r : dh < r && s.y >= y0 && s.y <= y1;
+            if (hit) inside.push(s.id + ' in ' + c.shape);
+          }
+        }
+        return { total: s0.total, regions: s0.regions.map((r) => r.id + ':' + r.total), kinds: [...new Set(s0.list.map((s) => s.kind))], view, sky, tp0: g.state().player.tp, inside };
       });
       await game((g) => g.ctx.cam.setOrbit(Math.PI / 2, 0.1));
       await game((g) => g.step(4));
@@ -542,8 +563,9 @@ export const scenarios = [
         const banner = g.events(['ui:banner']).some((e) => e.payload.key === 'rpg.banner.shardsTp');
         return { found: Q.shards().found, tp: g.state().player.tp, saved: (g.state().quests.flags['ora.shards'] || []).length, banner };
       });
-      console.log('    ' + JSON.stringify({ a: { total: a.total, regions: a.regions, kinds: a.kinds }, b, c }));
+      console.log('    ' + JSON.stringify({ a: { total: a.total, regions: a.regions, kinds: a.kinds, inside: a.inside }, b, c }));
       assert.ok(a.total >= 40, 'about eight shards in each of six regions (' + a.total + ')');
+      assert.deepEqual(a.inside, [], 'no shard inside a collider');
       assert.deepEqual(a.kinds.sort(), ['islet', 'peak', 'roof', 'sky'].filter((k) => a.kinds.includes(k)).sort());
       assert.ok(a.kinds.includes('peak') && a.kinds.includes('sky') && a.kinds.includes('roof'), 'peaks, open air and roofs');
       assert.ok(b.pickups >= 1, 'the nearby shard stands as a pickup');
@@ -568,6 +590,7 @@ export const scenarios = [
         g.god(true);
         g.setLevel(30);
         st.quests.flags.credits = true;
+        for (const b of ['durn', 'bramblehorn', 'gorrumaw', 'iskra', 'vorrhal']) if (st.world.bosses.indexOf(b) < 0) st.world.bosses.push(b);
         for (const id of ['ringstone_tide_beacon', 'ringstone_copperwatch']) {
           st.world.ringstones.push(id);
           st.quests.flags['attuned.' + id] = true;
@@ -596,7 +619,7 @@ export const scenarios = [
           g.damage(boss.id, 0.2);
           g.step(20);
         }
-        g.step(200);
+        g.step(600);
         out.rematch = st.quests.flags['rematch.durn'];
         // The gauntlet trial.
         Q.runActions([{ op: 'script', script: 'trial_gauntlet' }]);
@@ -621,9 +644,28 @@ export const scenarios = [
         out.retryDist = Math.round(Math.hypot(g.ctx.player.pos.x + 1650, g.ctx.player.pos.z - 1835));
         for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.questTag === 'trial_trial_waves')) g.ctx.ai.despawn(e.id);
         Q.runActions([]);
-        // The Spire Circuit.
+        // A wave that cannot spawn is never a cleared wave: the trial ends without a medal.
+        const sg = g.ctx.ai.spawnGroup;
+        g.ctx.ai.spawnGroup = () => [];
+        const rec0 = JSON.stringify(st.quests.flags['trial.trial_waves'] || null);
+        Q.runActions([{ op: 'script', script: 'trial_waves' }]);
+        g.step(60 * 7);
+        g.ctx.ai.spawnGroup = sg;
+        out.noSpawn = { rec: JSON.stringify(st.quests.flags['trial.trial_waves'] || null) === rec0,
+          failed: g.events(['ui:toast']).some((e) => e.payload.key === 'rpg.toast.trialFailed') };
+        // The Spire Circuit; a second start while it runs is refused where the player is.
         Q.runActions([{ op: 'script', script: 'trial_sky' }]);
         g.step(5);
+        g.teleport(g.ctx.player.pos.x + 50, g.ctx.player.pos.z, { alt: 20 });
+        const px = g.ctx.player.pos.x;
+        Q.runActions([{ op: 'script', script: 'trial_sky' }]);
+        out.skyRefused = Math.abs(g.ctx.player.pos.x - px) < 1 && g.events(['ui:toast']).some((e) => e.payload.key === 'rpg.toast.busyRace');
+        // Travel and a rematch refused during the race: each says why.
+        const nRace = () => g.events(['ui:toast']).filter((e) => e.payload.key === 'rpg.toast.busyRace').length;
+        const n0 = nRace();
+        out.travelInRace = Q.travel('ringstone_copperwatch');
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        out.raceToasts = nRace() - n0;
         out.race = g.ctx.quests.objects().length > 0 && g.ctx.player.move.mode;
         return out;
       }, drainSrc.toString());
@@ -656,8 +698,98 @@ export const scenarios = [
       assert.ok(r.rematch && r.rematch.medals.length >= 1, 'the rematch records a medal');
       assert.ok(r.trialFoes >= 4, 'the gauntlet band spawns');
       assert.ok(r.trial && r.trial.medals.length >= 1 && r.trial.best > 0, 'the trial records a time and a medal');
+      assert.ok(r.noSpawn.rec && r.noSpawn.failed, 'a wave that never spawned fails the trial, no medal');
+      assert.ok(r.skyRefused, 'a refused Spire Circuit leaves the player where they are');
+      assert.equal(r.travelInRace, false, 'no travel during a race');
+      assert.equal(r.raceToasts, 2, 'the refused travel and rematch each say why');
       assert.ok(r.canRetry, 'a lost trial offers Retry');
       assert.ok(r.retryFoes >= 1 && r.retryDist < 30, 'Retry puts the player back in the trial (' + r.retryFoes + ' foes, ' + r.retryDist + ' m)');
+    },
+  },
+  {
+    // A rematch is one attempt: Rise cancels it for good (Sparkstead, Durn's arena and the hub, stays quiet); Retry
+    // restarts it, and a retried win pays its medals once.
+    name: 'rpg-rematch-retry',
+    width: W, height: H,
+    async run({ game, assert }) {
+      const r = await game((g) => {
+        const Q = g.ctx.quests;
+        const st = g.ctx.store.state;
+        const out = {};
+        g.setLevel(20);
+        st.quests.flags.credits = true;
+        st.world.bosses.push('durn');
+        const bossOf = () => g.ctx.ents.list('boss').filter((b) => b.alive && b.defId === 'durn');
+        // The kill reward of a boss during a rematch, measured on a synthetic actor:died (the XP the kill grants).
+        const killXp = () => {
+          const p = g.player();
+          const x0 = g.ctx.rpg.level * 1e6 + g.ctx.rpg.xp;
+          const lv0 = g.ctx.rpg.level;
+          let got = 0;
+          const off = g.ctx.bus.on('rpg:xp', (e) => { if (e.source === 'kill') got += e.amount; }, 'scenario');
+          g.ctx.bus.emit('actor:died', { entId: -1, sourceId: p.id, kind: 'boss', defId: 'durn', level: 22, questTag: null, x: p.x, y: p.y, z: p.z });
+          off();
+          return got + 0 * (x0 + lv0);
+        };
+        // 1. Rematch, die, Rise, walk back into Sparkstead.
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(30);
+        out.level = (bossOf()[0] || {}).level || 0;
+        out.firstXp = killXp();
+        g.kill(g.player().id);
+        g.step(100);
+        g.ctx.rpg.respawn({ retry: false });
+        g.step(30);
+        const lm = g.ctx.world.landmark('sparkstead');
+        for (let i = 0; i < 4; i++) {
+          g.teleport(lm.x + i * 8, lm.z + 10, {});
+          g.step(40);
+        }
+        out.afterRise = bossOf().length;
+        out.aiBoss = !!g.ctx.ai.boss;
+        // 2. Rematch, die, Retry, win.
+        const shells0 = st.inv.shells;
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(30);
+        g.kill(g.player().id);
+        g.step(100);
+        out.canRetry = g.ctx.rpg.canRetry;
+        g.ctx.rpg.respawn({ retry: true });
+        g.god(true);
+        g.step(40);
+        const b2 = bossOf()[0];
+        out.retried = !!b2;
+        out.retryLevel = b2 ? b2.level : 0;
+        out.addLevels = [];
+        for (let i = 0; i < 60 && b2 && b2.alive && !st.quests.flags['rematch.durn']; i++) {
+          g.damage(b2.id, 0.2);
+          g.step(20);
+          for (const e of g.ctx.ents.list('enemy')) if (e.alive && e.defId === 'choir_acolyte' && out.addLevels.indexOf(e.level) < 0) out.addLevels.push(e.level);
+        }
+        g.step(300);
+        out.record = st.quests.flags['rematch.durn'];
+        out.paid = st.inv.shells - shells0;
+        out.pendingAfterWin = bossOf().length;
+        // 3. A repeat (the record exists): a small share of the XP.
+        g.step(600);
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(30);
+        out.repeatXp = killXp();
+        g.god(false);
+        return out;
+      });
+      console.log('    ' + JSON.stringify(r));
+      assert.ok(r.level > 4, 'the rematch runs at a raised level');
+      assert.equal(r.afterRise, 0, 'Rise cancels the rematch: no boss in Sparkstead');
+      assert.equal(r.aiBoss, false);
+      assert.ok(r.canRetry, 'the death screen can Retry the rematch');
+      assert.ok(r.retried && r.retryLevel === r.level, 'Retry restarts it at the same level');
+      assert.ok(r.record && r.record.medals.length >= 1, 'the retried win records its medal');
+      assert.ok(r.addLevels.length > 0 && r.addLevels.every((l) => l === r.level), 'the adds come at the rematch level (' + r.addLevels + ')');
+      assert.ok(r.firstXp > 0 && r.repeatXp > 0 && r.repeatXp <= r.firstXp * 0.2, 'a repeat pays a small share of the XP (' + r.repeatXp + ' of ' + r.firstXp + ')');
+      const once = { bronze: 300, silver: 600, gold: 1200 };
+      const want = r.record.medals.reduce((a, m) => a + once[m], 0);
+      assert.ok(r.paid >= want && r.paid < want + 400, 'the medals are paid once (' + r.paid + ' for ' + r.record.medals.join(',') + ')');
     },
   },
   {
