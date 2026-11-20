@@ -78,7 +78,7 @@ function clumpGeometry() {
  * @param {number} seed
  */
 export function createTufts(ctx, grid, seed, clear) {
-  const near = new Int32Array(768);
+  const bareMask = new Uint8Array((Math.ceil(MAX_RADIUS / CELL) * 2 + 1) ** 2);
   const flowerD = new Color(PALETTE.paper);
   const foliage = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].foliage));
   const ground = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].ground));
@@ -123,12 +123,28 @@ export function createTufts(ctx, grid, seed, clear) {
     const span = Math.ceil(rc);
     let n = 0;
     let nn = 0;
+    // bare discs near the player, rasterised once per refill into a mask over the tuft lattice
+    const side = span * 2 + 1;
     if (clear) {
-      for (let k = 0; k < clear.n && nn < near.length; k++) {
+      bareMask.fill(0, 0, side * side);
+      for (let k = 0; k < clear.n; k++) {
         const ex = px - clear.x[k];
         const ez = pz - clear.z[k];
-        const rr = set.radius + clear.r[k] + 2;
-        if (ex * ex + ez * ez < rr * rr) near[nn++] = k;
+        const cr = clear.r[k];
+        const rr = set.radius + cr + 2;
+        if (ex * ex + ez * ez >= rr * rr) continue;
+        nn++;
+        const i0 = Math.max(-span, Math.floor((clear.x[k] - cr) / CELL) - ci);
+        const i1 = Math.min(span, Math.floor((clear.x[k] + cr) / CELL) - ci);
+        const j0 = Math.max(-span, Math.floor((clear.z[k] - cr) / CELL) - cj);
+        const j1 = Math.min(span, Math.floor((clear.z[k] + cr) / CELL) - cj);
+        for (let dj = j0; dj <= j1; dj++) {
+          for (let di = i0; di <= i1; di++) {
+            const qx = (ci + di + 0.5) * CELL - clear.x[k];
+            const qz = (cj + dj + 0.5) * CELL - clear.z[k];
+            if (qx * qx + qz * qz < cr * cr) bareMask[(dj + span) * side + di + span] = 1;
+          }
+        }
       }
     }
     for (let dj = -span; dj <= span && n < max; dj++) {
@@ -150,19 +166,7 @@ export function createTufts(ctx, grid, seed, clear) {
         const field = (fl & FLAG.FIELD) !== 0;
         if (field) dens = dens * 1.25 + 0.1;
         // paving, floors and lanes stay bare (settlement plazas, building footprints, POI pads)
-        if (nn > 0) {
-          let bare = false;
-          for (let q = 0; q < nn; q++) {
-            const k = near[q];
-            const ex = x - clear.x[k];
-            const ez = z - clear.z[k];
-            if (ex * ex + ez * ez < clear.r[k] * clear.r[k]) {
-              bare = true;
-              break;
-            }
-          }
-          if (bare) continue;
-        }
+        if (nn > 0 && bareMask[(dj + span) * side + di + span] === 1) continue;
         if (ri === R_FROSTSPINE && y > 470) continue;
         if (u0 > dens) continue;
         if (grid.slopeAt(x, z) > 0.42) continue;
