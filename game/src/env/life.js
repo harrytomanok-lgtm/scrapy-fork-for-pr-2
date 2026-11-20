@@ -389,11 +389,16 @@ export function createLife(ctx, chimneys) {
         const dx = x0 - cx;
         const dz = z0 - cz;
         if (dx * dx + dz * dz > 450 * 450) continue;
-        for (let j = 0; j < 7 && ns < PUFFS; j++) {
-          const age = (t + j * (PUFF_LIFE / 7) + ci * 0.37) % PUFF_LIFE;
-          const u = age / PUFF_LIFE;
-          const s = (0.9 + 3.2 * u) * (u > 0.7 ? (1 - u) / 0.3 : 1);
-          put(puffs, ns, x0 + wx * u * 6 + Math.sin(t + j) * 0.3, y0 + u * 9, z0 + wz * u * 6, j + t * 0.3, s, s * 0.8, 0);
+        for (let j = 0; j < 5 && ns < PUFFS; j++) {
+          const tt = t + j * (PUFF_LIFE / 5) + ci * 0.37;
+          const cyc = Math.floor(tt / PUFF_LIFE);
+          const u = (tt - cyc * PUFF_LIFE) / PUFF_LIFE;
+          // each puff wanders its own way and bends downwind as it climbs
+          const rx = (h01(ci * 7 + j, cyc) - 0.5) * 2.6 * u;
+          const rz = (h01(ci * 7 + j, cyc + 99) - 0.5) * 2.6 * u;
+          const drift = Math.pow(u, 1.3) * 9;
+          const s = (0.6 + 2.6 * u) * (0.8 + 0.4 * h01(ci + j, cyc + 7)) * (u > 0.72 ? (1 - u) / 0.28 : 1);
+          put(puffs, ns, x0 + wx * drift + rx, y0 + Math.pow(u, 0.8) * 7, z0 + wz * drift + rz, cyc * 2.1 + j, s, s * 0.75, 0.2 * (h01(j, cyc) - 0.5));
           tint(puffs, ns++, col.smoke, 1.05 - 0.2 * u + 0.15 * night);
         }
       }

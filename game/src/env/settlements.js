@@ -12,6 +12,7 @@ import { PALETTE } from '../core/palette.js';
 import { IDS } from '../core/ids.js';
 import { createBuilder, SLOT, SLOT_HEX, mat, frame, prim } from './kit.js';
 import { FOOTPRINT, REQUIRED_SPOTS } from './data/settlements.js';
+import { dressVillage } from './village.js';
 
 const SOLID = 1;
 /** Settlements farther than this from the camera are hidden (fog has eaten them). */
@@ -49,6 +50,7 @@ export function createSettlements(ctx) {
 
   const lantern = new Color(PALETTE.structure.lantern);
   const windowDay = new Color(PALETTE.structure.curtain).multiplyScalar(0.55);
+  const poolDay = new Color(PALETTE.path);
   const tmpM = new Matrix4();
   const tmpQ = new Quaternion();
   const tmpE = new Euler();
@@ -155,7 +157,7 @@ export function createSettlements(ctx) {
       if (kind === 'house_s' && side === Math.PI) continue;
       const wy = y0 + wallH * 0.62;
       const rr = r * (1 - (1 - taper) * (wallH * 0.62 / wallH)) + 0.04;
-      B.add(prim.disc(0.34, 7), f.m(Math.sin(side) * rr, wy, Math.cos(side) * rr, side, -lean), SLOT.WINDOW);
+      B.add(prim.disc(0.42, 7), f.m(Math.sin(side) * rr, wy, Math.cos(side) * rr, side, -lean), SLOT.WINDOW);
     }
     return top;
   }
@@ -456,37 +458,6 @@ export function createSettlements(ctx) {
     return true;
   }
 
-  /** Paved plaza around the Ringstone, conformed to the ground. @param {any} B @param {number} x @param {number} z @param {number} r */
-  function plaza(B, x, z, r) {
-    const w = W();
-    const seg = 28;
-    const rings = [0, 4.2, 5.0, r - 1.2, r];
-    const slots = [SLOT.STONE, SLOT.TERRA, SLOT.PATH, SLOT.TERRA];
-    /** @param {number} rr @param {number} a */
-    const pt = (rr, a) => {
-      const px = x + Math.sin(a) * rr;
-      const pz = z + Math.cos(a) * rr;
-      return [px, w.heightAt(px, pz) + 0.09, pz];
-    };
-    for (let k = 0; k < rings.length - 1; k++) {
-      for (let i = 0; i < seg; i++) {
-        const a0 = (i / seg) * Math.PI * 2;
-        const a1 = ((i + 1) / seg) * Math.PI * 2;
-        const tint = k === 2 && i % 2 === 0 ? 0xf0e4d0 : undefined;
-        if (rings[k] === 0) {
-          B.tri(pt(0, 0), pt(rings[1], a0), pt(rings[1], a1), slots[k], tint);
-        } else {
-          const p00 = pt(rings[k], a0);
-          const p01 = pt(rings[k], a1);
-          const p10 = pt(rings[k + 1], a0);
-          const p11 = pt(rings[k + 1], a1);
-          B.tri(p00, p10, p11, slots[k], tint);
-          B.tri(p00, p11, p01, slots[k], tint);
-        }
-      }
-    }
-  }
-
   // ---------------------------------------------------------------- build
   /** @param {any} lm @param {any} def */
   function buildOne(lm, def) {
@@ -497,8 +468,10 @@ export function createSettlements(ctx) {
     const banner = def && def.banner ? def.banner : [PALETTE.biome.meadows.accent, PALETTE.structure.terracotta];
     const B = createBuilder();
     const extra = [];
-    if (style !== 'camp' && style !== 'ledge') plaza(B, lm.x, lm.z, style === 'town' ? 18 : 14);
     const list = def && Array.isArray(def.buildings) ? def.buildings : [];
+    const keep = (x, z, r, bare) => {
+      if (typeof w.keepClear === 'function') w.keepClear(x, z, r, bare);
+    };
     for (let i = 0; i < list.length; i++) {
       const bl = list[i];
       const x = lm.x + bl.dx;
@@ -537,6 +510,36 @@ export function createSettlements(ctx) {
         case 'beacon': extra.push(beacon(B, f)); break;
         default: break;
       }
+      // nothing grows through a building
+      if (r > 0.5 && bl.kind !== 'cloister') keep(x, z, r + 1.2, r > 1.5);
+    }
+    // the village plan: square, lanes, roads out, gardens, goods, benches, light pools (env/village)
+    const given0 = def && Array.isArray(def.spots) ? def.spots : [];
+    /** @type {any[]} */
+    const exits = [];
+    if (ctx.defs && typeof ctx.defs.all === 'function') {
+      const others = ctx.defs.all('landmark').filter((l) => l.id !== id && l.type !== 'spire' && l.id !== 'shattered_crown')
+        .map((l) => ({ x: l.x, z: l.z, d: Math.hypot(l.x - lm.x, l.z - lm.z) }))
+        .filter((l) => l.d > 150 && l.d < 2600).sort((a, b) => a.d - b.d);
+      for (const l of others) {
+        if (exits.length >= 2) break;
+        // a second road must leave in a clearly different direction
+        if (exits.length === 1) {
+          const a0 = Math.atan2(exits[0].x - lm.x, exits[0].z - lm.z);
+          const a1 = Math.atan2(l.x - lm.x, l.z - lm.z);
+          const da = Math.abs(Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)));
+          if (da < 1.2) continue;
+        }
+        exits.push(l);
+      }
+    }
+    {
+      dressVillage(B, {
+        x: lm.x, z: lm.z, plazaR: style === 'town' ? 18 : 14, style, banner, seed: id.length * 131 + id.charCodeAt(0),
+        buildings: list.filter((bl) => bl.kind !== 'jetty').map((bl) => ({ kind: bl.kind, x: lm.x + bl.dx, z: lm.z + bl.dz, yaw: bl.yaw || 0 })),
+        spots: given0.map((sp) => ({ x: lm.x + sp.dx, z: lm.z + sp.dz })),
+        exits, heightAt: (x, z) => w.heightAt(x, z), addCollider, keepClear: keep, lantern: lanternPost,
+      });
     }
     if (!B.empty) {
       const mesh = new Mesh(B.build(), material);
@@ -673,6 +676,9 @@ export function createSettlements(ctx) {
       em[SLOT.WINDOW] = lanternK * 1.1;
       em[SLOT.GLOW] = 0.35 + lanternK * 1.2;
       material.uniforms.uPalette.value[SLOT.WINDOW].copy(windowDay).lerp(lantern, lanternK);
+      // light pools: trodden ground by day, a warm glow on the ground after dusk
+      material.uniforms.uPalette.value[SLOT.POOL].copy(poolDay).lerp(lantern, lanternK * 0.75);
+      em[SLOT.POOL] = lanternK * 0.55;
       for (let i = 0; i < spinners.length; i++) {
         const s = spinners[i];
         if (s.axis === 'z') s.mesh.rotation.z += dt * s.speed * (0.6 + (wind ? wind.y * 3 : 0.45));

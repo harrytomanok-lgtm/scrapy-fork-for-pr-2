@@ -78,7 +78,7 @@ function clumpGeometry() {
  * @param {number} seed
  */
 export function createTufts(ctx, grid, seed, clear) {
-  const near = new Int32Array(96);
+  const near = new Int32Array(768);
   const flowerD = new Color(PALETTE.paper);
   const foliage = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].foliage));
   const ground = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].ground));

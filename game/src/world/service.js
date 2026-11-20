@@ -160,9 +160,9 @@ export function createWorld(ctx) {
   let pulseT = 0;
 
   /** Discs kept free of vegetation and rocks: landmark stamps and points of interest. */
-  const clearSet = createClearSet(512);
+  const clearSet = createClearSet(4096);
   /** Discs where not even ground tufts grow: paving, floors, lanes (world.keepClear with bare). */
-  const bareSet = createClearSet(384);
+  const bareSet = createClearSet(4096);
   const landmarks = LANDMARKS.map((l) => Object.assign({}, l, { y: 0 }));
   /** @type {Record<string, any>} */
   const landmarkById = Object.create(null);

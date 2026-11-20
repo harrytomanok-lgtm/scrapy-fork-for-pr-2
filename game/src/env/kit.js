@@ -15,13 +15,15 @@ import { PALETTE } from '../core/palette.js';
 export const SLOT = Object.freeze({
   CLAY: 0, TERRA: 1, COPPER: 2, CURTAIN: 3, WOOD: 4, WOOD_LIGHT: 5, STONE: 6, LANTERN: 7, CLOTH: 8, SNOW: 9, IRON: 10,
   WINDOW: 11, GLOW: 12, PATH: 13, INK: 14, ACCENT: 15,
+  /** Light pools under lanterns (world pass; shares index 14 with INK, which nothing else uses): ground by day, lantern light at night. */
+  POOL: 14,
 });
 
 /** Base colours of the slots (hex, palette tokens only). WINDOW and GLOW are rewritten at run time. */
 export const SLOT_HEX = Object.freeze([
   PALETTE.structure.clay, PALETTE.structure.terracotta, PALETTE.structure.copper, PALETTE.structure.curtain,
   PALETTE.biome.rustdune.shade, PALETTE.path, PALETTE.biome.frostspine.cliff, PALETTE.structure.lantern, PALETTE.paper,
-  PALETTE.snow, PALETTE.corruption, PALETTE.ink, PALETTE.structure.ringstone, PALETTE.biome.meadows.cliff, PALETTE.ink,
+  PALETTE.snow, PALETTE.corruption, PALETTE.ink, PALETTE.structure.ringstone, PALETTE.biome.meadows.cliff, PALETTE.path,
   PALETTE.biome.meadows.accent,
 ]);
 

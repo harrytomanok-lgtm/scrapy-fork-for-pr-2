@@ -183,11 +183,11 @@ function villageViews(g, hour) {
     const lm = g.ctx.world.landmark(d.id);
     if (!lm) continue;
     const a = 0.7;
-    const x = lm.x + Math.sin(a) * 34;
-    const z = lm.z + Math.cos(a) * 34;
+    const x = lm.x + Math.sin(a) * 58;
+    const z = lm.z + Math.cos(a) * 58;
     const gy = g.ctx.world.heightAt(lm.x, lm.z);
-    const fy = Math.max(g.ctx.world.heightAt(x, z), gy) + 9;
-    out.push({ name: d.id + (hour > 20 || hour < 5 ? ' night' : ''), from: [x, fy, z], to: [lm.x, gy + 2, lm.z], hour });
+    const fy = Math.max(g.ctx.world.heightAt(x, z), gy) + 24;
+    out.push({ name: d.id + (hour > 20 || hour < 5 ? " night" : ""), from: [x, fy, z], to: [lm.x - Math.sin(a) * 8, gy, lm.z - Math.cos(a) * 8], hour });
   }
   return out;
 }

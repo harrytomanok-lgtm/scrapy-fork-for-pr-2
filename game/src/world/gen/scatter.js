@@ -182,7 +182,7 @@ function inClear(c, near, nn, x, z, pad) {
   return false;
 }
 
-const NEAR = new Int32Array(64);
+const NEAR = new Int32Array(384);
 
 /**
  * Fill `out` with the props of scatter cell (ci, cj).
