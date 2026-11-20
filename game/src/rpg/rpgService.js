@@ -602,6 +602,7 @@ export function createRpg(ctx) {
 
   /** @param {any} p store.player after a level was applied */
   function onLevel(p) {
+    levelTechs(p, true);
     recompute();
     fullRestore();
     ctx.bus.emit('rpg:levelUp', { level: p.level, statPoints: p.statPoints, tp: p.tp });
@@ -778,6 +779,23 @@ export function createRpg(ctx) {
     },
   };
 
+  /**
+   * Techniques that open at a level and cost no TP (Meteor Heel at level 4: rank 1 has no tree node, so nothing else
+   * ever granted it). Learned on the level-up, with the usual techLearned event; `announce` false after a load.
+   * @param {any} p store.player @param {boolean} announce
+   */
+  function levelTechs(p, announce) {
+    for (const d of ctx.defs.all('technique')) {
+      const lv = d.unlock && typeof d.unlock.level === 'number' ? d.unlock.level : 0;
+      if (!lv || p.level < lv || p.techs.indexOf(d.id) >= 0 || ctx.defs.find('techNode', d.id + '_r1')) continue;
+      if (announce) {
+        rpg.unlockTech(d.id);
+        ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.newTech', args: { name: ctx.i18n.t('tech.' + d.id + '.name') } });
+      }
+      else p.techs.push(d.id);
+    }
+  }
+
   /** True when a saved journey in any slot has finished MQ1. Read before the new journey is first saved. */
   function returningPlayer() {
     try {
@@ -809,6 +827,7 @@ export function createRpg(ctx) {
       state.player.surge = e.combat ? Math.round(e.combat.surge) : 0;
     }));
     unsubs.push(ctx.save.onAfterLoad((state) => {
+      if (state && state.player && Array.isArray(state.player.techs)) levelTechs(state.player, false);
       const e = anyEnt();
       if (!e || !e.stats || !state || !state.player) return;
       const st = e.stats;

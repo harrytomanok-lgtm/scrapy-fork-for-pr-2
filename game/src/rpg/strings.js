@@ -31,6 +31,7 @@ const ROWS = [
   ['rpg.toast.tether', 'Thread delivered: {n} / {total}', 'חוט נמסר: {n} / {total}'],
   ['rpg.banner.shrine', 'Ora Shrine {n} / {total}: +1 TP', 'מקדש אורה {n} / {total}: עוד נקודת טכניקה'],
   ['rpg.banner.siphon', 'Siphon silenced', 'מגדל היניקה הושתק'],
+  ['rpg.banner.newTech', 'New technique: {name}', 'טכניקה חדשה: {name}'],
   ['rpg.banner.awakening', 'Resonance rising', 'התהודה עולה'],
   ['rpg.banner.mq7', 'The way to the Court is open', 'הדרך אל החצר פתוחה'],
   ['rpg.banner.freeRoam', 'The island is yours', 'האי פתוח לפניך'],
