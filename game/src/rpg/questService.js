@@ -564,6 +564,14 @@ export function createQuests(ctx, rpgInternals) {
     objects() {
       return activities.objects();
     },
+    /**
+     * Travel to an attuned Ringstone (for the map screen): false when it is not attuned or the player is in a fight,
+     * a boss arena, a race or a dialogue. @param {string} ringstoneId e.g. 'ringstone_tide_beacon'
+     */
+    travel(ringstoneId) {
+      if (runner.open) return false;
+      return activities.travel(ringstoneId);
+    },
     /** The Ora-shard counter and markers for the map screen (see activities.shards). */
     shards() {
       return activities.shards();

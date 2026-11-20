@@ -555,6 +555,96 @@ export const scenarios = [
     },
   },
   {
+    // After the ending: Ringstone travel, the menu, a boss rematch at a higher level with a medal, a timed trial and
+    // the Spire Circuit.
+    name: 'rpg-after-ending',
+    width: 412, height: 915,
+    query: 'res=1&quality=low',
+    async run({ game, assert, shot }) {
+      const r = await game((g, drain) => {
+        const d = (0, eval)('(' + drain + ')');
+        const Q = g.ctx.quests;
+        const st = g.ctx.store.state;
+        g.god(true);
+        g.setLevel(30);
+        st.quests.flags.credits = true;
+        for (const id of ['ringstone_tide_beacon', 'ringstone_copperwatch']) {
+          st.world.ringstones.push(id);
+          st.quests.flags['attuned.' + id] = true;
+        }
+        const out = {};
+        // Travel by the service (the map screen's call) and by the menu.
+        out.travel = Q.travel('ringstone_tide_beacon');
+        const rs = g.pois('ringstone').find((x) => x.id === 'ringstone_tide_beacon');
+        out.travelDist = Math.round(Math.hypot(g.ctx.player.pos.x - rs.x, g.ctx.player.pos.z - rs.z));
+        out.badTravel = Q.travel('ringstone_ridgerest');
+        Q.talk('ringstone_menu', {});
+        out.menu = Q.dialogueState();
+        Q.advance(1); // Travel
+        out.travelNode = Q.dialogueState() && Q.dialogueState().nodeId;
+        Q.advance(2); // the third attuned stone listed: Copperwatch (Sparkstead, Tide Beacon, Copperwatch)
+        g.step(5);
+        const cw = g.pois('ringstone').find((x) => x.id === 'ringstone_copperwatch');
+        out.menuTravelDist = Math.round(Math.hypot(g.ctx.player.pos.x - cw.x, g.ctx.player.pos.z - cw.z));
+        d(g);
+        // A rematch with Durn.
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(10);
+        const boss = g.ctx.ents.list('boss').find((b) => b.alive && b.defId === 'durn');
+        out.bossLevel = boss ? boss.level : 0;
+        for (let i = 0; i < 40 && boss && boss.alive && !st.quests.flags['rematch.durn']; i++) {
+          g.damage(boss.id, 0.2);
+          g.step(20);
+        }
+        g.step(200);
+        out.rematch = st.quests.flags['rematch.durn'];
+        // The gauntlet trial.
+        Q.runActions([{ op: 'script', script: 'trial_gauntlet' }]);
+        g.step(10);
+        out.trialFoes = g.ctx.ents.list('enemy').filter((e) => e.alive && e.questTag === 'trial_trial_gauntlet').length;
+        for (let i = 0; i < 6; i++) {
+          for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.questTag === 'trial_trial_gauntlet')) g.kill(e.id);
+          g.step(20);
+        }
+        out.trial = st.quests.flags['trial.trial_gauntlet'];
+        // The Spire Circuit.
+        Q.runActions([{ op: 'script', script: 'trial_sky' }]);
+        g.step(5);
+        out.race = g.ctx.quests.objects().length > 0 && g.ctx.player.move.mode;
+        return out;
+      }, drainSrc.toString());
+      const ms = await game((g) => {
+        g.step(30);
+        g.ctx.world.flushBuilds();
+        const t0 = performance.now();
+        g.render();
+        const t1 = performance.now();
+        g.render();
+        return [Math.round(t1 - t0), Math.round(performance.now() - t1), g.cmd.drawBreakdown ? JSON.stringify(g.cmd.drawBreakdown()).slice(0, 300) : ''];
+      });
+      console.log('    render ms ' + JSON.stringify(ms));
+      // A screenshot can time out on a loaded machine: one retry, then go on (the assertions do not need it).
+      for (let k = 0; k < 2; k++) {
+        try {
+          await shot('rpg-after-ending-circuit');
+          break;
+        } catch (err) {
+          console.log('    shot retry: ' + String(err).split('\n')[0]);
+        }
+      }
+      console.log('    ' + JSON.stringify(r));
+      assert.ok(r.travel && r.travelDist < 15, 'travel to an attuned Ringstone');
+      assert.equal(r.badTravel, false, 'not to a stone never touched');
+      assert.equal(r.menu && r.menu.dialogueId, 'ringstone_menu');
+      assert.equal(r.travelNode, 'travel');
+      assert.ok(r.menuTravelDist < 15, 'the menu travels too');
+      assert.ok(r.bossLevel > 4, 'the rematch is above the first fight (level ' + r.bossLevel + ')');
+      assert.ok(r.rematch && r.rematch.medals.length >= 1, 'the rematch records a medal');
+      assert.ok(r.trialFoes >= 4, 'the gauntlet band spawns');
+      assert.ok(r.trial && r.trial.medals.length >= 1 && r.trial.best > 0, 'the trial records a time and a medal');
+    },
+  },
+  {
     name: 'rpg-finale',
     width: W, height: H,
     async run({ game, assert, shot }) {

@@ -94,6 +94,8 @@ export function createAi(ctx) {
   let bossEngaged = false;
   /** The boss was held by a quest script while the player was outside the arena: it waits for the player to return. */
   let bossHeld = false;
+  /** Rematch levels by boss id (ai.startBoss opts.level), until the boss is defeated. @type {Map<string, number>} */
+  const bossLevels = new Map();
   /** The intro shot is playing (it ends with the sim-time intro, or when the boss goes). */
   let introPlaying = false;
   /** @type {number[]} */
@@ -791,7 +793,7 @@ export function createAi(ctx) {
       hpMult *= 1 + bd.hpPerSiphonStanding * Math.max(0, 5 - ctx.quests.siphonsSilenced());
     }
     const ent = spawnInternal(bd.enemyId, x, ctx.world ? ctx.world.heightAt(x, z) : 0, z,
-      { level: bd.level, aggro: true, leash: bd.arena.radius + BALANCE.bossRules.resetExtra + 40 }, { hpMult, poise: bd.poise }, ORIGIN.boss);
+      { level: bossLevels.get(bd.id) || bd.level, aggro: true, leash: bd.arena.radius + BALANCE.bossRules.resetExtra + 40 }, { hpMult, poise: bd.poise }, ORIGIN.boss);
     if (!ent) return null;
     ent.tags |= TAG.BOSS;
     const b = ent.brain;
@@ -918,7 +920,10 @@ export function createAi(ctx) {
     bossEnded = true;
     pBossEnd.bossId = bossDef ? bossDef.id : pending.pending || '';
     pBossEnd.defeated = defeated;
-    if (defeated) pending.defeat(pBossEnd.bossId);
+    if (defeated) {
+      pending.defeat(pBossEnd.bossId);
+      bossLevels.delete(pBossEnd.bossId);
+    }
     clearBossFog();
     ctx.bus.emit('boss:end', pBossEnd);
   }
@@ -1002,7 +1007,11 @@ export function createAi(ctx) {
       despawn(entId);
     },
 
-    /** @param {string} id @param {{ skipIntro?:boolean }} [opts] */
+    /**
+     * @param {string} id
+     * @param {{ skipIntro?:boolean, level?:number }} [opts] `level`: a rematch at another level (kept for the fight's
+     *   restarts until the boss is defeated)
+     */
     startBoss(id, opts) {
       const bd = ctx.defs.find('boss', id);
       if (!bd) {
@@ -1012,6 +1021,7 @@ export function createAi(ctx) {
       // Another boss's fight is reset, not dropped: it stays pending and restarts when the player enters its arena.
       if (bossEnt()) ai.resetBoss();
       clearAdds(false);
+      if (opts && typeof opts.level === 'number') bossLevels.set(bd.id, Math.max(1, Math.round(opts.level)));
       return spawnBoss(bd, !!(opts && opts.skipIntro));
     },
 
@@ -1115,6 +1125,7 @@ export function createAi(ctx) {
 
   function reset() {
     spawned.clear();
+    bossLevels.clear();
     bodyCount = 0;
     bossId = 0;
     bossDef = null;

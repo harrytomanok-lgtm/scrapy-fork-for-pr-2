@@ -88,6 +88,9 @@ export function createActivities(ctx, host) {
     api.clear();
     const w = ctx.world;
     if (!w) return;
+    // Every attuned stone carries its flag (the Ringstone menu's travel choices read it; older journeys and the
+    // tutorial=0 shortcut only had the list).
+    for (const id of W().ringstones) flags()['attuned.' + id] = true;
     for (const poi of w.pois('ringstone')) buildRingstone(poi);
     for (const poi of w.pois('shrine')) buildShrine(poi);
     for (const poi of w.pois('chest')) buildChest(poi, poi.data && poi.data.table ? poi.data.table : 'chest_t1');
@@ -137,6 +140,30 @@ export function createActivities(ctx, host) {
     }
     if (ctx.vfx) ctx.vfx.shockwave(r.x + RS_DX, ground(r.x + RS_DX, r.z + RS_DZ) + 0.5, r.z + RS_DZ, { radius: 6, color: PALETTE.structure.ringstone, seconds: 0.5 });
     ctx.bus.emit('ringstone:activated', { id: r.id, first });
+    // With a second Ringstone attuned the stone offers travel, and after the ending its rematches and trials.
+    if (!first && (w.ringstones.length > 1 || flags().credits) && !race.active) host.quests.talk('ringstone_menu', {});
+  }
+
+  /**
+   * Travel to an attuned Ringstone (the Ringstone menu, and the map screen through ctx.quests.travel): not during a
+   * boss fight, a race, a fight or a dialogue. The player arrives beside the stone on foot, healed like a touch.
+   * @param {string} id ringstone POI id @returns {boolean}
+   */
+  function travel(id) {
+    const r = byId.get(id);
+    const p = ctx.player;
+    if (!r || r.kind !== 'ringstone' || W().ringstones.indexOf(id) < 0 || !p || !p.alive) return false;
+    if (race.active || (ctx.ai && ctx.ai.boss) || (ctx.combat && ctx.combat.inCombat)) return false;
+    if (ctx.vfx) ctx.vfx.shockwave(p.pos.x, p.pos.y + 1, p.pos.z, { radius: 6, color: PALETTE.structure.ringstone, seconds: 0.4, sphere: true });
+    ctx.move.teleport(p, r.x, ground(r.x, r.z), r.z, Math.atan2(RS_DX, RS_DZ));
+    ctx.move.setMode(p, 'ground');
+    if (ctx.cam && ctx.cam.setOrbit) ctx.cam.setOrbit(Math.atan2(RS_DX, RS_DZ), ctx.cam.pitch);
+    S().player.respawn = id;
+    ctx.combat.heal(p, p.stats.hpMax);
+    ctx.combat.addOra(p, p.stats.oraMax);
+    if (ctx.vfx) ctx.vfx.shockwave(r.x + RS_DX, ground(r.x + RS_DX, r.z + RS_DZ) + 0.5, r.z + RS_DZ, { radius: 10, color: PALETTE.structure.ringstone, seconds: 0.6 });
+    ctx.bus.emit('ui:toast', { key: 'rpg.toast.travel', args: { place: ctx.i18n.t('landmark.' + (r.data && r.data.landmarkId) + '.name') }, kind: 'good' });
+    return true;
   }
 
   function buildShrine(poi) {
@@ -674,6 +701,8 @@ export function createActivities(ctx, host) {
       if (tickN % DISCOVERY_EVERY === 0) stepDiscovery(p);
       if (tickN % SHARD_EVERY === 0 && shards.length) stepShards(p);
     },
+
+    travel,
 
     /** @param {any} p pickup:collected */
     pickupCollected(p) {

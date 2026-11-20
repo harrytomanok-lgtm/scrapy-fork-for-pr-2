@@ -8,6 +8,7 @@
 import { createRpg } from './rpgService.js';
 import { createQuests } from './questService.js';
 import { registerScripts } from './scripts.js';
+import { registerChallenges } from './challenges.js';
 import { ITEMS, SHOPS, LOOT_TABLES } from './data/items.js';
 import { NPCS, OBJECTS, COURSES } from './data/world.js';
 import { QUESTS } from './data/quests.js';
@@ -35,6 +36,7 @@ export const pkg = {
     const q = createQuests(ctx, { isPlayerSide: r.isPlayerSide });
     ctx.provide('quests', q.quests, 'rpg');
     registerScripts(ctx);
+    registerChallenges(ctx, { travel: (id) => q.activities.travel(id), raceStart: (id) => q.activities.raceStart(id) });
 
     ctx.systems.add(r.tickSystem);
     ctx.systems.add(q.runSystem);
