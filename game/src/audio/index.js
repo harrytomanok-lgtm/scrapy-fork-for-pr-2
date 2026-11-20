@@ -11,7 +11,7 @@ import { installWiring } from './wiring.js';
 
 /** Stingers that carry a sound effect of their own besides the musical phrase. */
 const STINGER_SFX = Object.freeze({ levelUp: 'level_up', questComplete: 'quest_complete', discover: 'discover' });
-const STINGERS = new Set(['transform', 'levelUp', 'questComplete', 'discover', 'death', 'milestone', 'bossIntro', 'victory']);
+const STINGERS = new Set(['transform', 'levelUp', 'questComplete', 'discover', 'death', 'milestone', 'bossIntro', 'victory', 'finisher']);
 
 /**
  * Build the `ctx.audio` service.

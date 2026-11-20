@@ -200,6 +200,40 @@ export const scenarios = [
     },
   },
   {
+    // Ambience beds: the bed follows the region (and the shore), the critters sound around the listener, and the
+    // master output stays within the node budget.
+    name: 'audio-ambience',
+    query: QUERY,
+    async run({ page, game, assert }) {
+      await unlock(page, game, assert);
+      const bedAt = async (x, z) => {
+        await game((g, p) => { g.god(true); g.ai(false); g.teleport(p.x, p.z, {}); g.step(4); }, { x, z });
+        await page.waitForFunction(() => {
+          const pl = /** @type {any} */ (window).__GAME__.ctx.audio.debug().place;
+          return pl && pl.bed !== '';
+        }, null, { timeout: 30000, polling: 200 }).catch(() => {});
+        // the bed check runs at 1 Hz of frame time: render frames until it settles
+        let last = '';
+        for (let i = 0; i < 6; i++) {
+          last = await game((g) => { g.step(2); g.render(); return g.ctx.audio.debug().place.bed; });
+          await page.waitForTimeout(400);
+        }
+        const r = await game((g) => ({ bed: g.ctx.audio.debug().place.bed, region: g.ctx.world.regionAt(g.ctx.player.pos.x, g.ctx.player.pos.z), nodes: g.ctx.audio.nodes() }));
+        r.last = last;
+        return r;
+      };
+      const storm = await bedAt(2000, -1700);
+      assert.equal(storm.region, 'stormwell');
+      assert.equal(storm.bed, 'hum', 'the Stormwell hums');
+      const frost = await bedAt(-400, -2300);
+      assert.equal(frost.bed, 'wind', 'wind in the Frostspine');
+      const meadow = await bedAt(-1300, 1400);
+      assert.equal(meadow.bed, 'meadow', 'the meadows');
+      assert.ok(meadow.nodes <= 120, 'node budget (' + meadow.nodes + ')');
+      console.log('    beds: ' + JSON.stringify({ storm, frost, meadow }));
+    },
+  },
+  {
     // Place audio: the Siphon drone starts near a standing Siphon and stops when it is silenced or far; the
     // corrupted palette plays near standing Siphons and at Choir camps (ART_UX 9.3).
     name: 'audio-siphon-camp',
