@@ -1,7 +1,9 @@
 /**
  * Ocean and Veilstorm (ARCHITECTURE 4.1, ART_UX 1.8): one ocean plane that follows the camera, coloured from a
- * baked 512 x 512 water-depth texture (shallow turquoise to 6 m, deep beyond, a shoreline foam band 0-1.5 m with
- * animated breakup, hashed sun glints), and the Veilstorm wall at the world edge. Two programs.
+ * baked 512 x 512 water-depth texture (clear turquoise over the sand, shallow to 6 m, deep beyond, darker far out),
+ * two layers of drifting ripples, a sky-coloured Fresnel sheen at grazing angles, the sun's glint path (a broad sheen
+ * when the sun is low, hashed sparkles near the camera) and soft shore foam (the contact line and wash bands rolling
+ * in); and the Veilstorm wall at the world edge. Two programs; one depth fetch per water pixel, no other texture.
  * @module world/water
  */
 
@@ -11,6 +13,7 @@ import {
 } from 'three';
 import { PALETTE } from '../core/palette.js';
 import { WORLD_HALF, WORLD_SIZE } from '../core/constants.js';
+import { polishUniforms } from './terrain.js';
 
 /** Side of the water-depth texture. */
 export const DEPTH_SIZE = 512;
@@ -30,13 +33,14 @@ void main() {
 const WATER_FRAG = (glsl) => /* glsl */ `
 ${glsl.common}
 ${glsl.fog}
+${glsl.grade || ''}
 uniform sampler2D uDepth;
 uniform vec3 uDeep;
 uniform vec3 uShallow;
 uniform vec3 uFoam;
 uniform float uHalf;
 varying vec3 vPosW;
-float wh(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 45758.5453); }
+float wh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float wn(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
@@ -51,28 +55,47 @@ void main() {
   vec3 toCam = uCamPos - vPosW;
   float dist = length(toCam);
   vec3 v = toCam / max(dist, 0.001);
-  float n1 = wn(vPosW.xz * 0.07 + vec2(t * 0.21, t * 0.13));
-  float n2 = wn(vPosW.xz * 0.19 - vec2(t * 0.27, t * 0.09));
+  float nearK = 1.0 - smoothstep(60.0, 260.0, dist);
+  // two layers of ripples drifting across each other: a long swell along the wind, a short chop across it
+  vec2 wd = normalize(uWind.xz + vec2(0.0001));
+  vec2 p1 = vPosW.xz * 0.06 + wd * (t * 0.05);
+  vec2 p2 = vec2(vPosW.x * 0.17 - vPosW.z * 0.05, vPosW.z * 0.17 + vPosW.x * 0.05) - wd.yx * (t * 0.11);
+  float n1 = wn(p1);
+  float n2 = wn(p2);
   float n = n1 * 0.6 + n2 * 0.4;
-  // Two depth bands with a painted edge.
+  vec3 wnrm = normalize(vec3((n1 - 0.5) * 0.5 + (n2 - 0.5) * 0.3 * nearK, 1.0, (n2 - 0.5) * 0.5 - (n1 - 0.5) * 0.2));
+  // colour by depth: clear turquoise over the sand, a painted band edge, deep blue beyond, darker far out
   float band = smoothstep(4.2, 6.5, depth + (n - 0.5) * 1.6);
   vec3 c = mix(uShallow, uDeep, band);
-  c = mix(c, uDeep * 0.82, smoothstep(18.0, 40.0, depth));
-  c = mix(c, uShallow * 1.08, (1.0 - smoothstep(0.0, 2.5, depth)) * 0.5);
-  // Light: authored colours scaled by the sun and sky.
-  c *= uSunColor * 0.55 + uAmbSky * 0.45;
-  // Glints: hashed sparkles where the wave normal reflects the sun.
-  vec3 wnrm = normalize(vec3((n1 - 0.5) * 0.35, 1.0, (n2 - 0.5) * 0.35));
-  float spec = dot(reflect(-uSunDir, wnrm), v);
-  float sparkle = step(0.82, wh(floor(vPosW.xz * 0.5) + floor(t * 3.0)));
-  c += uSunColor * smoothstep(0.965, 0.985, spec) * sparkle * (1.0 - smoothstep(150.0, 700.0, dist));
-  // Shoreline foam band (0 to 1.5 m) with animated breakup.
-  float edge = 1.5 * (0.45 + 0.75 * n) + 0.18 * sin(t * 1.4 - depth * 2.6);
-  float foam = (1.0 - smoothstep(edge - 0.12, edge + 0.04, depth)) * step(-0.6, depth);
-  c = mix(c, uFoam * (uSunColor * 0.5 + uAmbSky * 0.5), foam);
+  c = mix(c, uDeep * 0.72, smoothstep(14.0, 40.0, depth));
+  c = mix(c, uShallow * 1.2, (1.0 - smoothstep(0.0, 2.2, depth)) * 0.55);
+  c *= uSunColor * 0.5 + uAmbSky * 0.5;
+  // ripple crests: thin lighter contour lines of the chop near the camera
+  float crest = smoothstep(0.62, 0.7, n2) * (1.0 - smoothstep(0.7, 0.8, n2)) * nearK;
+  c += (uAmbSky * 0.5 + uSunColor * 0.15) * crest * 0.35;
+  // sky sheen at grazing angles (Fresnel): toward the distance the water takes the horizon colour
+  float fres = pow(1.0 - clamp(dot(v, wnrm), 0.0, 1.0), 4.0);
+  vec3 skyC = mix(uFogColor, uAmbSky, 0.55);
+  c = mix(c, skyC, clamp(fres * 0.7, 0.0, 0.6));
+  // the sun's glint path: a broad sheen toward the sun when it is low, hashed sparkles near the camera
+  vec3 rv = reflect(-v, wnrm);
+  float sd = max(dot(rv, uSunDir), 0.0);
+  float lowL = 1.0 - smoothstep(0.2, 0.7, uSunDir.y);
+  vec3 sunC = min(uSunColor, vec3(1.2));
+  c += sunC * pow(sd, 24.0) * (0.18 + 0.4 * lowL);
+  float sparkle = step(0.8, wh(floor(vPosW.xz * 0.6) + floor(t * 4.0)));
+  c += sunC * smoothstep(0.93, 0.975, sd) * mix(1.0, sparkle, nearK) * (0.6 + 0.4 * lowL) * (1.0 - smoothstep(300.0, 1400.0, dist));
+  // shore foam: the contact line plus soft wash bands rolling in, broken up by noise
+  float edge = 0.45 + 0.6 * n + 0.15 * sin(t * 1.3 - depth * 2.4);
+  float foam = (1.0 - smoothstep(edge - 0.25, edge + 0.1, depth)) * step(-0.6, depth);
+  float wave = fract(t * 0.12 - depth * 0.32 + n1 * 0.35);
+  float wash = smoothstep(0.82, 0.9, wave) * (1.0 - smoothstep(0.93, 0.99, wave)) * (1.0 - smoothstep(0.6, 2.8, depth)) * smoothstep(0.38, 0.6, n2);
+  foam = max(foam, wash * 0.75);
+  c = mix(c, uFoam * (uSunColor * 0.45 + uAmbSky * 0.55), clamp(foam, 0.0, 1.0));
   c = applyFog(c, vPosW);
   gl_FragColor = vec4(c, 1.0);
   #include <colorspace_fragment>
+  ${glsl.grade ? 'gl_FragColor.rgb = gfxGrade(gl_FragColor.rgb);' : ''}
 }
 `;
 
@@ -156,6 +179,7 @@ export function createWater(ctx, grid, wallRadius) {
       uTime: g.uTime, uSunDir: g.uSunDir, uSunColor: g.uSunColor, uAmbSky: g.uAmbSky, uAmbGround: g.uAmbGround,
       uShadowTint: g.uShadowTint, uFogColor: g.uFogColor, uFogDensity: g.uFogDensity, uFogHeight: g.uFogHeight,
       uRimColor: g.uRimColor, uCamPos: g.uCamPos, uWind: g.uWind,
+      ...polishUniforms(g),
       uDepth: { value: tex },
       uDeep: { value: new Color(PALETTE.ocean.deep) },
       uShallow: { value: new Color(PALETTE.ocean.shallow) },

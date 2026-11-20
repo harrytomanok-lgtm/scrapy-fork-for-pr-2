@@ -164,9 +164,11 @@ vec3 toonLight(vec3 base, vec3 n, vec3 viewDir) {
 }
 
 /**
- * Exponential-squared height fog (ART_UX 1.5): density along the view ray scaled by the exponential height
- * integral between camera and point (floor 0.3 so distant peaks still fade); toward the sun the colour lerps up
- * to 35% to the sun colour.
+ * Height fog and aerial perspective (ART_UX 1.2 rule 4, 1.5): the exponential-squared fog of 1.5 plus a linear
+ * exponential haze that builds with distance, both thinned by the exponential height integral between camera and
+ * point (floor 0.22), so near ground stays crisp, far ridges recede in layers and peaks stand clear of hazy valleys.
+ * Colour: the region fog (= the sky's horizon); nearer haze leans toward the cool sky ambient; toward the sun (or
+ * moon) it lerps to the light colour, more when the light is low.
  */
 export const FOG_CHUNK = /* glsl */ `
 float fogAmount(vec3 worldPos) {
@@ -177,17 +179,22 @@ float fogAmount(vec3 worldPos) {
   float y1 = max(worldPos.y, 0.0);
   float dy = y1 - y0;
   float h = abs(dy) > 1.0 ? (exp(-k * y0) - exp(-k * y1)) / (k * dy) : exp(-k * y0);
-  h = max(h, 0.3);
+  h = max(h, 0.22);
   float fd = uFogDensity * dist;
-  return clamp(1.0 - exp(-fd * fd * h), 0.0, 1.0);
+  float air = fd * 1.6;
+  return clamp(1.0 - exp(-(fd * fd + air) * h), 0.0, 1.0);
 }
 vec3 fogTint(vec3 worldPos) {
   vec3 dir = normalize(worldPos - uCamPos);
-  float toSun = pow(max(dot(dir, uSunDir), 0.0), 8.0) * 0.35;
+  float lowL = 1.0 - smoothstep(0.15, 0.6, uSunDir.y);
+  float toSun = pow(max(dot(dir, uSunDir), 0.0), 6.0) * (0.3 + 0.35 * lowL);
   return mix(uFogColor, min(uSunColor, vec3(1.0)), toSun);
 }
 vec3 applyFog(vec3 color, vec3 worldPos) {
-  return mix(color, fogTint(worldPos), fogAmount(worldPos));
+  float a = fogAmount(worldPos);
+  vec3 t = fogTint(worldPos);
+  t = mix(t, mix(t, uAmbSky, 0.5), 0.45 * (1.0 - smoothstep(0.15, 0.7, a)));
+  return mix(color, t, a);
 }
 `;
 

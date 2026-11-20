@@ -16,6 +16,9 @@ import {
 import { PALETTE } from '../core/palette.js';
 
 const NOISE = 256;
+/** Height of the painted cloud plane above the camera (metres) and its texture scale (uv per metre). */
+export const CLOUD_HEIGHT = 1500;
+export const CLOUD_UV = 0.16 / CLOUD_HEIGHT;
 
 /** @param {number} x @param {number} y @param {number} p period @param {number} seed @returns {number} 0..1 */
 function latticeHash(x, y, p, seed) {
@@ -95,6 +98,19 @@ void main() {
 }
 `;
 
+/** The final grade of the low tier (render polish), inline so the sky stays one program. */
+const GRADE = /* glsl */ `
+  if (uGrade.w > 0.5) {
+    vec3 g = gl_FragColor.rgb;
+    float gl = dot(g, vec3(0.2126, 0.7152, 0.0722));
+    g = clamp(mix(vec3(gl), g, uGrade.y), 0.0, 1.0);
+    g = mix(g, g * g * (3.0 - 2.0 * g), uGrade.x);
+    vec2 q = (gl_FragCoord.xy * uScreen.zw - 0.5) * vec2(uScreen.x * uScreen.w, 1.0);
+    float r = length(q) / max(0.5 * uScreen.x * uScreen.w, 0.5);
+    gl_FragColor.rgb = g * (1.0 - uGrade.z * smoothstep(0.55, 1.45, r));
+  }
+`;
+
 const SKY_FRAG = /* glsl */ `
 uniform vec3 uZenith;
 uniform vec3 uHorizon;
@@ -117,6 +133,8 @@ uniform vec3 uSeamCol;
 uniform vec3 uSeamCenter;
 uniform vec3 uSeamNormal;
 uniform float uTime;
+uniform vec4 uGrade;
+uniform vec4 uScreen;
 varying vec3 vDir;
 
 float skyHash(vec3 p) {
@@ -152,6 +170,15 @@ void main() {
   // gradient: a wide horizon band, the zenith above; below the horizon the fog colour
   vec3 horizon = mix(uHorizon, sunC, pow(max(sd, 0.0), 8.0) * 0.35 * uSunVis);
   vec3 c = mix(horizon, uZenith, smoothstep(0.0, 1.0, pow(up, 0.5)));
+  // sunrise and sunset glow (and the afterglow of blue hour): a warm band low on the sky, widest toward the sun,
+  // that lingers a little after the sun has set
+  float low = (1.0 - smoothstep(0.04, 0.42, uSunTrue.y)) * smoothstep(-0.3, -0.02, uSunTrue.y);
+  vec2 sxz = normalize(uSunTrue.xz + vec2(0.0001));
+  vec2 dxz = normalize(d.xz + vec2(0.0001));
+  float az = dot(dxz, sxz) * 0.5 + 0.5;
+  float band = exp(-max(y + 0.02, 0.0) * mix(9.0, 4.0, az));
+  vec3 glowC = mix(sunC, vec3(sunC.r, sunC.g * 0.62, sunC.b * 0.55), 0.5 + 0.5 * az);
+  c = mix(c, glowC, band * low * (0.12 + 0.6 * az * az));
 
   // night: stars and the Seam
   if (uNight > 0.01 && y > 0.0) {
@@ -178,7 +205,7 @@ void main() {
 
   // sun: hard disc and halo
   float sunVis = uSunVis * smoothstep(-0.04, 0.02, y);
-  c += sunC * (pow(max(sd, 0.0), 300.0) * 0.5 + pow(max(sd, 0.0), 22.0) * 0.22) * sunVis;
+  c += sunC * (pow(max(sd, 0.0), 300.0) * 0.5 + pow(max(sd, 0.0), 22.0) * 0.22 + pow(max(sd, 0.0), 5.0) * 0.18 * low) * sunVis;
   float sunDisc = smoothstep(0.99955, 0.99962, sd) * sunVis;
 
   // moon: disc and pale ring
@@ -186,7 +213,7 @@ void main() {
   float moonVis = uNight * smoothstep(-0.02, 0.05, y);
   float moonDisc = smoothstep(0.99968, 0.99974, md);
   float ring = smoothstep(0.9988, 0.99915, md) * (1.0 - smoothstep(0.9993, 0.99955, md));
-  c += uMoonCol * (ring * 0.35 + pow(max(md, 0.0), 60.0) * 0.12) * moonVis;
+  c += uMoonCol * (ring * 0.35 + pow(max(md, 0.0), 60.0) * 0.16 + pow(max(md, 0.0), 9.0) * 0.07) * moonVis;
 
   // painted clouds over the discs
   if (y > 0.0) {
@@ -208,6 +235,7 @@ void main() {
   }
   gl_FragColor = vec4(c, 1.0);
   #include <colorspace_fragment>
+  ${GRADE}
 }
 `;
 
@@ -239,6 +267,8 @@ export function createSky() {
     uSeamCenter: { value: new Vector3(0, 1, 0) },
     uSeamNormal: { value: new Vector3(1, 0, 0) },
     uTime: { value: 0 },
+    uGrade: { value: new Vector4(0, 1, 0, 0) },
+    uScreen: { value: new Vector4(1, 1, 1, 1) },
   };
   const material = new ShaderMaterial({
     uniforms,
@@ -268,10 +298,14 @@ export function createSky() {
   let ofsZ1 = 0;
   let ofsX2 = 0;
   let ofsZ2 = 0;
+  /** World-space drift of cloud layer one (uv), for the ground's cloud shadows. */
+  const cloud = { x: 0, y: 0 };
 
   return {
     mesh,
     uniforms,
+    noise,
+    cloud,
     /**
      * @param {any} cam camera (position) @param {number} dt real seconds
      * @param {{ zenith:Color, horizon:Color, sunTrue:Vector3, moonDir:Vector3, sunColor:Color, ambSky:Color, shadow:Color,
@@ -308,7 +342,13 @@ export function createSky() {
       ofsZ1 = (ofsZ1 + (w.z / wl) * 2 * k) % 1;
       ofsX2 = (ofsX2 + (w.x / wl) * 3.5 * k) % 1;
       ofsZ2 = (ofsZ2 + (w.z / wl) * 3.5 * k) % 1;
-      uniforms.uCloudOfs.value.set(ofsX1, ofsZ1, ofsX2 + 0.43, ofsZ2 + 0.17);
+      // the clouds are anchored to the world (a plane CLOUD_HEIGHT above the camera): they pass overhead as the
+      // camera travels, and the ground's cloud shadows (render.globals uCloudP) sample the same pattern
+      const cx = (p.x * CLOUD_UV) % 1;
+      const cz = (p.z * CLOUD_UV) % 1;
+      uniforms.uCloudOfs.value.set((ofsX1 + cx) % 1, (ofsZ1 + cz) % 1, (ofsX2 + 0.43 + cx * 0.62) % 1, (ofsZ2 + 0.17 + cz * 0.62) % 1);
+      cloud.x = ofsX1;
+      cloud.y = ofsZ1;
       // the Seam: a great-circle scar through the point 2600 m above the Spire
       tmp.set(-p.x, 2600 - p.y, -p.z).normalize();
       uniforms.uSeamCenter.value.copy(tmp);

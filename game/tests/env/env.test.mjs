@@ -10,7 +10,7 @@ import { IDS } from '../../src/core/ids.js';
 import { PALETTE } from '../../src/core/palette.js';
 import {
   sampleDay, createSample, advanceClock, phaseOf, hexToLinear, nightFactor, lanternFactor, fogDensity, sunDirection,
-  lightDirection, wrapHour, SECONDS_PER_HOUR, KEYS,
+  lightDirection, wrapHour, SECONDS_PER_HOUR, KEYS, lookOfDay, hourWindow,
 } from '../../src/env/logic/day.js';
 import { SETTLEMENTS, layoutProblems, REQUIRED_SPOTS } from '../../src/env/data/settlements.js';
 import { PROP_KINDS } from '../../src/env/data/props.js';
@@ -186,4 +186,25 @@ test('settlement spot resolution on a mock world', () => {
   assert.equal(s.spot('sparkstead', 'nowhere', out), false);
   assert.equal(s.spot('nowhere', 'a', out), false);
   s.dispose();
+});
+
+test('time-of-day look: noon untouched, golden hour cools the fill, blue hour turns the sky blue, no jumps', () => {
+  const noon = sampleDay(12, REGION, createSample());
+  const ref = JSON.stringify(noon);
+  lookOfDay(12, noon);
+  assert.equal(JSON.stringify(noon), ref, 'the Day key is not changed');
+  const g0 = sampleDay(17.6, REGION, createSample());
+  const g1 = lookOfDay(17.6, sampleDay(17.6, REGION, createSample()));
+  assert.ok(g1.ambSky[2] / g1.ambSky[0] > g0.ambSky[2] / g0.ambSky[0], 'the golden fill is cooler');
+  assert.ok(g1.intensity > g0.intensity, 'the golden sun is stronger');
+  const b1 = lookOfDay(20.1, sampleDay(20.1, REGION, createSample()));
+  assert.ok(b1.zenith[2] > b1.zenith[0] * 1.5, 'blue hour has a blue zenith');
+  assert.equal(hourWindow(10, 16.2, 17.6, 18.9), 0);
+  const p = createSample();
+  const q = createSample();
+  for (let h = 15; h < 22; h += 0.01) {
+    lookOfDay(h, sampleDay(h, REGION, p));
+    lookOfDay(h + 0.01, sampleDay(h + 0.01, REGION, q));
+    assert.ok(close3(p.ambSky, q.ambSky, 0.01) && close3(p.zenith, q.zenith, 0.01), 'jump at ' + h.toFixed(2));
+  }
 });

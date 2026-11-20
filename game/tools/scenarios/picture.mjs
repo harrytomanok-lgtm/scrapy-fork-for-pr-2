@@ -81,7 +81,9 @@ function views(g, spotSrc) {
   const rr = W.landmark('ridgerest');
   const ps = W.landmark('paleglass_summit');
   // coast: a dry spot near the Tide Beacon, looking along the shore out to sea (south)
-  const cp = spot(g, tb.x - 60, tb.z - 70);
+  const cp = { x: tb.x - 140, z: tb.z - 320 };
+  for (let i = 0; i < 160 && W.waterDepthAt(cp.x, cp.z + 4) <= 0.3; i++) cp.z += 4;
+  cp.z -= 10;
   const out = {
     portrait: [
       { name: 'meadows', x: mp.x, z: mp.z, yaw: Math.atan2(-mp.x, -mp.z) + 0.25, pitch: -0.12, hour: 12 },
@@ -89,9 +91,9 @@ function views(g, spotSrc) {
     ],
     landscape: [
       { name: 'sparkstead-golden', x: sp.x + 18, z: sp.z + 26, yaw: Math.atan2(-18, -26) + 0.5, pitch: -0.06, hour: 17.5 },
-      { name: 'coast', x: cp.x, z: cp.z, yaw: -0.6, pitch: -0.1, hour: 14 },
+      { name: 'coast', x: cp.x, z: cp.z, yaw: -0.35, pitch: -0.2, hour: 14 },
       { name: 'flight-150', x: m.cx, z: m.cz, alt: 150, yaw: Math.atan2(-m.cx, -m.cz), pitch: -0.3, hour: 12 },
-      { name: 'mountain-vista', x: rr.x + 300, z: rr.z + 500, alt: 90, yaw: Math.atan2(ps.x - rr.x - 300, ps.z - rr.z - 500), pitch: -0.02, hour: 10 },
+      { name: 'mountain-vista', x: rr.x + 300, z: rr.z + 700, alt: 260, yaw: Math.atan2(ps.x - rr.x - 300, ps.z - rr.z - 700), pitch: -0.1, hour: 10 },
     ],
     hours: [5.5, 12, 17.5, 20, 0].map((h) => ({ name: 'hour-' + String(h).replace('.', ''), x: mp.x, z: mp.z, yaw: Math.atan2(-mp.x, -mp.z) + 0.25, pitch: -0.1, hour: h })),
   };
