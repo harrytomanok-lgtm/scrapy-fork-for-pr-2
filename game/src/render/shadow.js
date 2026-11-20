@@ -9,8 +9,9 @@
  *   small proxy instanced meshes that hold only the instances near the box, refreshed every 0.5 s or when the box
  *   moves 4 m, so the shadow pass never redraws the whole forest.
  * Receivers read the map through the shared lighting uniforms (`uShadowMap`, `uShadowMat`, `uShadowP`, `uShadowC`):
- * toon materials and the terrain. Depth textures are core WebGL2; the map is sampled with four nearest taps blended
- * bilinearly and then sharpened to a clean toon edge (render/glsl SHADOW_CHUNK).
+ * toon materials and the terrain. Depth textures are core WebGL2; the map is sampled with nearest taps: four on the
+ * small map, blended bilinearly and kept soft, nine on the large one with a clean toon edge (render/glsl
+ * SHADOW_FRAG_CHUNK). Instances the toon vertex shader hides near the camera are left out of the proxies.
  * Programs: the depth material adds three (static, skinned, instanced), linked at warm-up.
  * @module render/shadow
  */
@@ -52,6 +53,7 @@ export function createShadows(globals) {
   const bias = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
   const center = new Vector3();
   const lastFill = new Vector3(1e9, 0, 0);
+  const lastEye = new Vector3(1e9, 0, 0);
   const tmp = new Vector3();
   const right = new Vector3();
   const up = new Vector3();
@@ -102,6 +104,7 @@ export function createShadows(globals) {
   function fill(r) {
     const cx = center.x;
     const cz = center.z;
+    const eye = globals.uCamPos ? globals.uCamPos.value : null;
     for (let k = 0; k < proxies.length; k++) {
       const { src, proxy } = proxies[k];
       let n = 0;
@@ -109,11 +112,20 @@ export function createShadows(globals) {
         const a = src.instanceMatrix.array;
         const b = proxy.instanceMatrix.array;
         const count = src.count;
+        // the near hide of the toon vertex shader (an instance close to the camera is not drawn): what is hidden
+        // must not cast either
+        const nh = eye && src.material.uniforms.uNearHide ? src.material.uniforms.uNearHide.value : 0;
         for (let i = 0; i < count && n < PROXY_MAX; i++) {
           const o = i * 16;
           const dx = a[o + 12] - cx;
           const dz = a[o + 14] - cz;
           if (dx * dx + dz * dz > r * r) continue;
+          if (nh > 0) {
+            const rr = nh * Math.sqrt(a[o] * a[o] + a[o + 1] * a[o + 1] + a[o + 2] * a[o + 2]);
+            const ex = a[o + 12] - eye.x;
+            const ez = a[o + 14] - eye.z;
+            if (ex * ex + ez * ez < rr * rr && eye.y < a[o + 13] + rr * 4) continue;
+          }
           const d = n * 16;
           for (let j = 0; j < 16; j++) b[d + j] = a[o + j];
           n++;
@@ -193,9 +205,12 @@ export function createShadows(globals) {
       }
       center.set(x, y, z);
       fillT -= dt;
-      if (fillT <= 0 || lastFill.distanceToSquared(center) > 16) {
+      // refill every 0.5 s, when the box moved 4 m, or when the camera moved a metre (near-hidden casters change)
+      const eyeNow = globals.uCamPos ? globals.uCamPos.value : center;
+      if (fillT <= 0 || lastFill.distanceToSquared(center) > 16 || lastEye.distanceToSquared(eyeNow) > 1) {
         fillT = 0.5;
         lastFill.copy(center);
+        lastEye.copy(eyeNow);
         fill(half * 1.45 + 6);
       }
       const L = globals.uSunDir.value;

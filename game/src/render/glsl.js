@@ -75,19 +75,36 @@ varying vec3 vShadow;
 float gfxShadowTap(vec2 uv, float z) {
   return step(z, texture2D(uShadowMap, uv).r);
 }
-// 1 lit, 0 shadowed: four nearest taps blended bilinearly, then a clean toon edge; fades out at the box edge
+// 1 lit, 0 shadowed; fades out at the box edge. The large map (high tier) takes nine nearest taps with quadratic
+// B-spline weights and a clean toon edge. The small map takes four taps blended bilinearly and keeps the edge soft
+// over about a texel: sharpening four taps showed the texel grid as a sawtooth along every shadow edge.
 float gfxShadow(vec3 posW) {
   if (uShadowP.w < 0.5) return 1.0;
   vec3 sp = vShadow;
   if (sp.x <= 0.0 || sp.y <= 0.0 || sp.x >= 1.0 || sp.y >= 1.0 || sp.z >= 1.0) return 1.0;
   float z = sp.z - uShadowP.z;
   float t = uShadowP.y;
-  vec2 st = sp.xy / t - 0.5;
-  vec2 f = fract(st);
-  vec2 b = (floor(st) + 0.5) * t;
-  float s = mix(mix(gfxShadowTap(b, z), gfxShadowTap(b + vec2(t, 0.0), z), f.x),
-                mix(gfxShadowTap(b + vec2(0.0, t), z), gfxShadowTap(b + vec2(t, t), z), f.x), f.y);
-  s = smoothstep(0.28, 0.72, s);
+  float s;
+  if (t < 0.0007) {
+    vec2 c = sp.xy / t;
+    vec2 n = floor(c) + 0.5;
+    vec2 d = c - n;
+    vec2 w0 = 0.5 * (0.5 - d) * (0.5 - d);
+    vec2 w1 = 0.75 - d * d;
+    vec2 w2 = 0.5 * (0.5 + d) * (0.5 + d);
+    vec2 b = n * t;
+    s = w0.y * (w0.x * gfxShadowTap(b + vec2(-t, -t), z) + w1.x * gfxShadowTap(b + vec2(0.0, -t), z) + w2.x * gfxShadowTap(b + vec2(t, -t), z))
+      + w1.y * (w0.x * gfxShadowTap(b + vec2(-t, 0.0), z) + w1.x * gfxShadowTap(b, z) + w2.x * gfxShadowTap(b + vec2(t, 0.0), z))
+      + w2.y * (w0.x * gfxShadowTap(b + vec2(-t, t), z) + w1.x * gfxShadowTap(b + vec2(0.0, t), z) + w2.x * gfxShadowTap(b + vec2(t, t), z));
+    s = smoothstep(0.3, 0.7, s);
+  } else {
+    vec2 st = sp.xy / t - 0.5;
+    vec2 f = fract(st);
+    vec2 b = (floor(st) + 0.5) * t;
+    s = mix(mix(gfxShadowTap(b, z), gfxShadowTap(b + vec2(t, 0.0), z), f.x),
+            mix(gfxShadowTap(b + vec2(0.0, t), z), gfxShadowTap(b + vec2(t, t), z), f.x), f.y);
+    s = smoothstep(0.06, 0.94, s);
+  }
   vec2 e = abs(posW.xz - uShadowC.xy) / uShadowC.z;
   float fade = smoothstep(0.72, 0.97, max(e.x, e.y));
   return mix(1.0, s, uShadowP.x * (1.0 - fade));
