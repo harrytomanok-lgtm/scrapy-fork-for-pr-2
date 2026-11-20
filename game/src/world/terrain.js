@@ -25,8 +25,12 @@ const K1 = 1;
 const K2 = 2;
 const POOL = [24, 56, 80];
 
+/** True when the render service has the polish chunks (shadow map, cloud shadows, grade); the stand-in has not. */
+const POLISH = (glsl) => !!(glsl.shadowVert && glsl.grade);
+
 const VERT = (glsl) => /* glsl */ `
 ${glsl.common}
+${POLISH(glsl) ? glsl.shadowVert : 'void gfxShadowCoord(vec3 a, vec3 b) {}'}
 attribute vec4 aNormal;
 attribute vec4 aColor;
 uniform vec3 uFoliage[7];
@@ -65,6 +69,7 @@ void main() {
   vNormalW = normalize(aNormal.xyz + vec3(0.0, 0.0001, 0.0));
   vPosW = p;
   vWq = p.xz - floor(uCamPos.xz / 256.0) * 256.0;
+  gfxShadowCoord(p, vNormalW);
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }
 `;
@@ -73,6 +78,7 @@ const FRAG = (glsl) => /* glsl */ `
 ${glsl.common}
 ${glsl.lighting}
 ${glsl.fog}
+${POLISH(glsl) ? glsl.grade : ''}
 varying vec3 vGround;
 varying vec3 vCanopy;
 varying vec3 vShade;
@@ -152,12 +158,25 @@ void main() {
   }
   vec3 ln = normalize(n + vec3(bump - 0.5, 0.0, tn(vPosW.xz * 0.085 + 5.0) - 0.5) * amt * 0.9);
   // Terrain takes no rim light: the view vector is the normal itself.
-  vec3 c = toonLight(base, ln, ln);
+  vec3 c = ${POLISH(glsl) ? 'toonLightS(base, ln, ln, gfxShadow(vPosW), gfxCloud(vPosW))' : 'toonLight(base, ln, ln)'};
   c = applyFog(c, vPosW);
   gl_FragColor = vec4(c, 1.0);
   #include <colorspace_fragment>
+  ${POLISH(glsl) ? 'gl_FragColor.rgb = gfxGrade(gl_FragColor.rgb);' : ''}
 }
 `;
+
+/**
+ * The shared shadow, cloud and grade uniforms of render.globals (render polish), when the render service has them.
+ * @param {any} g render.globals @returns {object}
+ */
+export function polishUniforms(g) {
+  if (!g.uShadowP) return {};
+  return {
+    uShadowMap: g.uShadowMap, uShadowMat: g.uShadowMat, uShadowP: g.uShadowP, uShadowC: g.uShadowC,
+    uCloudMap: g.uCloudMap, uCloudP: g.uCloudP, uCloudQ: g.uCloudQ, uGrade: g.uGrade, uScreen: g.uScreen,
+  };
+}
 
 /**
  * @param {any} ctx
@@ -179,6 +198,7 @@ export function createTerrain(ctx, grid) {
         uTime: g.uTime, uSunDir: g.uSunDir, uSunColor: g.uSunColor, uAmbSky: g.uAmbSky, uAmbGround: g.uAmbGround,
         uShadowTint: g.uShadowTint, uFogColor: g.uFogColor, uFogDensity: g.uFogDensity, uFogHeight: g.uFogHeight,
         uRimColor: g.uRimColor, uCamPos: g.uCamPos, uWind: g.uWind,
+        ...polishUniforms(g),
         uFoliage: { value: foliage },
         uShade: { value: shade },
         uAccent: { value: accent },

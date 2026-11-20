@@ -49,6 +49,8 @@ export function createMaterials(globals, internal) {
       uAmbSky: globals.uAmbSky, uAmbGround: globals.uAmbGround, uShadowTint: globals.uShadowTint,
       uFogColor: globals.uFogColor, uFogDensity: globals.uFogDensity, uFogHeight: globals.uFogHeight,
       uGlobalRim: globals.uRimColor, uCamPos: globals.uCamPos,
+      uShadowMap: globals.uShadowMap, uShadowMat: globals.uShadowMat, uShadowP: globals.uShadowP, uShadowC: globals.uShadowC,
+      uCloudMap: globals.uCloudMap, uCloudP: globals.uCloudP, uCloudQ: globals.uCloudQ, uGrade: globals.uGrade, uScreen: globals.uScreen,
     });
   }
 

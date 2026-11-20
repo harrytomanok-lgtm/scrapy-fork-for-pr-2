@@ -80,8 +80,12 @@ export function createBlobs(ctx) {
     count() {
       return mesh ? mesh.count : 0;
     },
-    /** @param {number} alpha interpolation factor */
-    update(alpha) {
+    /**
+     * @param {number} alpha interpolation factor
+     * @param {{x:number,z:number}|null} [shadowC] centre of the shadow map box when the map is drawn
+     * @param {number} [shadowHalf] its half size: grounded entities well inside it lose their blob (real shadow)
+     */
+    update(alpha, shadowC, shadowHalf = 0) {
       if (!mesh) return;
       const world = ctx.world;
       const arr = alphaAttr.array;
@@ -113,7 +117,15 @@ export function createBlobs(ctx) {
         }
         const alt = Math.max(0, pos.y - gy);
         if (alt > 120) continue;
-        const k = Math.max(0.3, 1 - alt / 50);
+        let k = Math.max(0.3, 1 - alt / 50);
+        if (shadowC && alt < 8) {
+          const dx = pos.x - shadowC.x;
+          const dz = pos.z - shadowC.z;
+          const d = Math.max(Math.abs(dx), Math.abs(dz));
+          const t = Math.min(1, Math.max(0, (d - shadowHalf * 0.55) / (shadowHalf * 0.25)));
+          // inside the map the real shadow takes over; a faint contact blob stays under the feet
+          k *= 0.25 + 0.75 * t * t * (3 - 2 * t);
+        }
         const s = radius[i] * 1.25 * Math.max(0.45, 1 - alt / 60);
         q.setFromUnitVectors(up, nrm);
         pos.y = gy + 0.05;

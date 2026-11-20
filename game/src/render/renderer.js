@@ -8,14 +8,16 @@
 
 import {
   WebGLRenderer, Scene, PerspectiveCamera, Group, Color, Vector2, Vector3, Vector4, Mesh, SkinnedMesh, InstancedMesh,
-  BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute, Skeleton, Bone,
+  BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute, Skeleton, Bone, Matrix4,
 } from 'three';
 import { PALETTE } from '../core/palette.js';
 import { TMP } from '../core/math.js';
 import { createFlashBudget } from '../core/fx.js';
 import { TIERS, chooseTier } from './logic/tiers.js';
 import { createDynRes, TELEPORT_HOLD } from './logic/dynres.js';
-import { commonChunk, lightingChunk, FOG_CHUNK } from './glsl.js';
+import { createCalib } from './logic/calib.js';
+import { commonChunk, lightingChunk, FOG_CHUNK, SHADOW_VERT_CHUNK, GRADE_CHUNK } from './glsl.js';
+import { createShadows } from './shadow.js';
 import { createMaterials } from './materials.js';
 import { createOutlines } from './outline.js';
 import { createBlobs } from './blob.js';
@@ -66,11 +68,30 @@ export function createRender(ctx) {
     uCamPos: { value: new Vector3() },
     /** x: wind direction x, y: sway amplitude in metres, z: wind direction z. */
     uWind: { value: new Vector3(0.8, 0.15, 0.6) },
+    // render polish: the shadow map (written by render/shadow), cloud shadows (written by env), the final grade
+    uShadowMap: { value: null },
+    uShadowMat: { value: new Matrix4() },
+    /** x strength, y 1/size, z depth bias, w on. */
+    uShadowP: { value: new Vector4(0, 1 / 1024, 0, 0) },
+    /** x, y box centre (world x, z), z half size. */
+    uShadowC: { value: new Vector4(0, 0, 20, 0) },
+    /** The sky's cloud noise texture (env). */
+    uCloudMap: { value: null },
+    /** x, y uv offset (drift), z uv per metre, w strength (0: off). */
+    uCloudP: { value: new Vector4(0, 0, 0.0001, 0) },
+    /** x coverage, y cloud plane height (metres). */
+    uCloudQ: { value: new Vector4(0.42, 1500, 0, 0) },
+    /** x contrast, y saturation, z vignette, w on (low tier). */
+    uGrade: { value: new Vector4(0.14, 1.08, 0.28, 1) },
+    /** Drawing buffer size: width, height, 1/width, 1/height. */
+    uScreen: { value: new Vector4(1, 1, 1, 1) },
   };
   /** gfx-private shared uniforms. */
   const internal = {
     uViewport: { value: new Vector2(1, 1) },
     uInk: { value: new Color(PALETTE.ink) },
+    /** The final grade (shared with render.globals.uGrade; the high composite reads contrast and saturation). */
+    uGrade: globals.uGrade,
     uPointPos0: { value: new Vector4(0, 0, 0, 0) },
     uPointPos1: { value: new Vector4(0, 0, 0, 0) },
     uPointCol0: { value: new Color(0, 0, 0) },
@@ -84,6 +105,13 @@ export function createRender(ctx) {
   const fx = createScreenFx();
   const budget = createFlashBudget();
   const dyn = createDynRes(TIERS.low, false);
+  const shadows = createShadows(globals);
+  const calib = createCalib({ maxRatio: 1, target: 30, shadows: false });
+  /** Shadow map allowed: not forced off, the device is not among the weakest. */
+  let shadowAllowed = true;
+  /** The shadow map was shed (calibration or dynamic resolution: the first sacrifice). */
+  let shadowShed = false;
+  let calibrating = false;
 
   // ------------------------------------------------------------------ point lights
   const LIGHTS = 2;
@@ -148,10 +176,13 @@ export function createRender(ctx) {
       const t = post.target();
       if (t) internal.uViewport.value.set(t.width, t.height);
     } else {
-      renderer.setPixelRatio(pr * render.scale);
+      // low: render.scale is the pixel ratio itself (device pixels per CSS pixel), never above the device's own
+      renderer.setPixelRatio(Math.min(render.scale, Math.max(dpr, 0.6)));
       renderer.setSize(width, height, false);
       renderer.getDrawingBufferSize(internal.uViewport.value);
     }
+    const vp = internal.uViewport.value;
+    globals.uScreen.value.set(vp.x, vp.y, 1 / Math.max(1, vp.x), 1 / Math.max(1, vp.y));
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     resizeDirty = false;
@@ -174,12 +205,40 @@ export function createRender(ctx) {
     });
   }
 
+  /** Device pixel ratio the low tier may reach: min(devicePixelRatio, maxDpr). */
+  function maxRatio() {
+    const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
+    return Math.min(dpr, render.caps.maxDpr);
+  }
+
+  /** Static check for the weakest phones (2 GB or less): they never get a shadow map. */
+  function weakDevice() {
+    if (typeof navigator === 'undefined') return false;
+    const mem = /** @type {any} */ (navigator).deviceMemory;
+    return typeof mem === 'number' && mem > 0 && mem <= 2;
+  }
+
+  /** @returns {boolean} the shadow map is drawn this frame */
+  function shadowsOn() {
+    return render.caps.shadowSize > 0 && shadowAllowed && !shadowShed && (!calibrating || calib.shadows);
+  }
+
   /** @param {'low'|'high'} tier */
   function applyTier(tier) {
     render.tier = tier;
     render.caps = TIERS[tier];
     dyn.configure(render.caps, tier === 'high' && !dropped);
+    // the phone tier calibrates its pixel ratio from 1.0 (render/logic/calib); dynamic resolution then keeps it
+    calibrating = dynamic && !!render.caps.calibrate;
+    if (calibrating) {
+      calib.configure({ maxRatio: maxRatio(), target: render.caps.targetFps, shadows: shadowAllowed && !shadowShed && render.caps.shadowSize > 0 });
+      dyn.limit(calib.scale);
+      dyn.scale = calib.scale;
+    }
+    dyn.canShed = shadowsOn();
     render.scale = dynamic ? dyn.scale : fixedScale;
+    globals.uGrade.value.w = tier === 'high' ? 0 : 1;
+    if (scene) shadows.configure(render.caps.shadowSize, render.caps.shadowHalf, render.layers, scene);
     post.setEnabled(tier === 'high');
     if (camera) {
       camera.far = render.caps.farPlane;
@@ -234,6 +293,8 @@ export function createRender(ctx) {
     const hk = new SkinnedMesh(g, materials.outline(skinned.material, 2, undefined));
     hk.bind(skinned.skeleton, skinned.bindMatrix);
     add(hk);
+    // the shadow pass draws static, skinned and instanced casters with its depth material
+    shadows.markWarm([tStatic, skinned, warm.children[3]]);
     warm.visible = false;
     render.layers.world.add(warm);
   }
@@ -251,6 +312,15 @@ export function createRender(ctx) {
       }
     });
     const target = render.tier === 'high' ? post.target() : null;
+    // the depth programs of the shadow pass link against the shadow target: draw it once with everything visible
+    if (render.caps.shadowSize > 0) {
+      const on = globals.uShadowP.value.w;
+      shadows.render(renderer, scene, 0, 0, 0, 1, 1);
+      globals.uShadowP.value.w = on;
+    }
+    // the proxies (depth material) stay out of the main compile: they only ever draw into the shadow target
+    const proxyRoot = scene.getObjectByName('gfx.shadowProxies');
+    if (proxyRoot) scene.remove(proxyRoot);
     renderer.setRenderTarget(target);
     try {
       if (!sync && typeof renderer.compileAsync === 'function') {
@@ -279,6 +349,7 @@ export function createRender(ctx) {
       // diagnostics only
     }
     renderer.setRenderTarget(null);
+    if (proxyRoot) scene.add(proxyRoot);
     for (let i = 0; i < hidden.length; i++) hidden[i].visible = false;
     warm.visible = false;
     // the screen passes of the tier: one frame with every effect at zero
@@ -305,6 +376,7 @@ export function createRender(ctx) {
       else seen.add(m);
     });
     for (const m of post.materials()) seen.add(m);
+    for (const m of shadows.materials()) seen.add(m);
     for (const m of seen) m.dispose();
   }
 
@@ -316,16 +388,24 @@ export function createRender(ctx) {
     /** @type {{ sky:any, world:any, props:any, actors:any, vfx:any }} */
     layers: { sky: new Group(), world: new Group(), props: new Group(), actors: new Group(), vfx: new Group() },
     globals,
-    glsl: { common: commonChunk('uRimColor'), lighting: lightingChunk('uRimColor'), fog: FOG_CHUNK },
+    glsl: {
+      common: commonChunk('uRimColor'), lighting: lightingChunk('uRimColor'), fog: FOG_CHUNK,
+      shadowVert: SHADOW_VERT_CHUNK, grade: GRADE_CHUNK,
+    },
     materials: { toon: materials.toon, toonSkinned: materials.toonSkinned, unlit: materials.unlit },
 
     /** Create the renderer, scene, camera and layers; pick the tier. @returns {Promise<void>} */
     async init() {
       if (renderer) return;
       const f = ctx.flags || {};
-      const res = Number(f.res);
-      dynamic = !(res >= 0.3 && res <= 1) && !f.test;
-      fixedScale = res >= 0.3 && res <= 1 ? res : 1;
+      // ?res fixes the scale; on the low tier it is the pixel ratio, up to 2 (read raw: the core flag clamps to 1)
+      const raw = f.raw || {};
+      const res = raw.res !== undefined && raw.res !== null && raw.res !== '' ? Number(raw.res) : Number(f.res);
+      dynamic = !(res >= 0.3 && res <= 2) && !f.test;
+      fixedScale = res >= 0.3 && res <= 2 ? res : 1;
+      // ?shadows=0 forces the shadow map off and ?shadows=1 on; otherwise the weakest devices never get one
+      const sf = raw.shadows;
+      shadowAllowed = sf === '0' ? false : sf === '1' ? true : !weakDevice();
       renderer = new WebGLRenderer({
         antialias: true, preserveDrawingBuffer: !!f.test, powerPreference: 'high-performance', stencil: false,
       });
@@ -395,6 +475,27 @@ export function createRender(ctx) {
     /** Re-read the layer size (also on orientation change). */
     resize,
 
+    /**
+     * Picture quality state (render polish): calibration, ceiling, shadow map and drawing buffer (diagnostics, tests).
+     * @returns {{ calibrating:boolean, ceiling:number, maxRatio:number, scale:number, shadows:boolean, shadowShed:boolean,
+     *   shadowAllowed:boolean, canvas:number[], shadow:any, steps:number }}
+     */
+    quality() {
+      const vp = internal.uViewport.value;
+      return {
+        calibrating, ceiling: calibrating ? calib.ceiling : dyn.max(), maxRatio: maxRatio(), scale: render.scale,
+        shadows: shadowsOn(), shadowShed, shadowAllowed, canvas: [vp.x, vp.y], shadow: shadows.stats(), steps: calib.steps,
+      };
+    },
+
+    /** Allow or forbid the shadow map for the session (settings, tests); clears a shed. @param {boolean} on */
+    setShadows(on) {
+      shadowAllowed = !!on;
+      shadowShed = false;
+      dyn.canShed = shadowsOn();
+      if (!shadowsOn()) shadows.off();
+    },
+
     /** @param {'low'|'high'} tier */
     setTier(tier) {
       if (tier !== 'low' && tier !== 'high') return;
@@ -412,6 +513,8 @@ export function createRender(ctx) {
       /** @param {any} mesh @param {{ widthPx?:number, color?:number }} [opts] */
       add(mesh, opts) {
         outlines.add(mesh, opts);
+        // every outlined character casts into the shadow map
+        shadows.mark(mesh);
       },
       /** @param {any} mesh */
       remove(mesh) {
@@ -550,7 +653,7 @@ export function createRender(ctx) {
         linkFailures,
         scale: render.scale, tier: render.tier,
         particles: vfx && typeof vfx.count === 'function' ? vfx.count() : 0,
-        outlines: outlines.shown, blobs: blobs.count(),
+        outlines: outlines.shown, blobs: blobs.count(), shadows: shadowsOn(),
       };
     },
 
@@ -563,6 +666,7 @@ export function createRender(ctx) {
       }
       outlines.dispose();
       blobs.dispose();
+      shadows.dispose();
       post.dispose();
       if (!renderer) return;
       const canvas = renderer.domElement;
@@ -594,9 +698,34 @@ export function createRender(ctx) {
       globals.uCamPos.value.copy(cp);
       if (dynamic && dt > 0) {
         const ls = c.loop && c.loop.stats;
-        if (dyn.update(dt, cinematic, ls ? ls.costMs : 0, ls ? ls.cap : 0)) {
+        const cost = ls ? ls.costMs : 0;
+        const cap = ls ? ls.cap : 0;
+        if (calibrating) {
+          // the calibration runs through the title flyover (a cinematic, uncapped)
+          if (calib.update(dt, false, cost, cap)) {
+            if (!calib.shadows && render.caps.shadowSize > 0 && shadowAllowed) shadowShed = true;
+            if (calib.scale !== render.scale) {
+              dyn.limit(Math.max(calib.ceiling, calib.scale));
+              dyn.scale = calib.scale;
+              render.scale = calib.scale;
+              resize();
+            }
+          }
+          if (calib.phase === 'done') {
+            calibrating = false;
+            dyn.limit(calib.ceiling);
+            dyn.scale = calib.scale;
+            dyn.canShed = shadowsOn();
+          }
+        } else if (dyn.update(dt, cinematic, cost, cap)) {
           render.scale = dyn.scale;
           resize();
+        }
+        if (dyn.shedRequested) {
+          // the order of sacrifices: the shadow map goes first, the resolution only after
+          dyn.shedRequested = false;
+          dyn.canShed = false;
+          shadowShed = true;
         }
         if (dyn.dropRequested && render.tier === 'high' && !dropped) {
           dropped = true;
@@ -616,11 +745,33 @@ export function createRender(ctx) {
       }
       camera.updateMatrixWorld();
       outlines.update(camera, render.caps, pPos.x, pPos.y, pPos.z, tPos.x, tPos.y, tPos.z);
-      blobs.update(alpha);
       updateLights();
       const s = c.save && c.save.settings;
       fx.tick(edt, !!(s && s.reducedMotion));
       renderer.info.reset();
+      // the shadow map follows the player; over a flyer high above the ground it covers the ground below instead
+      // (the flyer keeps its blob for altitude reading)
+      if (shadowsOn()) {
+        let sx = cp.x;
+        let sy = cp.y;
+        let sz = cp.z;
+        if (pPos.x === pPos.x) {
+          sx = pPos.x;
+          sy = pPos.y;
+          sz = pPos.z;
+        }
+        const w = c.world;
+        const gy = w && typeof w.heightAt === 'function' ? w.heightAt(sx, sz) : sy;
+        if (sy - gy > 10) sy = Math.max(gy, 0);
+        // the shadows soften with the light (dusk, moonlight)
+        const sc = globals.uSunColor.value;
+        const lum = 0.2126 * sc.r + 0.7152 * sc.g + 0.0722 * sc.b;
+        const k = Math.min(1, Math.max(0, (lum - 0.06) / 0.5));
+        shadows.render(renderer, scene, sx, sy, sz, 0.6 + 0.4 * k, edt);
+      } else {
+        shadows.off();
+      }
+      blobs.update(alpha, shadows.active ? shadows.center : null, shadows.half);
       if (render.tier === 'high' && post.target()) {
         post.setFx(fx, clock, width / height, false);
         post.render(renderer, scene, camera);

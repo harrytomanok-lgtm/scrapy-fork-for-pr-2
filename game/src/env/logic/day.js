@@ -265,3 +265,52 @@ export function wrapHour(h) {
   if (!Number.isFinite(n)) return 0;
   return ((n % 24) + 24) % 24;
 }
+
+/** Smooth window: 0 outside [a, c], 1 at b. @param {number} h @param {number} a @param {number} b @param {number} c */
+export function hourWindow(h, a, b, c) {
+  if (h <= a || h >= c) return 0;
+  return h < b ? smooth(h, a, b) : 1 - smooth(h, b, c);
+}
+
+// Colours of the time-of-day look, derived from palette tokens (linear rgb).
+const COOL_FILL = scaleArr(hexToLinear(KEY_BY_NAME.day.ambSky), 0.8);
+const DEEP_ZENITH = scaleArr(hexToLinear(PALETTE.sky.zenith), 0.78);
+const BLUE_SKY = mixArr(scaleArr(hexToLinear(KEY_BY_NAME.night.ambSky), 2.6), scaleArr(hexToLinear(PALETTE.sky.zenith), 0.42), 0.5);
+const BLUE_ZENITH = mixArr(scaleArr(hexToLinear(KEY_BY_NAME.night.ambSky), 1.6), scaleArr(hexToLinear(PALETTE.sky.zenith), 0.22), 0.5);
+const BLUE_SHADOW = scaleArr(hexToLinear(KEY_BY_NAME.night.shadowTint), 2.2);
+const BLUE_GROUND = scaleArr(hexToLinear(KEY_BY_NAME.night.ambGround), 2.4);
+
+/** @param {number[]} a mutated @param {number[]} b @param {number} t */
+function mixInto(a, b, t) {
+  a[0] += (b[0] - a[0]) * t;
+  a[1] += (b[1] - a[1]) * t;
+  a[2] += (b[2] - a[2]) * t;
+}
+
+/**
+ * The time-of-day look (render polish), applied after `sampleDay` without changing the five keys themselves:
+ * - golden hour (16.2-18.9, peak 17.6): a cool sky fill against the warm sun, so shadows turn blue-violet and the
+ *   lit side glows; a deeper zenith over the warm horizon; the sun 12% stronger;
+ * - blue hour (19.0-21.5, peak 20.1): a deep blue sky, ambient and shadow after the sunset; the horizon keeps the
+ *   dusk key's warm fog only in the afterglow band of the sky; the haze itself turns blue.
+ * Allocation-free.
+ * @param {number} h 0..24 @param {DaySample} s mutated
+ * @returns {DaySample}
+ */
+export function lookOfDay(h, s) {
+  const gw = hourWindow(h, 16.2, 17.6, 18.9);
+  if (gw > 0) {
+    mixInto(s.ambSky, COOL_FILL, 0.5 * gw);
+    mixInto(s.zenith, DEEP_ZENITH, 0.6 * gw);
+    s.intensity *= 1 + 0.12 * gw;
+  }
+  const bw = hourWindow(h, 19.0, 20.1, 21.5);
+  if (bw > 0) {
+    mixInto(s.ambSky, BLUE_SKY, 0.55 * bw);
+    mixInto(s.zenith, BLUE_ZENITH, 0.65 * bw);
+    mixInto(s.shadow, BLUE_SHADOW, 0.45 * bw);
+    mixInto(s.ambGround, BLUE_GROUND, 0.35 * bw);
+    mixInto(s.fog, BLUE_SKY, 0.3 * bw);
+  }
+  return s;
+}

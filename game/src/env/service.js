@@ -9,9 +9,9 @@ import { Vector3, Color } from 'three';
 import { PALETTE } from '../core/palette.js';
 import {
   phaseOf, sampleDay, createSample, advanceClock, wrapHour, nightFactor, lanternFactor, fogDensity, sunDirection,
-  moonDirection, lightDirection, hexToLinear,
+  moonDirection, lightDirection, hexToLinear, lookOfDay,
 } from './logic/day.js';
-import { createSky } from './sky.js';
+import { createSky, CLOUD_HEIGHT, CLOUD_UV } from './sky.js';
 import { createSettlements } from './settlements.js';
 import { createProps } from './props.js';
 
@@ -140,6 +140,7 @@ export function createEnv(ctx) {
     snapFog = false;
     for (let i = 0; i < 3; i++) regionFog[i] += (regionFogTarget[i] - regionFog[i]) * k;
     sampleDay(h, regionFog, sample);
+    lookOfDay(h, sample);
 
     setLinear(g.uSunColor.value, sample.sun);
     g.uSunColor.value.multiplyScalar(sample.intensity);
@@ -199,6 +200,13 @@ export function createEnv(ctx) {
       skyIn.layers = render.caps && render.caps.cloudLayers ? render.caps.cloudLayers : 1;
       skyIn.time = g.uTime.value;
       sky.update(cam, dt, skyIn);
+      // cloud shadows on the ground (render polish): the sky's own cloud pattern, by day only, thinner in fog
+      if (g.uCloudP) {
+        const sunUp = Math.min(1, Math.max(0, (sunTrue.y - 0.02) / 0.2));
+        g.uCloudMap.value = sky.noise;
+        g.uCloudP.value.set(sky.cloud.x, sky.cloud.y, CLOUD_UV, 0.5 * sunUp * (1 - fk));
+        g.uCloudQ.value.set(sky.uniforms.uCoverage.value, CLOUD_HEIGHT, 0, 0);
+      }
     }
     const renderer = ctx.three && ctx.three.renderer;
     if (renderer) renderer.setClearColor(g.uFogColor.value, 1);
@@ -313,6 +321,12 @@ export function createEnv(ctx) {
     if (!sky) {
       sky = createSky();
       render.layers.sky.add(sky.mesh);
+      // the sky takes the low tier's final grade (render polish) from the shared uniforms
+      const g = render.globals;
+      if (g && g.uGrade && g.uScreen) {
+        sky.uniforms.uGrade.value = g.uGrade.value;
+        sky.uniforms.uScreen.value = g.uScreen.value;
+      }
     }
     settlements.build();
     props.warm();

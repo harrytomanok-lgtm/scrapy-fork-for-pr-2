@@ -107,6 +107,7 @@ uniform sampler2D tBloom;
 uniform float uBloom;
 uniform float uGrain;
 uniform vec3 uInk;
+uniform vec4 uGrade;
 varying vec2 vUv;
 ${FX_CHUNK}
 vec3 toSRGB(vec3 c) {
@@ -124,6 +125,10 @@ void main() {
   c = mix(c, vec3(1.0), speedLines(vUv) * 0.55);
   c = mix(c, uFlash.rgb, uFlash.a);
   c = toSRGB(clamp(c, 0.0, 1.0));
+  // the final grade of the low tier, here on the display value: saturation, then a soft S contrast curve
+  float gl = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = clamp(mix(vec3(gl), c, uGrade.y), 0.0, 1.0);
+  c = mix(c, c * c * (3.0 - 2.0 * c), uGrade.x);
   c += (fxHash(vUv * 731.0 + fract(uTime * 7.13)) - 0.5) * uGrain;
   gl_FragColor = vec4(c, 1.0);
 }
@@ -251,6 +256,8 @@ export function createPost(internal) {
   up.transparent = true;
   const composite = pass(COMPOSITE_FRAG, Object.assign({
     tScene: { value: null }, tBloom: { value: null }, uBloom: { value: 0.8 }, uGrain: { value: 0.03 }, uInk: internal.uInk,
+    // contrast and saturation of the final grade (render.globals.uGrade x, y; the low tier grades in its shaders)
+    uGrade: internal.uGrade || { value: new Vector4(0.14, 1.08, 0, 0) },
   }, fxUniforms));
   const fxaa = pass(FXAA_FRAG, { tSrc: { value: null }, uTexel: { value: new Vector2() } });
   const overlay = new ShaderMaterial({
