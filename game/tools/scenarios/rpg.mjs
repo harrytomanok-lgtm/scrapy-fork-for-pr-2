@@ -607,6 +607,20 @@ export const scenarios = [
           g.step(20);
         }
         out.trial = st.quests.flags['trial.trial_gauntlet'];
+        // Lose the wave trial, take the Retry: back on the Ledge with the first wave.
+        Q.runActions([{ op: 'script', script: 'trial_waves' }]);
+        g.step(10);
+        g.god(false);
+        g.kill(g.player().id);
+        g.step(5);
+        out.canRetry = g.ctx.rpg.canRetry;
+        g.ctx.rpg.respawn({ retry: true });
+        g.god(true);
+        g.step(10);
+        out.retryFoes = g.ctx.ents.list('enemy').filter((e) => e.alive && e.questTag === 'trial_trial_waves').length;
+        out.retryDist = Math.round(Math.hypot(g.ctx.player.pos.x + 1650, g.ctx.player.pos.z - 1835));
+        for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.questTag === 'trial_trial_waves')) g.ctx.ai.despawn(e.id);
+        Q.runActions([]);
         // The Spire Circuit.
         Q.runActions([{ op: 'script', script: 'trial_sky' }]);
         g.step(5);
@@ -642,6 +656,8 @@ export const scenarios = [
       assert.ok(r.rematch && r.rematch.medals.length >= 1, 'the rematch records a medal');
       assert.ok(r.trialFoes >= 4, 'the gauntlet band spawns');
       assert.ok(r.trial && r.trial.medals.length >= 1 && r.trial.best > 0, 'the trial records a time and a medal');
+      assert.ok(r.canRetry, 'a lost trial offers Retry');
+      assert.ok(r.retryFoes >= 1 && r.retryDist < 30, 'Retry puts the player back in the trial (' + r.retryFoes + ' foes, ' + r.retryDist + ' m)');
     },
   },
   {

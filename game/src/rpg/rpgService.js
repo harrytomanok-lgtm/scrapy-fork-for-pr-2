@@ -61,6 +61,8 @@ export function createRpg(ctx) {
   };
 
   const S = () => ctx.store.state;
+  /** @type {null|{ available:boolean, run:()=>boolean, clear:()=>void }} */
+  let trialRetry = null;
   const PL = () => ctx.store.state.player;
   const INV = () => ctx.store.state.inv;
   const ent = () => {
@@ -560,6 +562,9 @@ export function createRpg(ctx) {
       if (!e || !e.stats) return;
       const p = PL();
       const retry = !!(opts && opts.retry && retryBoss);
+      // A trial fight lost: its Retry runs it again (the trial puts the player back on the Ledge).
+      const retryTrial = !!(opts && opts.retry && !retryBoss && trialRetry && trialRetry.available);
+      if (!retryTrial && trialRetry) trialRetry.clear();
       let x = p.x;
       let z = p.z;
       let yaw = e.yaw;
@@ -591,7 +596,13 @@ export function createRpg(ctx) {
       ctx.move.setMode(e, 'ground');
       ctx.combat.revive(e, 1);
       healLeft = 0;
-      ctx.bus.emit('player:respawned', { ringstoneId, retry });
+      ctx.bus.emit('player:respawned', { ringstoneId, retry: retry || retryTrial });
+      if (retryTrial) trialRetry.run();
+    },
+
+    /** True when the death screen's Retry has a fight to put the player back into (a boss, or a trial fight). */
+    get canRetry() {
+      return !!retryBoss || !!(trialRetry && trialRetry.available);
     },
 
     /** Drop private state, pickups and the save hooks. */
@@ -854,5 +865,10 @@ export function createRpg(ctx) {
     }));
   }
 
-  return { rpg, tickSystem, on, hooks, isPlayerSide };
+  /** @param {{ available:boolean, run:()=>boolean, clear:()=>void }} r the challenge trials' retry */
+  function setTrialRetry(r) {
+    trialRetry = r || null;
+  }
+
+  return { rpg, tickSystem, on, hooks, isPlayerSide, setTrialRetry };
 }

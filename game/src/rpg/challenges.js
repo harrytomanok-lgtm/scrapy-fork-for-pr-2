@@ -42,6 +42,8 @@ export function recordMedal(ctx, key, seconds, medal, rewards) {
  */
 export function registerChallenges(ctx, host) {
   const Q = ctx.quests;
+  /** The trial fight the player just died in (its Retry runs it again), until another respawn. */
+  const lastTrial = { id: '' };
 
   // ---- boss rematches
   for (const bossId of Object.keys(REMATCH.bosses)) {
@@ -139,7 +141,10 @@ export function registerChallenges(ctx, host) {
         }
       });
       spawnWave();
-      api.onEvent('player:died', () => end(false));
+      api.onEvent('player:died', () => {
+        lastTrial.id = trialId;
+        end(false);
+      });
       api.onTick((dt) => {
         if (over) return;
         t += dt;
@@ -156,9 +161,28 @@ export function registerChallenges(ctx, host) {
     });
   }
 
+  // ---- Retry of a lost trial: the death screen's Retry (rpg.respawn retry) starts it again on the Ledge.
+  const retry = {
+    get available() {
+      return lastTrial.id !== '';
+    },
+    /** Run the lost trial again; false when there is none. */
+    run() {
+      const id = lastTrial.id;
+      lastTrial.id = '';
+      if (!id) return false;
+      ctx.quests.runActions([{ op: 'script', script: id }]);
+      return true;
+    },
+    clear() {
+      lastTrial.id = '';
+    },
+  };
+
   // ---- Ringstone travel (the menu's Travel choices; the map screen calls ctx.quests.travel directly)
   for (const id of RINGSTONES) Q.registerScript('travel_' + id, (c, api) => {
     api.done();
     host.travel('ringstone_' + id);
   });
+  return retry;
 }

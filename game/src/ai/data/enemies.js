@@ -81,6 +81,9 @@ export const ELITE_MOVE = Object.freeze({
   choir_vanguard: 'elite_quake', ember_wisp: 'elite_fan', choir_caster: 'elite_fan', frost_harrier: 'elite_fan',
 });
 
+/** Metres from the arena centre where a boss Retry puts the player. */
+const RETRY_NEAR = 26;
+
 /** Phase technique tables of the five bosses (GDD 7.3). */
 const BOSS_PHASES = {
   durn: [
@@ -137,7 +140,8 @@ export function bosses() {
     const b = B[id];
     const d = {
       id, enemyId: id, level: b.level, hpMult: b.hpMult, poise: b.poise,
-      arena: { landmarkId: b.arena.landmarkId, radius: b.arena.radius, retry: { dx: 0, dz: Math.round(b.arena.radius * 0.6) } },
+      // The retry point is close to the fight (a few seconds' run), inside the arena so the fight restarts at once.
+      arena: { landmarkId: b.arena.landmarkId, radius: b.arena.radius, retry: { dx: 0, dz: Math.round(Math.min(b.arena.radius * 0.6, RETRY_NEAR)) } },
       phases: BOSS_PHASES[id].map((ph, i) => {
         const p = { hpBelow: b.phases[i], techs: ph.techs.map((t) => ({ id: t.id, weight: t.weight })) };
         if (ph.speedMult) p.speedMult = ph.speedMult;
