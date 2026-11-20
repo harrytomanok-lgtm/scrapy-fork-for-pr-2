@@ -17,8 +17,11 @@ import * as esbuild from 'esbuild';
 import { genRegistry, GAME_ROOT } from './gen-registry.mjs';
 import { startServer } from './serve.mjs';
 
-/** Bundle size gate in bytes (minified), ARCHITECTURE 7.1. Replaced stand-ins are not bundled (gen-registry). */
-export const SIZE_FAIL = 1600000;
+/**
+ * Bundle size gate in bytes (minified). The lead raised it from 1.6 MB to 2.2 MB for the quality round: richer
+ * characters, effects and screens are worth the bytes (about 0.5 MB gzipped), and an app bundle does not care.
+ */
+export const SIZE_FAIL = 2200000;
 /** Bundle size warning in bytes (minified). */
 export const SIZE_WARN = 1200000;
 /** Page title of the HTML outputs. */
