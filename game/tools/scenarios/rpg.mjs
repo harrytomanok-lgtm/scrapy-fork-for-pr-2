@@ -513,7 +513,23 @@ export const scenarios = [
         // Approach the sky shard in flight from 120 m and look at its light column.
         g.teleport(sky.x - 120, sky.z, { alt: sky.y - g.heightAt(sky.x - 120, sky.z), fly: true, yaw: Math.PI / 2 });
         g.step(25);
-        return { total: s0.total, regions: s0.regions.map((r) => r.id + ':' + r.total), kinds: [...new Set(s0.list.map((s) => s.kind))], view, sky, tp0: g.state().player.tp };
+        // Every shard clear of the world's colliders as the browser has them (structures, places, props).
+        const inside = [];
+        const out = [];
+        for (const s of s0.list) {
+          const n = g.ctx.world.queryColliders(s.x, s.z, 4, out);
+          for (let i = 0; i < n; i++) {
+            const c = out[i];
+            if (!c || !(c.flags & 1)) continue;
+            const dh = Math.hypot(s.x - c.x, s.z - c.z);
+            const r = (c.r || Math.max(c.hx || 0, c.hz || 0)) + 0.4;
+            const y0 = c.shape === 'sphere' ? c.y - r : c.y;
+            const y1 = c.shape === 'sphere' ? c.y + r : c.y + (c.h || 0) + (c.shape === 'capsule' ? c.r : 0);
+            const hit = c.shape === 'sphere' ? Math.hypot(dh, s.y - c.y) < r : dh < r && s.y >= y0 && s.y <= y1;
+            if (hit) inside.push(s.id + ' in ' + c.shape);
+          }
+        }
+        return { total: s0.total, regions: s0.regions.map((r) => r.id + ':' + r.total), kinds: [...new Set(s0.list.map((s) => s.kind))], view, sky, tp0: g.state().player.tp, inside };
       });
       await game((g) => g.ctx.cam.setOrbit(Math.PI / 2, 0.1));
       await game((g) => g.step(4));
@@ -542,8 +558,9 @@ export const scenarios = [
         const banner = g.events(['ui:banner']).some((e) => e.payload.key === 'rpg.banner.shardsTp');
         return { found: Q.shards().found, tp: g.state().player.tp, saved: (g.state().quests.flags['ora.shards'] || []).length, banner };
       });
-      console.log('    ' + JSON.stringify({ a: { total: a.total, regions: a.regions, kinds: a.kinds }, b, c }));
+      console.log('    ' + JSON.stringify({ a: { total: a.total, regions: a.regions, kinds: a.kinds, inside: a.inside }, b, c }));
       assert.ok(a.total >= 40, 'about eight shards in each of six regions (' + a.total + ')');
+      assert.deepEqual(a.inside, [], 'no shard inside a collider');
       assert.deepEqual(a.kinds.sort(), ['islet', 'peak', 'roof', 'sky'].filter((k) => a.kinds.includes(k)).sort());
       assert.ok(a.kinds.includes('peak') && a.kinds.includes('sky') && a.kinds.includes('roof'), 'peaks, open air and roofs');
       assert.ok(b.pickups >= 1, 'the nearby shard stands as a pickup');

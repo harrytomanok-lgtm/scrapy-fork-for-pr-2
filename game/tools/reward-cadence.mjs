@@ -21,7 +21,8 @@ import { QUESTS } from '../src/rpg/data/quests.js';
 import { DIALOGUES } from '../src/rpg/data/dialogues.js';
 import { ITEMS } from '../src/rpg/data/items.js';
 import { NPCS, OBJECTS, COURSES } from '../src/rpg/data/world.js';
-import { SHARDS_PER_REGION, shardRewards, placeShards } from '../src/rpg/data/shards.js';
+import { SHARDS_PER_REGION, shardRewards } from '../src/rpg/data/shards.js';
+import { SHARD_TABLE } from '../src/rpg/data/shardTable.js';
 import { CADENCE } from '../src/rpg/data/cadence.js';
 import { rewardTimeline, formatTimeline } from '../src/rpg/logic/cadence.js';
 
@@ -43,7 +44,7 @@ export function cadenceWorld() {
     if (typeof t.unlockLevel === 'number') levelTechs.push({ techId: id, level: t.unlockLevel, tp: t.ranks[0].tp || 0 });
   }
   const npcs = Object.fromEntries(NPCS.map((n) => [n.id, n]));
-  const shards = process.env.NO_SHARDS ? [] : placeShards(q.heightAt, (x, z) => q.regionAt(x, z), REGIONS, LANDMARKS);
+  const shards = process.env.NO_SHARDS ? [] : SHARD_TABLE.slice();
   return {
     start: lm.selas_ledge,
     regionAt: (x, z) => q.regionAt(x, z),

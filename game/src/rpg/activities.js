@@ -11,7 +11,8 @@ import * as F from '../core/formulas.js';
 import { TAG } from '../core/ents.js';
 import { PALETTE } from '../core/palette.js';
 import { medalFor, gatePassed, siphonOpen } from './logic/activity.js';
-import { placeShards, shardRewards, SHARD_XP } from './data/shards.js';
+import { shardRewards, SHARD_XP } from './data/shards.js';
+import { SHARD_TABLE } from './data/shardTable.js';
 
 /** The Ringstone prop stands ahead of its POI so a journey (or respawn) never starts inside the stone (11). */
 const RS_DX = 4;
@@ -99,7 +100,8 @@ export function createActivities(ctx, host) {
     for (const poi of w.pois('siphon')) buildSiphon(poi);
     for (const poi of w.pois('race')) buildRaceStart(poi);
     for (const l of ctx.defs.all('landmark')) if (l.tag !== 'P1') discover.push({ id: l.id, type: 'landmark', x: l.x, z: l.z });
-    shards = placeShards((x, z) => w.heightAt(x, z), (x, z) => w.regionAt(x, z), ctx.defs.all('region'), ctx.defs.all('landmark'));
+    // The shards are fixed data (tools/gen-shards.mjs): the same ids at the same spots on every grid.
+    shards = SHARD_TABLE.slice();
     shardReward = shardRewards(shards.length);
     for (const poi of w.pois()) discover.push({ id: poi.id, type: poi.type, x: poi.x, z: poi.z });
     // Where the journey (re)starts is known already: no XP and no event for it.

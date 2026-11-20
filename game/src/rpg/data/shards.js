@@ -38,15 +38,35 @@ function hash(a, b) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+/** Clearance (m) a shard keeps from every solid collider: the player's radius and a margin. */
+export const SHARD_CLEARANCE = 2;
+
 /**
- * Place every shard.
+ * Place every shard (tools/gen-shards.mjs runs this once on the baked world and writes data/shardTable.js; the game
+ * reads the table, so every phone, whatever its grid, has the same shards under the same ids).
+ * A spot is used only when it is reachable: above the ground and above the sea, and with SHARD_CLEARANCE free of
+ * solid colliders at the spot and in the column of air above it (a flyer comes down onto it).
  * @param {(x:number, z:number) => number} heightAt @param {(x:number, z:number) => string} regionAt
  * @param {any[]} regions RegionDefs in their fixed order (defs 'region') @param {any[]} landmarks LandmarkDefs
+ * @param {(x:number, y:number, z:number, clearance:number) => boolean} [blocked] the world's solid-collider test
  * @returns {Array<{ id:string, x:number, y:number, z:number, regionId:string, kind:'peak'|'sky'|'roof'|'islet', view:boolean }>}
  */
-export function placeShards(heightAt, regionAt, regions, landmarks) {
+export function placeShards(heightAt, regionAt, regions, landmarks, blocked) {
   const out = [];
   const N = SHARDS_PER_REGION;
+  // The highest ground around a spot: a finer world grid resolves a peak a few metres higher than a coarse one.
+  const top = (x, z) => {
+    let h = -Infinity;
+    for (let dx = -6; dx <= 6; dx += 6) for (let dz = -6; dz <= 6; dz += 6) h = Math.max(h, heightAt(x + dx, z + dz));
+    return h;
+  };
+  const reachable = (x, y, z) => {
+    const g = heightAt(x, z);
+    if (y < g + 1.5 || y < 1.5) return false;
+    if (!blocked) return true;
+    for (const up of [0, 4, 10, 20]) if (blocked(x, y + up, z, SHARD_CLEARANCE)) return false;
+    return true;
+  };
   regions.forEach((reg, ri) => {
     if (SHARD_REGIONS.indexOf(reg.id) < 0) return;
     const span = reg.radius ? reg.radius : 1150;
@@ -70,32 +90,49 @@ export function placeShards(heightAt, regionAt, regions, landmarks) {
     cand.sort((a, b) => b.h - a.h || a.x - b.x || a.z - b.z);
     for (const c of cand) {
       if (list.length >= N.peaks) break;
-      if (far(c.x, c.z, 300)) push('peak', c.x, c.h + 3, c.z);
+      const y = top(c.x, c.z) + 4;
+      if (far(c.x, c.z, 300) && reachable(c.x, y, c.z)) push('peak', c.x, y, c.z);
     }
     if (list.length) list[0].view = true;
     // High in the open air: seeded spots well inside the region, 90-150 m above the ground.
     for (let k = 0, tries = 0; k < N.sky && tries < 40; tries++) {
       const x = reg.cx + (hash(ri, tries * 2 + 1) * 2 - 1) * span * 0.7;
       const z = reg.cz + (hash(ri, tries * 2 + 2) * 2 - 1) * span * 0.7;
-      if (regionAt(x, z) !== reg.id || !far(x, z, 250)) continue;
-      push('sky', x, Math.max(0, heightAt(x, z)) + 90 + hash(tries, ri) * 60, z);
+      const y = Math.max(0, heightAt(x, z)) + 90 + hash(tries, ri) * 60;
+      if (regionAt(x, z) !== reg.id || !far(x, z, 250) || !reachable(x, y, z)) continue;
+      push('sky', x, y, z);
       k++;
     }
-    // Above roofs and landmarks of the region.
+    // Above roofs and landmarks of the region: the first clear spot on rings around the landmark (a tall
+    // structure, like the Spire, pushes it out past its walls).
     let roofs = 0;
     for (const l of landmarks) {
       if (roofs >= N.roofs || l.tag === 'P1' || regionAt(l.x, l.z) !== reg.id) continue;
       if (l.type !== 'settlement' && l.type !== 'landmark' && l.type !== 'spire') continue;
       if (!far(l.x, l.z, 120)) continue;
-      push('roof', l.x + 8, Math.max(0, heightAt(l.x, l.z)) + (l.type === 'spire' ? 60 : 16), l.z + 6);
-      roofs++;
+      const lift = l.type === 'spire' ? 60 : 16;
+      let placed = false;
+      for (const r of [10, 25, 45, 70, 100]) {
+        for (let k = 0; k < 8 && !placed; k++) {
+          const a = Math.atan2(6, 8) + (k * Math.PI) / 4;
+          const x = l.x + Math.cos(a) * r;
+          const z = l.z + Math.sin(a) * r;
+          const y = Math.max(0, heightAt(l.x, l.z), heightAt(x, z)) + lift;
+          if (!reachable(x, y, z)) continue;
+          push('roof', x, y, z);
+          placed = true;
+        }
+        if (placed) break;
+      }
+      if (placed) roofs++;
     }
     // Islets and sea stacks off the shore.
     shore.sort((a, b) => (Math.hypot(b.x - reg.cx, b.z - reg.cz) - Math.hypot(a.x - reg.cx, a.z - reg.cz)) || a.x - b.x);
     for (let k = 0, i = 0; k < N.islets && i < shore.length; i++) {
       const s = shore[i];
-      if (!far(s.x, s.z, 250)) continue;
-      push('islet', s.x, s.h + 2.5, s.z);
+      const y = top(s.x, s.z) + 3;
+      if (!far(s.x, s.z, 250) || !reachable(s.x, y, s.z)) continue;
+      push('islet', s.x, y, s.z);
       k++;
     }
     for (const s of list) out.push(s);
