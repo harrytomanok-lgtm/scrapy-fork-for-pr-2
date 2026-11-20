@@ -1,14 +1,14 @@
 /**
  * Integration performance scenarios: the low-tier frame budget of the merged game (ARCHITECTURE 7.1).
- * perf-budget asserts at most 85 draw calls at rest (the spawn, above every settlement, at every region centre),
- * at most 120 with 12 enemies in a fight, and at most 250k triangles and 24 programs everywhere.
+ * perf-budget asserts at most 100 draw calls at rest with the shadow map on (the spawn, above every settlement, at every region centre),
+ * at most 120 with 12 enemies in a fight, and at most 250k triangles and 30 programs everywhere (render polish: the shadow pass).
  * perf-probe (run with --only perf-probe) prints the draw-call breakdown of each view for diagnosis.
  */
 
-const REST = 85;
+const REST = 100;
 const FIGHT = 120;
 const TRIS = 250000;
-const PROGRAMS = 24;
+const PROGRAMS = 30;
 
 /**
  * In the page: put the player at (x, z) (alt > 0 flies), camera yaw/pitch/dist, settle streaming, render, measure.

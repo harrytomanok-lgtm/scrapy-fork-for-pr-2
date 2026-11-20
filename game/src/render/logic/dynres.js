@@ -10,6 +10,9 @@
  *   the presented rate alone decides, as in ARCHITECTURE 7.1;
  * - while the loop's frame cap is below the target (a 30 fps menu on the high tier) the window is discarded and nothing
  *   changes, so a capped menu never lowers the scale or drops the tier.
+ * - sacrifices come before resolution: while `canShed` is true, a slow window sets `shedRequested` (the caller turns
+ *   the shadow map off and clears `canShed`) instead of lowering the scale;
+ * - `limit(max)` lowers the ceiling (the start-up calibration of the phone tier, render/logic/calib).
  * A hold (cinematic, the first 5 s after a teleport) also discards the window and blocks changes. On a tier that may drop (high), sitting at the minimum
  * scale for `dropAfter` seconds raises `dropRequested` once per controller.
  * @module render/logic/dynres
@@ -19,6 +22,10 @@
  * @typedef {object} DynRes
  * @property {number} scale           current scale
  * @property {boolean} dropRequested  true once the drop rule fired (high only)
+ * @property {boolean} canShed        a sacrifice (the shadow map) is available before the scale drops
+ * @property {boolean} shedRequested  a slow window asked for the sacrifice (the caller clears both flags)
+ * @property {(max:number) => void} limit  set the maximum scale (the scale is clamped to it)
+ * @property {() => number} max        the current maximum scale
  * @property {(dt:number, held:boolean, costMs?:number, cap?:number) => boolean} update  feed one presented frame of `dt`
  *   real seconds, its cost in ms (0: unknown) and the frame cap in force (0: uncapped); true when the scale changed
  * @property {(caps:{ targetFps:number, dynRes:{min:number,max:number,step:number,interval:number} }, canDrop:boolean) => void} configure
@@ -58,6 +65,15 @@ export function createDynRes(caps, canDrop = false) {
   const dr = {
     scale: 1,
     dropRequested: false,
+    canShed: false,
+    shedRequested: false,
+    limit(m) {
+      max = Math.max(min, m);
+      if (dr.scale > max) dr.scale = max;
+    },
+    max() {
+      return max;
+    },
     configure(c, cd) {
       target = c.targetFps;
       min = c.dynRes.min;
@@ -122,6 +138,10 @@ export function createDynRes(caps, canDrop = false) {
       winCostN = 0;
       const slow = shown < target - 3 || (costFps > 0 && costFps < target - 3);
       const fast = costFps > 0 ? costFps > target + 8 && shown >= target - 3 : shown > target + 8;
+      if (slow && dr.canShed) {
+        dr.shedRequested = true;
+        return false;
+      }
       let next = dr.scale;
       if (slow) next = Math.max(min, snap(dr.scale - step));
       else if (fast) next = Math.min(max, snap(dr.scale + step));

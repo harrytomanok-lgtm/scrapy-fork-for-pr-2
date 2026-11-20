@@ -25,7 +25,7 @@ export const scenarios = [
       });
       await shot('gfx-materials-noon');
       const s = await game((g) => g.stats());
-      assert.ok(s.programs <= 24, `programs on low <= 24 (got ${s.programs})`);
+      assert.ok(s.programs <= 30, `programs on low <= 30 (got ${s.programs})`);
       assert.equal(s.programs, progAfterCompile, 'no program linked after compile');
       assert.ok(s.drawCalls <= 120, `draw calls <= 120 (got ${s.drawCalls})`);
       await game((g) => {
@@ -132,7 +132,7 @@ export const scenarios = [
       await game(view);
       const low0 = await game((g) => g.stats());
       assert.equal(low0.tier, 'low');
-      assert.ok(low0.programs <= 24, `programs on low <= 24 (${low0.programs})`);
+      assert.ok(low0.programs <= 30, `programs on low <= 30 (${low0.programs})`);
       await game((g) => {
         g.cmd.gfxBeamAura({ dist: 9 });
         g.step(6);

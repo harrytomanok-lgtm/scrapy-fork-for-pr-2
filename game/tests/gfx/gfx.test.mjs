@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TIERS, TIER_KEYS, chooseTier } from '../../src/render/logic/tiers.js';
 import { createDynRes, DROP_AFTER } from '../../src/render/logic/dynres.js';
+import { createCalib, LADDER, MAX_TIME } from '../../src/render/logic/calib.js';
 import { createParticlePool, cullCoverage } from '../../src/vfx/logic/pool.js';
 import { RECIPES, CELL, MAT } from '../../src/vfx/logic/recipes.js';
 import { IDS } from '../../src/core/ids.js';
@@ -20,7 +21,9 @@ test('tier table: both rows complete and matching 7.1', () => {
   assert.equal(TIERS.high.targetFps, 60);
   assert.equal(TIERS.low.drawCalls, 120);
   assert.equal(TIERS.low.triangles, 250000);
-  assert.equal(TIERS.low.programs, 24);
+  assert.equal(TIERS.low.programs, 30);
+  assert.equal(TIERS.low.maxDpr, 2);
+  assert.equal(TIERS.low.shadowSize, 1024);
   assert.equal(TIERS.high.programs, 32);
   assert.equal(TIERS.low.particles, 800);
   assert.equal(TIERS.high.particles, 3500);
@@ -139,6 +142,107 @@ test('dynamic resolution (low): cost decisions, and the 30 fps paused cap is not
   assert.equal(dr.scale, 1);
   // cost 30 ms (33 fps) is inside the band
   assert.equal(feedCost(dr, 30, 30, 60, 9.1), 0);
+});
+
+/**
+ * A device model for the calibration: presented fps = min(cap, base / ratio^2 / (shadows ? 1.2 : 1)), i.e. a
+ * fill-bound GPU whose shadow pass costs 20%; the CPU cost is a fixed `cpuMs` per frame.
+ */
+function runDevice(calib, base, cpuMs = 8, cap = 60, seconds = 40) {
+  let t = 0;
+  while (t < seconds && calib.phase !== 'done') {
+    const fps = Math.min(cap, base / (calib.scale * calib.scale) / (calib.shadows ? 1.2 : 1));
+    const dt = 1 / fps;
+    calib.update(dt, false, cpuMs, cap);
+    t += dt;
+  }
+  return t;
+}
+
+test('calibration: a weak phone sheds the shadows first and stays at ratio 1 (never worse than before)', () => {
+  const c = createCalib({ maxRatio: 2.75, target: 30, shadows: true });
+  assert.equal(c.scale, 1, 'starts from the safe ratio of before');
+  runDevice(c, 28);
+  assert.equal(c.phase, 'done');
+  assert.equal(c.shadows, false, 'shadows were the first sacrifice');
+  assert.equal(c.scale, 1);
+  assert.equal(c.ceiling, 1, 'dynamic resolution then works below 1 as before');
+  // the same device far too slow even without shadows: ends at 1 at once (dynamic resolution lowers it to 0.6)
+  const d = createCalib({ maxRatio: 2.75, target: 30, shadows: true });
+  runDevice(d, 15);
+  assert.equal(d.phase, 'done');
+  assert.equal(d.scale, 1);
+  assert.equal(d.shadows, false);
+});
+
+test('calibration: a mid phone climbs while the prediction holds, keeps its shadows', () => {
+  const c = createCalib({ maxRatio: 2.625, target: 30, shadows: true });
+  runDevice(c, 75);
+  assert.equal(c.phase, 'done');
+  assert.equal(c.scale, 1.25);
+  assert.equal(c.ceiling, 1.25);
+  assert.equal(c.shadows, true);
+});
+
+test('calibration: a strong phone reaches ratio 2 with shadows; the ladder stops at the device ratio', () => {
+  const c = createCalib({ maxRatio: 2.75, target: 30, shadows: true });
+  const t = runDevice(c, 400);
+  assert.equal(c.scale, 2);
+  assert.equal(c.shadows, true);
+  assert.ok(t < MAX_TIME + 6, `done within the time budget (${t.toFixed(1)} s)`);
+  const d = createCalib({ maxRatio: 1.5, target: 30, shadows: true });
+  runDevice(d, 400);
+  assert.equal(d.scale, 1.5, 'a 1.5x screen tops out at its own ratio');
+  const e = createCalib({ maxRatio: 1, target: 30, shadows: false });
+  assert.equal(e.phase, 'done', 'nothing to probe on a 1x screen without shadows');
+  assert.deepEqual([...LADDER], [1, 1.25, 1.5, 1.75, 2]);
+});
+
+test('calibration: a level that turns out slow sheds shadows, then steps back down and ends', () => {
+  const c = createCalib({ maxRatio: 2, target: 30, shadows: true });
+  // 60 presented at 1.0, but at 1.25 the device falls to 25 whatever the shadows do
+  let t = 0;
+  while (t < 30 && c.phase !== 'done') {
+    const fps = c.scale > 1 ? 25 : 60;
+    c.update(1 / fps, false, 8, 60);
+    t += 1 / fps;
+  }
+  assert.equal(c.scale, 1);
+  assert.equal(c.ceiling, 1);
+  assert.equal(c.shadows, false);
+});
+
+test('calibration: capped menus and holds are not measured; a slow CPU blocks the climb', () => {
+  const c = createCalib({ maxRatio: 2, target: 30, shadows: true });
+  for (let i = 0; i < 300; i++) assert.equal(c.update(1 / 30, false, 8, 30), false, 'a 30 fps cap says nothing about head-room');
+  for (let i = 0; i < 300; i++) assert.equal(c.update(1 / 60, true, 8, 60), false, 'held');
+  assert.equal(c.phase, 'probe');
+  assert.equal(c.scale, 1);
+  // presented at 60 but each frame costs 30 ms of CPU (33 fps): the resolution would not help, no climb
+  runDevice(c, 400, 30);
+  assert.equal(c.phase, 'done');
+  assert.equal(c.scale, 1);
+  assert.equal(c.shadows, true);
+});
+
+test('dynamic resolution: the shadow map is shed before the scale drops; limit() sets the ceiling', () => {
+  const dr = createDynRes(TIERS.low, false);
+  dr.limit(1.5);
+  dr.scale = 1.5;
+  dr.canShed = true;
+  // a slow window: the sacrifice is asked for, the scale stays
+  assert.equal(feed(dr, 20, 3.05), 0);
+  assert.equal(dr.shedRequested, true);
+  assert.equal(dr.scale, 1.5);
+  dr.shedRequested = false;
+  dr.canShed = false;
+  // still slow: now the scale drops one step per window
+  assert.equal(feed(dr, 20, 3.05), 1);
+  assert.equal(dr.scale, 1.4);
+  // fast: climbs back, never above the ceiling
+  feed(dr, 50, 40);
+  assert.equal(dr.scale, 1.5);
+  assert.equal(dr.max(), 1.5);
 });
 
 /** Fill one particle. */
