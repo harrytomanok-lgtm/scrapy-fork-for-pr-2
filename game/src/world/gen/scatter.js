@@ -42,12 +42,12 @@ const TREE_COLS = Math.floor(SCATTER_CELL / TREE_STEP);
 const COVER_STEP = 6.4;
 const COVER_COLS = SCATTER_CELL / COVER_STEP;
 /** Base size of each ground cover kind (indexed by KIND; 0 elsewhere). */
-const COVER_S = Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1.45, 1.9, 1.4, 1.5, 1.7, 1.15, 0, 0.85, 0]);
+const COVER_S = Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0, 1.3, 1.25, 1.1, 1.2, 1.15, 0, 0.85, 0]);
 
 /** Rock clusters per cell by region, and the chance that one is kept (more on slopes). */
 const ROCKY = Object.freeze([0.3, 0.32, 0.4, 0.55, 0.65, 0.55, 0.4]);
 /** Ground cover density by region (candidates kept at the fullest spot). */
-const COVER = Object.freeze([0.9, 0.6, 0.95, 0.55, 0.45, 0.75, 0.4]);
+const COVER = Object.freeze([0.9, 0.6, 0.95, 0.55, 0.45, 0.5, 0.4]);
 /** Size range of the trees by region: min, span. */
 const TREE_S0 = Object.freeze([1.65, 1.3, 1.8, 1.0, 1.45, 1.0, 1.0]);
 const TREE_S1 = Object.freeze([1.0, 0.7, 1.3, 0.9, 1.1, 0.8, 0.9]);
@@ -320,7 +320,8 @@ export function scatterCell(ci, cj, seed, g, out, opt) {
       out.x[n] = x;
       out.z[n] = z;
       out.y[n] = y - 0.12 - slope * 0.8;
-      out.s[n] = COVER_S[kind] * (0.75 + 0.5 * u(h * 0x45d9f3b + 11)) * (field ? 1.15 : 1);
+      // Stormwell marsh grass stays knee high (sparse clumps with open wet ground between)
+      out.s[n] = COVER_S[kind] * (0.75 + 0.5 * u(h * 0x45d9f3b + 11)) * (field ? 1.15 : 1) * (ri === R_STORMWELL && kind === KIND.GRASS ? 0.55 : 1);
       out.yaw[n] = u(h * 13 + 5) * Math.PI * 2;
       out.key[n] = propKey(ci, cj, 2000 + b * COVER_COLS + a);
       out.tint[n] = (h >>> 25) & 3;

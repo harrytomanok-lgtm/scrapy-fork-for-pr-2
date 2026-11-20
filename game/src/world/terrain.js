@@ -159,6 +159,11 @@ void main() {
   vec3 ln = normalize(n + vec3(bump - 0.5, 0.0, tn(vPosW.xz * 0.085 + 5.0) - 0.5) * amt * 0.9);
   // Terrain takes no rim light: the view vector is the normal itself.
   vec3 c = ${POLISH(glsl) ? 'toonLightS(base, ln, ln, gfxShadow(vPosW), gfxCloud(vPosW))' : 'toonLight(base, ln, ln)'};
+  // shadow floor by day (world fix): a bright face turned from the sun (snow, salt, pale crystal) lands in the toon
+  // shadow band as base x shadow tint, a hard navy slab against the lit side; keep it at least about half its base
+  // value while the sun is up (ART_UX 1.2: world shadows never darker than 25% value). Night is untouched.
+  float dayK = clamp(dot(uSunColor, vec3(0.3, 0.59, 0.11)) - 0.35, 0.0, 1.0);
+  c = max(c, base * (0.52 * dayK) * vec3(0.9, 0.94, 1.0));
   c = applyFog(c, vPosW);
   gl_FragColor = vec4(c, 1.0);
   #include <colorspace_fragment>

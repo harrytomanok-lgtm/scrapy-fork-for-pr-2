@@ -8,7 +8,7 @@
  * - bridges: a boardwalk across the lagoon on the Tide Beacon road, a plank bridge over the Thornwood gorge;
  * - ruins: the Drowned Observatory (a broken ring of columns and a cracked dome in the Stormwell lake), a ring of
  *   standing stones in the Meadows, the Iron Ring (a half-buried giant copper wheel in the Rustdune);
- * - the Weeping Falls: a waterfall down the steepest drop near its landmark, its bands scrolling, with a foam pool.
+ * (No Weeping Falls: there is no cliff near the landmark.)
  * The ids and positions are listed by `world.places()` (an addition) for the gallery and the map.
  * @module world/places
  */
@@ -542,75 +542,8 @@ export function createPlaces(ctx, grid, colliders, seed, clear, landmarks) {
     }
   }
 
-  // ---------------------------------------------------------------- the Weeping Falls
-  {
-    const wf = { x: -2000, z: -1290 };
-    let best = null;
-    for (let r = 0; r <= 640; r += 16) {
-      const n = Math.max(1, Math.floor(r / 10));
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        const x = wf.x + Math.cos(a) * r;
-        const z = wf.z + Math.sin(a) * r;
-        const h = H(x, z);
-        if (h < 8) continue;
-        for (let q = 0; q < 8; q++) {
-          const qa = (q / 8) * Math.PI * 2;
-          const fx = Math.cos(qa);
-          const fz = Math.sin(qa);
-          const hb = H(x + fx * 22, z + fz * 22);
-          const drop = h - hb;
-          if (drop > 12 && (!best || drop - r * 0.02 > best.score)) best = { x, z, fx, fz, top: h, bot: hb, score: drop - r * 0.02 };
-        }
-      }
-    }
-    if (best) {
-      const S = soup();
-      const water = P.ocean.shallow;
-      const foam = P.ocean.foam;
-      const W = 7;
-      const sx = -best.fz;
-      const sz = best.fx;
-      // the fall: a ribbon from the lip down the drop in steps that hug the cliff
-      const steps = 10;
-      const pts = [];
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const d = t * 22;
-        const px = best.x + best.fx * d;
-        const pz = best.z + best.fz * d;
-        const g = H(px, pz);
-        const y = best.top + 0.6 - (best.top - best.bot) * Math.pow(t, 0.8);
-        pts.push([px, Math.max(y, g + 0.5), pz]);
-      }
-      const v0 = S.count() * 3;
-      for (let i = 0; i < steps; i++) {
-        const a = pts[i];
-        const b = pts[i + 1];
-        const w0 = W * (1 + i * 0.03);
-        const w1 = W * (1 + (i + 1) * 0.03);
-        S.quad([a[0] - sx * w0, a[1], a[2] - sz * w0], [b[0] - sx * w1, b[1], b[2] - sz * w1], [b[0] + sx * w1, b[1], b[2] + sz * w1], [a[0] + sx * w0, a[1], a[2] + sz * w0], water, foam);
-      }
-      const v1 = S.count() * 3;
-      // a foam pool at the foot, and spray boulders
-      const fb = pts[steps];
-      for (let i = 0; i < 12; i++) {
-        const a0 = (i / 12) * Math.PI * 2;
-        const a1 = ((i + 1) / 12) * Math.PI * 2;
-        S.tri([fb[0], fb[1] - 0.3, fb[2]], [fb[0] + Math.cos(a1) * 11, fb[1] - 0.35, fb[2] + Math.sin(a1) * 11], [fb[0] + Math.cos(a0) * 11, fb[1] - 0.35, fb[2] + Math.sin(a0) * 11], foam, water, water);
-      }
-      for (let i = 0; i < 5; i++) {
-        const a = i * 1.3;
-        blob(S, fb[0] + Math.cos(a) * 10, fb[1], fb[2] + Math.sin(a) * 10, 2.2, 1.6, 2, P.biome.thornwood.cliff, k(P.biome.thornwood.cliff, 1.15));
-      }
-      const mesh = finish('weeping_falls', S, best.x, best.z, best.bot, (best.top - best.bot) * 0.5, { emissive: foam, emissiveIntensity: 0.12, doubleSide: true });
-      const ca = mesh.geometry.attributes.color;
-      const base = Float32Array.from(ca.array);
-      const phase = new Float32Array(ca.count);
-      for (let v = v0; v < v1; v++) phase[v] = (mesh.geometry.attributes.position.array[v * 3 + 1] - best.bot) * 0.35;
-      falls = { attr: ca, base, phase, v0, v1, t: -1 };
-    }
-  }
+  // The Weeping Falls are not built (review): the height field has no cliff near the landmark and a ribbon on a
+  // slope does not read as a fall. `falls` stays null; update() keeps the band animation for a future cliff fall.
 
   return {
     /** Diagnostics and the gallery: id, position and a look height per place. */

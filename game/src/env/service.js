@@ -345,6 +345,18 @@ export function createEnv(ctx) {
         smoke.push({ x: out.x, y: out.y + 1, z: out.z });
       }
     }
+    // clear ground (no cover) where the player stands still: NPC homes, quest objects, course starts, the spawn
+    const w = ctx.world;
+    if (w && typeof w.keepClear === 'function' && ctx.defs && typeof ctx.defs.all === 'function') {
+      const at = (x, z, r) => {
+        if (typeof x === 'number' && typeof z === 'number') w.keepClear(x, z, r, false);
+      };
+      for (const d of ctx.defs.all('npc')) if (d.home) at(d.home.x, d.home.z, 8);
+      for (const d of ctx.defs.all('object')) if (d.prop !== 'siphon') at(d.x, d.z, 8);
+      for (const d of ctx.defs.all('course')) if (d.start) at(d.start.x, d.start.z, 10);
+      const sp = ctx.store && ctx.store.state && ctx.store.state.player;
+      if (sp) at(sp.x, sp.z, 8);
+    }
     if (!life) {
       for (const c of settlements.chimneys()) smoke.push(c);
       life = createLife(ctx, () => smoke);

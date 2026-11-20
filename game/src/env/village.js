@@ -12,7 +12,7 @@
  */
 
 import { PALETTE } from '../core/palette.js';
-import { SLOT, frame, prim } from './kit.js';
+import { SLOT, frame, prim, mat } from './kit.js';
 import { FOOTPRINT } from './data/settlements.js';
 
 /** @param {number} i @param {number} k @returns {number} 0..1 */
@@ -55,37 +55,155 @@ export function dressVillage(B, o) {
   let lanterns = 0;
 
   // ---------------------------------------------------------------- the square
+  // an irregular square: its edge wanders with three seeded waves, cobbles are tinted per stone, not in bands
+  const ph1 = h01(o.seed, 1) * 6.28;
+  const ph2 = h01(o.seed, 2) * 6.28;
+  const ph3 = h01(o.seed, 3) * 6.28;
+  const edgeR = (a) => R * (0.86 + 0.1 * Math.sin(3 * a + ph1) + 0.06 * Math.sin(5 * a + ph2) + 0.05 * Math.sin(2 * a + ph3));
   if (!camp) {
-    const rings = [0, 3.6, 4.4, 7.2, 10, R - 0.8, R];
-    const seg = 32;
+    // radius of ring k at angle a: an absolute stone base, then fractions of the wandering edge
+    const ringR = (k, a) => (k === 0 ? 0 : k === 1 ? 2.6 : edgeR(a) * [0, 0, 0.42, 0.62, 0.8, 0.93, 1][k]);
+    const rings = 7;
+    const seg = 36;
     const pt = (rr, a) => {
       const px = cx + Math.sin(a) * rr;
       const pz = cz + Math.cos(a) * rr;
       return [px, H(px, pz) + 0.14, pz];
     };
-    for (let k = 0; k < rings.length - 1; k++) {
-      const n = k < 2 ? 16 : seg;
+    for (let k = 0; k < rings - 1; k++) {
+      const n = k < 1 ? 12 : seg;
       for (let i = 0; i < n; i++) {
-        const a0 = (i / n) * Math.PI * 2 + (k % 2) * 0.05;
-        const a1 = ((i + 1) / n) * Math.PI * 2 + (k % 2) * 0.05;
+        const a0 = (i / n) * Math.PI * 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2;
         let slot = SLOT.PATH;
-        let tint = COBBLE[Math.floor(h01(i + k * 64, o.seed) * 4)];
+        let tint = COBBLE[Math.floor(h01(i * 7 + k * 131, o.seed) * 4)];
         if (k === 0) { slot = SLOT.STONE; tint = 0xe8e8e8; }
-        else if (k === 1) { slot = SLOT.TERRA; tint = undefined; }
-        else if (k === rings.length - 2) { slot = SLOT.STONE; tint = i % 2 ? 0xf0d8b8 : 0xe0c8a8; }
-        if (rings[k] === 0) {
-          B.tri(pt(0, 0), pt(rings[1], a0), pt(rings[1], a1), slot, tint);
+        else if (k === rings - 2) { slot = SLOT.STONE; tint = h01(i, o.seed + 9) < 0.5 ? 0xf0d8b8 : 0xe0c8a8; }
+        if (k === 0) {
+          B.tri(pt(0, 0), pt(ringR(1, a0), a0), pt(ringR(1, a1), a1), slot, tint);
           continue;
         }
-        const p00 = pt(rings[k], a0);
-        const p01 = pt(rings[k], a1);
-        const p10 = pt(rings[k + 1], a0);
-        const p11 = pt(rings[k + 1], a1);
+        const p00 = pt(ringR(k, a0), a0);
+        const p01 = pt(ringR(k, a1), a1);
+        const p10 = pt(ringR(k + 1, a0), a0);
+        const p11 = pt(ringR(k + 1, a1), a1);
         B.tri(p00, p10, p11, slot, tint);
         B.tri(p00, p11, p01, slot, tint);
       }
     }
-    o.keepClear(cx, cz, R + 0.5, true);
+    o.keepClear(cx, cz, R * 0.7, true);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const e = edgeR(a);
+      o.keepClear(cx + Math.sin(a) * e * 0.8, cz + Math.cos(a) * e * 0.8, e * 0.22 + 0.6, true);
+    }
+  }
+
+  // ---------------------------------------------------------------- more houses close around the square
+  if (o.house && (o.style === 'village' || o.style === 'town' || o.style === 'outpost' || o.style === 'mountain' || o.style === 'beacon')) {
+    const want = o.style === 'town' ? 11 : 8;
+    const isHouse = (k) => k === 'house_s' || k === 'house_m' || k === 'house_l';
+    let near = 0;
+    for (const b of o.buildings) if (isHouse(b.kind) && Math.hypot(b.x - cx, b.z - cz) < R + 30) near++;
+    const exitA = o.exits.map((e) => Math.atan2(e.x - cx, e.z - cz));
+    const kinds = ['house_m', 'house_s', 'house_l', 'house_s', 'house_m', 'house_s'];
+    let ki = Math.floor(h01(o.seed, 5) * kinds.length);
+    for (let pass = 0; pass < 2 && near < want; pass++) {
+      for (let i = 0; i < 24 && near < want; i++) {
+        const a = (i / 24) * Math.PI * 2 + h01(o.seed, 6) * 0.26 + pass * 0.13;
+        // keep the roads out open
+        let onRoad = false;
+        for (const ea of exitA) if (Math.abs(Math.atan2(Math.sin(a - ea), Math.cos(a - ea))) < 0.42) onRoad = true;
+        if (onRoad) continue;
+        const kind = kinds[ki % kinds.length];
+        const r = FOOTPRINT[kind];
+        const d = edgeR(a) + 5.5 + r + pass * 7 + h01(i, o.seed + 7) * 2;
+        const x = cx + Math.sin(a) * d;
+        const z = cz + Math.cos(a) * d;
+        if (!free(x, z, r + 1.6)) continue;
+        const yaw = Math.atan2(cx - x, cz - z);
+        if (!o.house(B, x, z, yaw, kind)) continue;
+        o.buildings.push({ kind, x, z, yaw });
+        claim(x, z, r + 1.2);
+        near++;
+        ki++;
+      }
+    }
+    // low stone walls tying neighbouring houses together behind them (never across a road out)
+    const ring = o.buildings.filter((b) => isHouse(b.kind) && Math.hypot(b.x - cx, b.z - cz) < R + 34)
+      .map((b) => ({ b, a: Math.atan2(b.x - cx, b.z - cz), d: Math.hypot(b.x - cx, b.z - cz) }))
+      .sort((p, q) => p.a - q.a);
+    for (let i = 0; i < ring.length; i++) {
+      const p = ring[i];
+      const q = ring[(i + 1) % ring.length];
+      let da = q.a - p.a;
+      if (da <= 0) da += Math.PI * 2;
+      if (da > 1.2 || ring.length < 2) continue;
+      let cross = false;
+      for (const ea of exitA) {
+        let de = ea - p.a;
+        if (de < 0) de += Math.PI * 2;
+        if (de < da + 0.2) cross = true;
+      }
+      if (cross) continue;
+      const rp = FOOTPRINT[p.b.kind] * 0.8;
+      const rq = FOOTPRINT[q.b.kind] * 0.8;
+      const x0 = p.b.x + Math.sin(p.a + 0.7) * rp;
+      const z0 = p.b.z + Math.cos(p.a + 0.7) * rp;
+      const x1 = q.b.x + Math.sin(q.a - 0.7) * rq;
+      const z1 = q.b.z + Math.cos(q.a - 0.7) * rq;
+      const L = Math.hypot(x1 - x0, z1 - z0);
+      if (L < 2 || L > 22) continue;
+      const wy = Math.atan2(x1 - x0, z1 - z0);
+      const n = Math.max(1, Math.round(L / 3));
+      for (let s = 0; s < n; s++) {
+        const t = (s + 0.5) / n;
+        const wx = x0 + (x1 - x0) * t;
+        const wz = z0 + (z1 - z0) * t;
+        const g = H(wx, wz);
+        B.add(prim.box(0.55, 0.95, L / n + 0.08), mat(wx, g - 0.35, wz, wy), SLOT.STONE, 0xe6d6c0, 0.35);
+        B.add(prim.box(0.68, 0.12, L / n + 0.1), mat(wx, g + 0.6, wz, wy), SLOT.TERRA);
+      }
+      o.addCollider({ shape: 'box', x: (x0 + x1) / 2, y: H((x0 + x1) / 2, (z0 + z1) / 2) - 0.35, z: (z0 + z1) / 2, hx: 0.3, hz: L / 2, h: 1.0, yaw: wy });
+    }
+  }
+
+  // ---------------------------------------------------------------- the square's centrepiece and awnings
+  if (!camp && o.style !== 'monastery') {
+    // beside the Ringstone: a shade tree in a ring bench (or a well where the definition has none nearby)
+    for (let i = 0; i < 8; i++) {
+      const a = h01(o.seed, 11) * 6.28 + i * 0.785;
+      const d = edgeR(a) * 0.55;
+      const x = cx + Math.sin(a) * d;
+      const z = cz + Math.cos(a) * d;
+      if (!free(x, z, 2.6)) continue;
+      const g = H(x, z);
+      const leaf = o.style === 'mountain' ? P.biome.frostspine.foliage : o.style === 'outpost' ? P.biome.rustdune.foliage : P.flora.redLeaf;
+      B.add(prim.drum(2.3, 2.4, 0.45, 12), mat(x, g - 0.05, z), SLOT.STONE, 0xe0d0b8, 0.3);
+      B.add(prim.drum(2.45, 2.45, 0.08, 12, true), mat(x, g + 0.42, z), SLOT.WOOD_LIGHT);
+      B.add(prim.drum(0.28, 0.4, 3.6, 6), mat(x, g + 0.3, z), SLOT.WOOD, undefined, 0.3);
+      B.add(prim.gem(2.0), mat(x, g + 4.6, z, 0.3, 0, 0, 1.3, 0.9, 1.3), SLOT.CLOTH, leaf);
+      B.add(prim.gem(1.5), mat(x + 0.9, g + 5.6, z - 0.4, 0.8, 0, 0, 1.1, 0.8, 1.1), SLOT.CLOTH, leaf);
+      o.addCollider({ shape: 'disc', x, y: g - 0.1, z, r: 2.4, h: 0.6 });
+      claim(x, z, 2.6);
+      break;
+    }
+    // two awnings on poles at the square's edge, in the banner colours
+    let made = 0;
+    for (let i = 0; i < 12 && made < 2; i++) {
+      const a = h01(o.seed, 21) * 6.28 + i * 0.52;
+      const d = edgeR(a) - 1.6;
+      const x = cx + Math.sin(a) * d;
+      const z = cz + Math.cos(a) * d;
+      if (!free(x, z, 2.2)) continue;
+      const f = frame(x, H(x, z), z, a + Math.PI);
+      for (const sx of [-1.4, 1.4]) for (const sz of [-0.9, 0.9]) B.add(prim.box(0.1, sz > 0 ? 2.3 : 2.6, 0.1), f.m(sx, -0.1, sz), SLOT.WOOD);
+      for (let s = 0; s < 4; s++) B.add(prim.cbox(0.72, 0.06, 2.3), f.m(-1.08 + s * 0.72, 2.45, 0, 0, 0.12), SLOT.CLOTH, o.banner[s % 2]);
+      B.add(prim.box(2.4, 0.8, 0.6), f.m(0, -0.05, 0.4), SLOT.WOOD_LIGHT, undefined, 0.3);
+      o.addCollider({ shape: 'box', x: f.wx(0, 0.4), y: f.y, z: f.wz(0, 0.4), hx: 1.2, hz: 0.3, h: 0.8, yaw: f.yaw });
+      claim(x, z, 2.2);
+      made++;
+    }
   }
 
   // ---------------------------------------------------------------- lanes and roads
@@ -144,7 +262,7 @@ export function dressVillage(B, o) {
   doors.sort((a, b) => a[2] - b[2]);
   let li = 0;
   for (const d of doors) {
-    const edge = camp ? 4 : R - 0.4;
+    const edge = camp ? 4 : edgeR(Math.atan2(d[0] - cx, d[1] - cz)) - 0.4;
     if (d[2] <= edge + 1) continue;
     let tx = cx + ((d[0] - cx) / d[2]) * edge;
     let tz = cz + ((d[1] - cz) / d[2]) * edge;
@@ -170,7 +288,7 @@ export function dressVillage(B, o) {
     const vd = Math.hypot(vx, vz) || 1;
     const ux = vx / vd;
     const uz = vz / vd;
-    const start = camp ? 5 : R - 0.4;
+    const start = camp ? 5 : edgeR(Math.atan2(ux, uz)) - 0.4;
     const end = Math.min(vd, start + 46);
     lane(cx + ux * start, cz + uz * start, cx + ux * end, cz + uz * end, 3.0, 50 + e, true);
     // signpost at the start of the road, to the right
@@ -320,8 +438,8 @@ export function dressVillage(B, o) {
     // benches on the square, facing the Ringstone
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + 0.75;
-      const x = cx + Math.sin(a) * (R - 2.2);
-      const z = cz + Math.cos(a) * (R - 2.2);
+      const x = cx + Math.sin(a) * (edgeR(a) - 2.2);
+      const z = cz + Math.cos(a) * (edgeR(a) - 2.2);
       if (!free(x, z, 1.3)) continue;
       const f = frame(x, H(x, z), z, a + Math.PI);
       B.add(prim.box(1.9, 0.1, 0.55), f.m(0, 0.42, 0), SLOT.WOOD_LIGHT);

@@ -258,7 +258,7 @@ export function createWorld(ctx) {
         clearSet.n = 0;
         bareSet.n = 0;
         for (const l of landmarks) {
-          if (l.type === 'settlement') addClear(bareSet, l.x, l.z, l.id === 'haven_aster' ? 21 : 17);
+          if (l.type === 'settlement') addClear(bareSet, l.x, l.z, 8);
           if (l.type === 'spire') continue;
           const r = l.stamp && l.stamp.radius ? l.stamp.radius : 24;
           addClear(clearSet, l.x, l.z, l.type === 'settlement' ? r + 10 : l.type === 'arena' ? r * 0.85 : r * 0.7);
@@ -278,7 +278,7 @@ export function createWorld(ctx) {
         poiAll.push(p);
         poiByType[p.type].push(p);
         // keep the points of interest clear of trees and rocks (camps get room for their tents and fights)
-        const pr = p.type === 'camp' ? 22 : p.type === 'shrine' ? 8 : p.type === 'race' ? 14 : p.type === 'siphon' ? 18 : 5;
+        const pr = p.type === 'camp' ? 22 : p.type === 'shrine' || p.type === 'ringstone' ? 9 : p.type === 'race' ? 14 : p.type === 'siphon' ? 18 : 6;
         if (p.type !== 'crownChest') addClear(clearSet, p.x, p.z, pr);
       }
       if (veg) {
