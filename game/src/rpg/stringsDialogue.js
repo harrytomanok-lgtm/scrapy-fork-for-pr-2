@@ -23,6 +23,7 @@ const ROWS = [
   ['mq1.l13', 'Boars. Something has driven them mad. Calm them the hard way.', 'חזירי חט. משהו שיגע אותם. {g:תרגיע/תרגיעי} אותם בדרך הקשה.'],
   ['mq1.l14', "Red light means don't block. Vanish.", 'אור אדום אומר: לא לחסום. {g:היעלם/היעלמי}.'],
   ['mq1.l15', 'Back to Sparkstead. Touch the Ringstone. It will remember you.', 'חזרה לבית הניצוץ. {g:גע/געי} באבן הטבעת. היא תזכור אותך.'],
+  ['mq1.skip.l01', "You move like you've done this before. Drills, or straight to Sparkstead?", '{g:אתה זז/את זזה} כמו מי שכבר עשה את זה. תרגולים, או ישר לבית הניצוץ?'],
 
   // MQ2 "Smoke over Sparkstead" (GDD 8.5)
   ['mq2.l01', "Tavi! You're glowing. Is that contagious? Take these Sunfruit, just in case.", 'טאבי! {g:אתה זוהר/את זוהרת}. זה מדבק? {g:קח/קחי} פירות שמש, ליתר ביטחון.'],

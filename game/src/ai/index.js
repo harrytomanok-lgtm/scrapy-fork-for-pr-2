@@ -30,6 +30,7 @@ export const pkg = {
     bus.on('player:respawned', s.on.respawned);
     bus.on('player:died', s.on.playerDied);
     bus.on('game:ended', s.on.ended);
+    bus.on('cine:end', s.on.cineEnd);
     if (ctx.debug && ctx.debug.register) {
       ctx.debug.register('aiState', (id) => ctx.ai.debugState(id));
       ctx.debug.register('aiTokens', () => ctx.ai.tokens());

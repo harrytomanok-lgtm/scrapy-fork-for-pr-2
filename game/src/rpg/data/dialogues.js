@@ -51,7 +51,19 @@ const T = 'tavi';
 
 export const DIALOGUES = [
   // MQ1 "The Spark": spoken by the tutorial scripts, two lines at most per box (GDD 8.4).
-  seq('mq1_post', [[S, 'mq1.l01'], [T, 'mq1.l02'], [S, 'mq1.l03']]),
+  seq('mq1_post', [[S, 'mq1.l01'], [T, 'mq1.l02']]),
+  seq('mq1_post_hit', [[S, 'mq1.l03']]),
+  // A returning player (MQ1 done in an earlier journey) may skip the training: the first choice keeps it.
+  {
+    id: 'mq1_skip', start: 'n1',
+    nodes: {
+      n1: { speaker: S, text: 'mq1.skip.l01', next: null, choices: [
+        { text: 'rpg.choice.train', next: 'train' },
+        { text: 'rpg.choice.skipTut', next: null, actions: [{ op: 'script', script: 'skip_tutorial' }] },
+      ] },
+      train: { speaker: S, text: 'mq1.l01', next: null },
+    },
+  },
   seq('mq1_wake', [[S, 'mq1.l04'], [T, 'mq1.l05'], [S, 'mq1.l06']]),
   seq('mq1_rings', [[T, 'mq1.l07'], [S, 'mq1.l08']]),
   seq('mq1_wisps', [[S, 'mq1.l09']]),

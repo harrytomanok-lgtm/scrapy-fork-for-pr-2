@@ -743,7 +743,12 @@ export function createRpg(ctx) {
     },
     /** The tutorial=0 shortcut (4.11). */
     newGame() {
-      if (ctx.flags.tutorial !== 0) return;
+      if (ctx.flags.tutorial !== 0) {
+        // A returning player (a journey in any slot, restored from a code or played here, got past MQ1) is offered
+        // to skip the training when it starts (rpg/scripts tut_move).
+        if (returningPlayer()) S().quests.flags['tut.skipOffer'] = true;
+        return;
+      }
       const s = S();
       const p = s.player;
       const q = s.quests;
@@ -772,6 +777,19 @@ export function createRpg(ctx) {
       bossSnapshot = null;
     },
   };
+
+  /** True when a saved journey in any slot has finished MQ1. Read before the new journey is first saved. */
+  function returningPlayer() {
+    try {
+      for (let n = 1; n <= 3; n++) {
+        const st = ctx.save.load(n);
+        if (st && st.quests && Array.isArray(st.quests.done) && st.quests.done.indexOf('mq1') >= 0) return true;
+      }
+    } catch (e) {
+      return false;
+    }
+    return false;
+  }
 
   /** @param {number} sourceId */
   function isPlayerSide(sourceId) {

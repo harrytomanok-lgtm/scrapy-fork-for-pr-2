@@ -90,7 +90,14 @@ export function registerScripts(ctx) {
 
   // MQ1 step 1: walk to the post.
   Q.registerScript('tut_move', (c, api) => {
-    if (!api.resumed) api.say('mq1_post');
+    // A player who has finished MQ1 in an earlier journey is offered to skip the training (the offer's Skip choice
+    // runs the skipTutorial action); otherwise Sela's two opening lines.
+    if (!api.resumed) {
+      if (c.store.state.quests.flags['tut.skipOffer']) {
+        delete c.store.state.quests.flags['tut.skipOffer'];
+        api.say('mq1_skip');
+      } else api.say('mq1_post');
+    }
     api.prompt('move', 'rpg.tut.move');
     api.onTick(() => {
       const p = pl(c);
@@ -101,6 +108,7 @@ export function registerScripts(ctx) {
         api.clearPrompt();
         api.done();
         hint(c, 'attack', 'rpg.tut.attack');
+        api.bark('mq1_post_hit');
       }
     });
   });
@@ -125,7 +133,7 @@ export function registerScripts(ctx) {
       if (!flying && e.move && e.move.mode === 'fly') {
         flying = true;
         api.clearPrompt();
-        api.say('mq1_rings');
+        api.bark('mq1_rings');
       }
       const n = passRings(c, rings);
       api.setObjective('rpg.tut.rings', { count: n, need: 3 });
@@ -149,7 +157,7 @@ export function registerScripts(ctx) {
   // A wisp that bursts in its own dive (or dies any other way not by the player's hand) does not count toward the
   // kill step, so a replacement drifts in: the step can always be finished.
   Q.registerScript('mq1_wisps', (c, api) => {
-    if (!api.resumed) api.say('mq1_wisps');
+    if (!api.resumed) api.bark('mq1_wisps');
     // After a load inside the step only the wisps it still needs drift in (around the Ringstone the load puts the player at).
     spawnArc(c, 'ember_wisp', api.resumed && api.left >= 0 ? api.left : 4, 28, 10, { aggro: true, level: 1, questTag: 'mq1_wisps' });
     hint(c, 'bolt', 'rpg.tut.bolt');
@@ -181,7 +189,7 @@ export function registerScripts(ctx) {
   // MQ1 step 6: Gather to full Ora -> the scripted Ora Awakening burst.
   Q.registerScript('tut_awakening', (c, api) => {
     c.rpg.unlockTech('gather');
-    if (!api.resumed) api.say('mq1_gather');
+    if (!api.resumed) api.bark('mq1_gather');
     spawnArc(c, 'ember_wisp', 6, 30, 12, { aggro: false, level: 1, questTag: 'mq1_awake' });
     api.prompt('gather', 'rpg.tut.gather');
     let t = -1;
@@ -203,7 +211,7 @@ export function registerScripts(ctx) {
       t += dt;
       if (t >= 1.5) {
         for (const e of c.ents.list('enemy')) if (e.alive && e.questTag === 'mq1_awake') c.combat.kill(e, 0);
-        api.say('mq1_awake');
+        api.bark('mq1_awake');
         api.done();
       }
     });
@@ -211,7 +219,7 @@ export function registerScripts(ctx) {
 
   // MQ1 step 7 (free script): two boars charge; the first red telegraph slows time.
   Q.registerScript('mq1_boars', (c, api) => {
-    if (!api.resumed) api.say('mq1_boars');
+    if (!api.resumed) api.bark('mq1_boars');
     spawnArc(c, 'tusk_boar', api.resumed && api.left >= 0 ? api.left : 2, 18, 0, { aggro: true, level: 1, questTag: 'mq1_boars' });
     // The Awakening often leaves the player in the air: the boars are on the ground, so first teach landing.
     const lockHint = () => hint(c, 'lock', c.input && c.input.device === 'touch' ? 'rpg.tut.lockTap' : 'rpg.tut.lock');
@@ -249,7 +257,12 @@ export function registerScripts(ctx) {
   });
 
   // Story beats (free scripts): the line plays once, not again after a load inside the step.
-  for (const id of ['mq1_home', 'mq2_raid', 'mq2_durn', 'mq2_siphon']) {
+  // MQ1's last beat is said on the way (the flight home is the reward for the fight): a bark, no stop.
+  Q.registerScript('mq1_home', (c, api) => {
+    if (!api.resumed) api.bark('mq1_home');
+    api.done();
+  });
+  for (const id of ['mq2_raid', 'mq2_durn', 'mq2_siphon']) {
     Q.registerScript(id, (c, api) => {
       if (!api.resumed) api.say(id);
       api.done();

@@ -251,6 +251,52 @@ function installHelpers() {
     }
     return out;
   };
+  /**
+   * The player's clock (GDD 2 targets): sim seconds since New Journey, plus the time a real player would spend where
+   * the scenario takes a shortcut: the trip a teleport skips (at run or flight speed) and the reading of each
+   * dialogue line (typing at 45 characters per second, then a short pause before the tap).
+   */
+  P.clock = { t0: -1, extra: 0, marks: {}, lines: 0 };
+  P.now = () => (P.clock.t0 < 0 ? 0 : ctx.time.real - P.clock.t0 + P.clock.extra);
+  P.mark = (k) => {
+    if (P.clock.t0 >= 0 && P.clock.marks[k] === undefined) P.clock.marks[k] = Math.round(P.now() * 10) / 10;
+  };
+  P.startClock = () => {
+    P.clock.t0 = ctx.time.real;
+    P.clock.extra = 0;
+    P.clock.marks = {};
+    ctx.bus.on('combat:hit', (h) => {
+      const t = ctx.ents.get(h.targetId);
+      if (ctx.player && h.attackerId === ctx.player.id && t && (t.kind === 'enemy' || t.kind === 'boss')) P.mark('firstHit');
+    }, 'scenario');
+    ctx.bus.on('combat:form', () => P.mark('bigPower'), 'scenario');
+    ctx.bus.on('quest:step', (s) => P.mark(s.questId + '.' + s.stepId), 'scenario');
+    ctx.bus.on('ui:banner', (b) => {
+      if (b && b.key === 'rpg.banner.awakening') P.mark('bigPower');
+    }, 'scenario');
+  };
+  const sim0 = P.sim;
+  P.sim = (n) => {
+    sim0(n);
+    if (ctx.player && ctx.player.move && ctx.player.move.mode === 'fly') P.mark('firstFlight');
+  };
+  const tp0 = g.teleport;
+  g.teleport = (x, z, o) => {
+    const p = ctx.player;
+    if (p && P.clock.t0 >= 0) {
+      const d = Math.hypot(x - p.pos.x, z - p.pos.z);
+      const flying = p.move && p.move.mode !== 'ground' && p.move.mode !== 'swim';
+      P.clock.extra += d / (flying ? 30 : 9);
+    }
+    return tp0(x, z, o);
+  };
+  const dlg0 = P.dlg;
+  P.dlg = (max) => {
+    const lines = dlg0(max);
+    for (const l of lines) P.clock.extra += l.length / 45 + 0.6;
+    P.clock.lines += lines.length;
+    return lines;
+  };
   /** @type {any} */ (window).__P = P;
   return true;
 }
@@ -353,6 +399,7 @@ function firstTen(name, w, h) {
       await page.tap('[data-screen=newgame] .ui-btn.ui-accent');
       const s0 = await game((g) => {
         const P = window.__P;
+        P.startClock();
         P.sim(30);
         return { top: g.top(), mq1: P.step('mq1'), preset: g.state().player.preset, gender: g.state().player.gender, diff: g.state().player.difficulty, lv: g.ctx.rpg.level };
       });
@@ -611,6 +658,8 @@ function firstTen(name, w, h) {
       assert.equal(done.mq2, 's1', 'MQ2 starts');
       const fin = await look('mq2');
       assert.ok(fin.tracker.length > 0, 'the tracker shows MQ2');
+      const clock = await game(() => ({ marks: window.__P.clock.marks, lines: window.__P.clock.lines, now: Math.round(window.__P.now()) }));
+      console.log('    clock (player seconds from New Journey): ' + JSON.stringify(clock));
       const all = report.flatMap((r) => r.problems.map((p) => r.shot + ': ' + p));
       assert.deepEqual(all, [], 'no layout, translation or overlap problems');
     },

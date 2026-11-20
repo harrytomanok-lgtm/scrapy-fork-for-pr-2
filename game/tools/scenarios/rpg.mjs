@@ -452,6 +452,51 @@ export const scenarios = [
     },
   },
   {
+    // The returning player's offer: Skip the training lands at the Sparkstead Ringstone with MQ1 done and MQ2 on;
+    // a new journey after a saved one past MQ1 opens with the offer instead of the drills.
+    name: 'rpg-mq1-skip',
+    width: W, height: H,
+    query: 'tutorial=1',
+    async run({ game, assert, shot }) {
+      const r = await game((g, drain) => {
+        const d = (0, eval)('(' + drain + ')');
+        const Q = g.ctx.quests;
+        d(g);
+        g.step(5);
+        const xp0 = g.ctx.rpg.xp;
+        Q.talk('mq1_skip', {});
+        const first = Q.dialogueState();
+        Q.advance(1);
+        g.step(5);
+        d(g);
+        g.step(5);
+        const p = g.ctx.player;
+        const rs = g.pois('ringstone').find((x) => x.id === 'ringstone_sparkstead');
+        const out = { first, mq1: Q.state('mq1'), mq2: Q.state('mq2'), lvl: g.ctx.rpg.level, xp0, fly: g.state().player.canFly, awake: g.state().player.awakened,
+          techs: g.state().player.techs.slice(), dist: Math.round(Math.hypot(p.pos.x - rs.x, p.pos.z - rs.z)), attuned: g.state().world.ringstones.slice(),
+          tutEnemies: g.ctx.ents.list('enemy').filter((e) => e.alive && String(e.questTag || '').startsWith('mq1_')).length };
+        // A second journey: the saved one is past MQ1, so the opening is the offer.
+        g.save();
+        g.ctx.session.start({ slot: 1, newGame: true });
+        out.offer = Q.dialogueState();
+        out.mq1b = Q.state('mq1');
+        d(g);
+        return out;
+      }, drainSrc.toString());
+      console.log('    ' + JSON.stringify(r));
+      assert.equal(r.first && r.first.dialogueId, 'mq1_skip');
+      assert.equal(r.mq1, 'done', 'Skip completes MQ1');
+      assert.equal(r.mq2, 'active', 'MQ2 starts');
+      assert.ok(r.lvl >= 2, 'MQ1 XP granted (level ' + r.lvl + ')');
+      assert.ok(r.fly && r.awake && r.techs.includes('gather'), 'flight, the Awakening and Gather granted');
+      assert.ok(r.dist < 20, 'at the Sparkstead Ringstone (' + r.dist + ' m)');
+      assert.ok(r.attuned.includes('ringstone_sparkstead'), 'the Ringstone is attuned');
+      assert.equal(r.tutEnemies, 0, 'no tutorial enemies left');
+      assert.equal(r.offer && r.offer.dialogueId, 'mq1_skip', 'a returning player is offered the skip');
+      await shot('rpg-mq1-skip');
+    },
+  },
+  {
     name: 'rpg-finale',
     width: W, height: H,
     async run({ game, assert, shot }) {

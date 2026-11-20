@@ -19,6 +19,8 @@ import { pickEntry, enemyLevel, campAvailable, phaseFor, createPendingBoss } fro
 import { registerAiScripts } from './scripts.js';
 
 const BODY_SECONDS = 1.5;
+/** Seconds of boss intro left after the player skips the intro shot (a beat to get the guard up). */
+const INTRO_AFTER_SKIP = 0.5;
 const MAX_BODIES = 128;
 const THINK_EVERY = 6;
 const RING_MIN = 90;
@@ -1163,6 +1165,17 @@ export function createAi(ctx) {
   }
 
   const on = {
+    /**
+     * cine:end. A boss intro shot the player skips also cuts the boss's idle intro short: a skip puts the fight on
+     * at once instead of leaving both waiting out the rest of the 3 s.
+     * @param {any} e
+     */
+    cineEnd(e) {
+      if (!e || !e.skipped || typeof e.id !== 'string' || e.id.indexOf('boss.intro.') !== 0) return;
+      const be = bossEnt();
+      if (be && be.brain && be.brain.introT > INTRO_AFTER_SKIP) be.brain.introT = INTRO_AFTER_SKIP;
+      introPlaying = false;
+    },
     /** @param {any} e actor:died */
     died(e) {
       if ((e.kind !== 'enemy' && e.kind !== 'boss') || !spawned.has(e.entId)) return;

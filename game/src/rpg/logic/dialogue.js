@@ -79,6 +79,31 @@ export function createDialogueRunner(host) {
       else r.end();
     },
 
+    /**
+     * Skip ahead: run the actions of every remaining line without showing it, up to the next node with a visible
+     * choice (shown, because the choice is the player's to make) or the end of the conversation.
+     */
+    skip() {
+      for (let guard = 0; r.open && guard < 64; guard++) {
+        const n = r.def.nodes[r.nodeId];
+        if (!n) return r.end();
+        if (visibleChoices(n, host.cond).length) return;
+        const next = n.next === undefined ? null : n.next;
+        if (!next || !r.def.nodes[next]) return r.end();
+        const m = r.def.nodes[next];
+        r.nodeId = next;
+        r.shown++;
+        if (m.actions) host.run(m.actions);
+        if (!r.open || r.nodeId !== next) return;
+        if (visibleChoices(m, host.cond).length) {
+          const choices = [];
+          for (const c of visibleChoices(m, host.cond)) choices.push({ textKey: c.text });
+          host.emit('dialogue:line', { dialogueId: r.def.id, nodeId: next, speakerId: m.speaker, textKey: m.text, choices });
+          return;
+        }
+      }
+    },
+
     end() {
       if (!r.open) return;
       const id = r.def.id;

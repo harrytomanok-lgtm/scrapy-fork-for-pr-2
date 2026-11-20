@@ -21,6 +21,10 @@ const ROWS = [
   ['rpg.choice.shop', 'Trade', 'לסחור'],
   ['rpg.choice.talk', 'Chat', 'לשוחח'],
   ['rpg.choice.bye', 'Farewell', 'להתראות'],
+  ['rpg.choice.train', 'Train with Sela', 'להתאמן עם סלע'],
+  ['rpg.choice.skipTut', 'Skip the training', 'לדלג על האימון'],
+  // a line said while play goes on (a toast): speaker, then the line
+  ['rpg.bark', '{who}: {line}', '{who}: {line}'],
   // toasts and banners
   ['rpg.toast.item', '{item} x{count}', '{item} ×{count}'],
   ['rpg.toast.shells', 'Shells +{n}', 'צדפים +{n}'],

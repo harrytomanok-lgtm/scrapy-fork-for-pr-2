@@ -624,6 +624,14 @@ export function createActivities(ctx, host) {
       return false;
     },
 
+    /** Attune a Ringstone as if the player touched it (heal, respawn point, event). False when it is unknown. @param {string} id */
+    attune(id) {
+      const r = byId.get(id);
+      if (!r || r.kind !== 'ringstone') return false;
+      useRingstone(r);
+      return true;
+    },
+
     /** @param {string} id */
     record(id) {
       return byId.get(id) || null;
