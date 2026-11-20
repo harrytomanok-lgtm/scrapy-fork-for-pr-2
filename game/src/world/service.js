@@ -18,6 +18,7 @@ import { createTerrain } from './terrain.js';
 import { createWater } from './water.js';
 import { createVegetation } from './vegetation.js';
 import { createClearSet, addClear } from './gen/scatter.js';
+import { createPlaces } from './places.js';
 import { createTufts } from './tufts.js';
 import { createStructures } from './structures.js';
 import { drawMap } from './map.js';
@@ -149,6 +150,8 @@ export function createWorld(ctx) {
   let tufts = null;
   /** @type {any} */
   let structs = null;
+  /** @type {any} */
+  let places = null;
   let bakeMode = 'none';
   let bakeMs = 0;
   let focusX = 0;
@@ -260,6 +263,7 @@ export function createWorld(ctx) {
           const r = l.stamp && l.stamp.radius ? l.stamp.radius : 24;
           addClear(clearSet, l.x, l.z, l.type === 'settlement' ? r + 10 : l.type === 'arena' ? r * 0.85 : r * 0.7);
         }
+        places = createPlaces(ctx, grid, col, seed, clearSet, landmarks);
         veg = createVegetation(ctx, grid, col, seed, clearSet);
         tufts = createTufts(ctx, grid, seed, bareSet);
         terrain.flush(focusX, focusY, focusZ);
@@ -477,6 +481,14 @@ export function createWorld(ctx) {
       if (tufts) tufts.invalidate();
     },
 
+    /**
+     * The authored places between the settlements (an addition): arches, elder trees, bridges, ruins, falls.
+     * @returns {{ id:string, x:number, y:number, z:number, lookUp:number }[]}
+     */
+    places() {
+      return places ? places.list() : [];
+    },
+
     /** Streaming and LOD centre (the camera position). */
     setFocus(x, y, z) {
       focusX = x;
@@ -522,7 +534,8 @@ export function createWorld(ctx) {
 
     /** Remove the meshes and GPU resources. */
     dispose() {
-      for (const part of [terrain, water, veg, tufts, structs]) if (part) part.dispose();
+      for (const part of [terrain, water, veg, tufts, structs, places]) if (part) part.dispose();
+      places = null;
       tufts = null;
       terrain = null;
       water = null;
@@ -567,6 +580,7 @@ export function createWorld(ctx) {
       if (p && p.alive) tufts.update(p.pos.x, p.pos.y, p.pos.z, focusY, false);
       pulseT += dt > 0 ? dt : 0;
       structs.update(pulseT);
+      if (places) places.update(pulseT);
     },
   };
 

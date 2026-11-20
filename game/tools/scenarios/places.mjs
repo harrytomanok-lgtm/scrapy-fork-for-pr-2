@@ -198,7 +198,7 @@ function landmarkTargets(g) {
   const out = [];
   const add = (name, x, z, up) => out.push([name, x, w.heightAt(x, z), z, up]);
   add('spire', 0, 0, 260);
-  for (const id of ['tide_beacon', 'saltglass_arches', 'haven_aster', 'copperwatch', 'still_wind', 'paleglass_summit', 'ridgerest', 'stormwell_eye', 'bramble_hollow', 'burrow_pit']) {
+  for (const id of ['tide_beacon', 'haven_aster', 'copperwatch', 'still_wind']) {
     const lm = w.landmark(id);
     if (lm) add(id, lm.x, lm.z, id === 'haven_aster' ? 25 : 12);
   }

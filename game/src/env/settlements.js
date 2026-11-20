@@ -306,13 +306,13 @@ export function createSettlements(ctx) {
     for (const a of [Math.PI / 2, -Math.PI / 2]) B.add(prim.cbox(0.9, 14, 0.06), f.m(Math.sin(a) * 3.05, 38, Math.cos(a) * 3.05, a, 0.03), SLOT.CLOTH, banner[0]);
     addCollider({ shape: 'disc', x: f.x, y: f.y, z: f.z, r: 4.6, h: H + 4 });
     for (let i = 0; i < 4; i++) {
-      kites.push({ x: f.x, y: f.y + H + 8 - i * 0.5, z: f.z, yaw: -0.6 + i * 0.4, phase: i * 2.1, len: 2.2 + i * 0.35, color: KITE_COLORS[i % 3] });
+      kites.push({ x: f.x, y: f.y + H + 8 - i * 0.5, z: f.z, yaw: -0.6 + i * 0.4, phase: i * 2.1, len: 3.2 + i * 0.5, color: KITE_COLORS[i % 3] });
     }
   }
 
   /** Copper signal mast. @param {any} B @param {any} f @param {number[]} banner */
   function mast(B, f, banner) {
-    const H = 18;
+    const H = 26;
     B.add(prim.drum(0.8, 1.0, 0.8, 8), f.m(0, -0.3, 0), SLOT.STONE);
     B.add(prim.drum(0.16, 0.26, H, 6), f.m(0, 0.3, 0), SLOT.WOOD, undefined, 0.2);
     B.add(prim.cbox(3.2, 0.14, 0.14), f.m(0, H - 2.5, 0), SLOT.WOOD);
@@ -632,7 +632,8 @@ export function createSettlements(ctx) {
       const render = ctx.render;
       if (!w || !render || !render.layers || !render.materials) return;
       built = true;
-      material = render.materials.toon({ palette: true, vertexColors: true });
+      // reduced fog: kite towers, lighthouses, masts and roofs keep their silhouette from the air (world pass)
+      material = render.materials.toon({ palette: true, vertexColors: true, fogScale: 0.7 });
       material.name = 'env.structure';
       const pal = material.uniforms.uPalette.value;
       for (let i = 0; i < 16; i++) pal[i].setHex(SLOT_HEX[i]);

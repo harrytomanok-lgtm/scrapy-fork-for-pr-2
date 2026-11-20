@@ -27,7 +27,7 @@ function rgb(hex) {
 }
 
 /** Gorge polyline through Thornwood (to Bramble Hollow). */
-const GORGE = Object.freeze([-1650, 330, -1950, -60, -2250, -420, -2580, -860, -2820, -1250, -3050, -1500]);
+export const GORGE = Object.freeze([-1650, 330, -1950, -60, -2250, -420, -2580, -860, -2820, -1250, -3050, -1500]);
 
 /**
  * Create the field for a world seed.
