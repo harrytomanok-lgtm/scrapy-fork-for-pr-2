@@ -585,6 +585,7 @@ export const scenarios = [
         g.god(true);
         g.setLevel(30);
         st.quests.flags.credits = true;
+        for (const b of ['durn', 'bramblehorn', 'gorrumaw', 'iskra', 'vorrhal']) if (st.world.bosses.indexOf(b) < 0) st.world.bosses.push(b);
         for (const id of ['ringstone_tide_beacon', 'ringstone_copperwatch']) {
           st.world.ringstones.push(id);
           st.quests.flags['attuned.' + id] = true;
@@ -675,6 +676,71 @@ export const scenarios = [
       assert.ok(r.trial && r.trial.medals.length >= 1 && r.trial.best > 0, 'the trial records a time and a medal');
       assert.ok(r.canRetry, 'a lost trial offers Retry');
       assert.ok(r.retryFoes >= 1 && r.retryDist < 30, 'Retry puts the player back in the trial (' + r.retryFoes + ' foes, ' + r.retryDist + ' m)');
+    },
+  },
+  {
+    // A rematch is one attempt: Rise cancels it for good (Sparkstead, Durn's arena and the hub, stays quiet); Retry
+    // restarts it, and a retried win pays its medals once.
+    name: 'rpg-rematch-retry',
+    width: W, height: H,
+    async run({ game, assert }) {
+      const r = await game((g) => {
+        const Q = g.ctx.quests;
+        const st = g.ctx.store.state;
+        const out = {};
+        g.setLevel(20);
+        st.quests.flags.credits = true;
+        st.world.bosses.push('durn');
+        const bossOf = () => g.ctx.ents.list('boss').filter((b) => b.alive && b.defId === 'durn');
+        // 1. Rematch, die, Rise, walk back into Sparkstead.
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(30);
+        out.level = (bossOf()[0] || {}).level || 0;
+        g.kill(g.player().id);
+        g.step(100);
+        g.ctx.rpg.respawn({ retry: false });
+        g.step(30);
+        const lm = g.ctx.world.landmark('sparkstead');
+        for (let i = 0; i < 4; i++) {
+          g.teleport(lm.x + i * 8, lm.z + 10, {});
+          g.step(40);
+        }
+        out.afterRise = bossOf().length;
+        out.aiBoss = !!g.ctx.ai.boss;
+        // 2. Rematch, die, Retry, win.
+        const shells0 = st.inv.shells;
+        Q.runActions([{ op: 'script', script: 'rematch_durn' }]);
+        g.step(30);
+        g.kill(g.player().id);
+        g.step(100);
+        out.canRetry = g.ctx.rpg.canRetry;
+        g.ctx.rpg.respawn({ retry: true });
+        g.god(true);
+        g.step(40);
+        const b2 = bossOf()[0];
+        out.retried = !!b2;
+        out.retryLevel = b2 ? b2.level : 0;
+        for (let i = 0; i < 60 && b2 && b2.alive && !st.quests.flags['rematch.durn']; i++) {
+          g.damage(b2.id, 0.2);
+          g.step(20);
+        }
+        g.step(300);
+        out.record = st.quests.flags['rematch.durn'];
+        out.paid = st.inv.shells - shells0;
+        out.pendingAfterWin = bossOf().length;
+        g.god(false);
+        return out;
+      });
+      console.log('    ' + JSON.stringify(r));
+      assert.ok(r.level > 4, 'the rematch runs at a raised level');
+      assert.equal(r.afterRise, 0, 'Rise cancels the rematch: no boss in Sparkstead');
+      assert.equal(r.aiBoss, false);
+      assert.ok(r.canRetry, 'the death screen can Retry the rematch');
+      assert.ok(r.retried && r.retryLevel === r.level, 'Retry restarts it at the same level');
+      assert.ok(r.record && r.record.medals.length >= 1, 'the retried win records its medal');
+      const once = { bronze: 300, silver: 600, gold: 1200 };
+      const want = r.record.medals.reduce((a, m) => a + once[m], 0);
+      assert.ok(r.paid >= want && r.paid < want + 400, 'the medals are paid once (' + r.paid + ' for ' + r.record.medals.join(',') + ')');
     },
   },
   {

@@ -1037,6 +1037,19 @@ export function createAi(ctx) {
       clearBossFog();
     },
 
+    /**
+     * Cancel a boss fight completely (a rematch abandoned): the boss and its adds go, it is no longer pending (walking
+     * into its arena later starts nothing) and its rematch level is cleared. boss:end { defeated: false } is emitted
+     * when the fight was on. No-op for a boss that is neither spawned nor pending.
+     * @param {string} id
+     */
+    cancelBoss(id) {
+      const e = bossEnt();
+      if (e && bossDef && bossDef.id === id) ai.resetBoss();
+      pending.defeat(id);
+      bossLevels.delete(id);
+    },
+
     get boss() {
       const e = bossEnt();
       return e && !bossEnded && e.combat && e.combat.state !== 'dead' ? e : null;

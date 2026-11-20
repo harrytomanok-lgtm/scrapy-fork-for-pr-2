@@ -42,6 +42,15 @@ export function recordMedal(ctx, key, seconds, medal, rewards) {
  */
 export function registerChallenges(ctx, host) {
   const Q = ctx.quests;
+  /** The running rematch (rpg reads it for the kill's reward): its boss, and whether it is the first clear. */
+  const rematch = { bossId: '', first: false };
+  /** The activity that another one cancels when it starts (a rematch). */
+  const active = { cancel: /** @type {null|(() => void)} */ (null) };
+  const cancelActive = () => {
+    const f = active.cancel;
+    active.cancel = null;
+    if (f) f();
+  };
   /** The trial fight the player just died in (its Retry runs it again), until another respawn. */
   const lastTrial = { id: '' };
 
@@ -50,7 +59,13 @@ export function registerChallenges(ctx, host) {
     Q.registerScript('rematch_' + bossId, (c, api) => {
       const bd = c.defs.find('boss', bossId);
       const p = pl(c);
-      if (!bd || !p || !c.ai || c.ai.boss) return api.done();
+      if (!bd || !p || !c.ai) return api.done();
+      if (c.ai.boss) {
+        c.bus.emit('ui:toast', { key: 'rpg.toast.busyBoss', args: null, kind: 'warn' });
+        return api.done();
+      }
+      if (c.store.state.world.bosses.indexOf(bossId) < 0) return api.done();
+      cancelActive();
       const level = Math.min(REMATCH.levelCap, Math.max(bd.level, c.rpg.level) + REMATCH.levelAbove);
       const lm = c.world.landmark(bd.arena.landmarkId);
       if (lm) {
@@ -61,24 +76,64 @@ export function registerChallenges(ctx, host) {
       }
       c.combat.heal(p, p.stats.hpMax);
       c.combat.addOra(p, p.stats.oraMax);
+      rematch.bossId = bossId;
+      rematch.first = !(c.store.state.quests.flags['rematch.' + bossId]);
       c.ai.startBoss(bossId, { level });
       c.bus.emit('ui:toast', { key: 'rpg.toast.rematch', args: { level }, kind: 'warn' });
+      // One attempt: a death waits for the death screen. Retry restarts the fight and the clock; Rise, leaving the
+      // arena, travelling or starting another activity cancels it for good (the boss is not left pending).
       let t = 0;
+      let down = false;
+      let over = false;
+      const cancel = () => {
+        if (over) return;
+        over = true;
+        if (c.ai) c.ai.cancelBoss(bossId);
+        api.done();
+      };
+      api.cleanup(() => {
+        if (!over) {
+          over = true;
+          if (c.ai) c.ai.cancelBoss(bossId);
+        }
+        if (rematch.bossId === bossId) rematch.bossId = '';
+        if (active.cancel === cancel) active.cancel = null;
+      });
+      active.cancel = cancel;
       api.onTick((dt) => {
-        t += dt;
+        if (!down) t += dt;
+      });
+      api.onEvent('player:died', () => {
+        down = true;
+      });
+      api.onEvent('player:respawned', (e) => {
+        if (!down) return;
+        down = false;
+        if (e.retry) t = 0;
+        else cancel();
       });
       api.onEvent('boss:end', (e) => {
-        if (e.bossId !== bossId) return;
-        if (!e.defeated) return;
+        if (e.bossId !== bossId || over) return;
+        if (!e.defeated) {
+          // The fight was reset: by the player's death (Retry may follow), else the player left the arena.
+          const me = c.player;
+          if (down || !me || !me.alive || (me.combat && me.combat.state === 'dead')) {
+            down = true;
+            return;
+          }
+          cancel();
+          return;
+        }
+        over = true;
         const par = REMATCH.bosses[bossId];
-        const s = Math.round(t * 10) / 10;
-        const medal = s <= par.gold ? 'gold' : s <= par.silver ? 'silver' : 'bronze';
-        recordMedal(c, 'rematch.' + bossId, s, medal, REMATCH.rewards);
-        c.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.medal.' + medal, args: { seconds: s } });
-        api.done();
+        const sec = Math.round(t * 10) / 10;
+        const medal = sec <= par.gold ? 'gold' : sec <= par.silver ? 'silver' : 'bronze';
+        recordMedal(c, 'rematch.' + bossId, sec, medal, REMATCH.rewards);
+        c.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.medal.' + medal, args: { seconds: sec } });
+        // The script ends once the boss is down for good (Durn runs for a moment before he falls): the kill reads
+        // rematch.first for its reward.
+        api.wait(4).then(() => api.done());
       });
-      // A death ends the rematch here (the boss's own retry still offers another go).
-      api.onEvent('player:died', () => api.done());
     });
   }
 
@@ -87,6 +142,7 @@ export function registerChallenges(ctx, host) {
     const tr = TRIALS[trialId];
     if (tr.kind === 'race') {
       Q.registerScript(trialId, (c, api) => {
+        cancelActive();
         const course = c.defs.find('course', tr.course);
         const p = pl(c);
         if (course && p) {
@@ -104,6 +160,7 @@ export function registerChallenges(ctx, host) {
     Q.registerScript(trialId, (c, api) => {
       const p = pl(c);
       if (!p || !c.ai) return api.done();
+      cancelActive();
       const at = tr.at;
       c.move.teleport(p, at.x, c.world.heightAt(at.x, at.z), at.z + 12, Math.PI);
       c.move.setMode(p, 'ground');
@@ -163,6 +220,10 @@ export function registerChallenges(ctx, host) {
 
   // ---- Retry of a lost trial: the death screen's Retry (rpg.respawn retry) starts it again on the Ledge.
   const retry = {
+    /** The running rematch: { bossId ('' when none), first } (rpg pays a repeat kill a share, see rpgService). */
+    get rematch() {
+      return rematch;
+    },
     get available() {
       return lastTrial.id !== '';
     },
