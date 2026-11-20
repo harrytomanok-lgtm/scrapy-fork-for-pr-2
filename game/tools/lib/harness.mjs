@@ -23,6 +23,7 @@ export const BASE_QUERY = 'test=1&quality=low&res=0.5&noaudio=1&seed=123&lang=en
 const FONT_HOSTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 /** Boot timeout (SwiftShader is slow). */
 const READY_TIMEOUT = 180000;
+const SHOT_TIMEOUT = 150000;
 /** Output folders. */
 export const OUT_SHOTS = join(GAME_ROOT, 'tools', 'out', 'shots');
 export const OUT_LOGS = join(GAME_ROOT, 'tools', 'out', 'logs');
@@ -171,7 +172,8 @@ export async function launch(opts = {}) {
       await page.evaluate(() => /** @type {any} */ (window).__GAME__.screenshotReady());
       mkdirSync(OUT_SHOTS, { recursive: true });
       const path = join(OUT_SHOTS, name + '.png');
-      await page.screenshot({ path });
+      // the software rasteriser on a busy machine can need far longer than the default 30 s for the capture frame
+      await page.screenshot({ path, timeout: SHOT_TIMEOUT });
       return path;
     },
     errors: () => errs.slice(),
