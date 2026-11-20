@@ -346,6 +346,12 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
     const more = kit.el('span', 'ui-dlgmore', body);
     more.appendChild(icon(doc, 'diamond'));
     const choices = kit.el('div', 'ui-choices', body);
+    // Skip: a small secondary button in the top inline-end corner, far from the thumb that taps to advance. It runs
+    // the rest of the conversation (its actions still happen) and stops at a choice, so it hides while one is shown.
+    // Keyboard and pad: uiBack (Esc, B) does the same; its glyph shows beside the label off touch.
+    const skipBtn = kit.button(root, 'ui.dlg.skip', () => skipAll(), 'ui-sm ui-ghostbtn ui-dlgskip', 'next');
+    const skipGlyph = kit.el('span', 'ui-glyph', skipBtn);
+    skipBtn.dataset.skip = '1';
     let text = '';
     let t = 0;
     let shown = 0;
@@ -359,8 +365,23 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
       line.textContent = text;
       reveal();
     }
+    function atChoice() {
+      return !!cur && cur.choices.length > 0;
+    }
+    function skipAll() {
+      if (!cur || atChoice() || !ctx.quests || typeof ctx.quests.skipDialogue !== 'function') return;
+      ctx.quests.skipDialogue();
+    }
+    function syncSkip() {
+      skipBtn.hidden = !cur || atChoice();
+      const dev = ctx.input ? ctx.input.device : 'touch';
+      const g = dev !== 'touch' && ctx.input && typeof ctx.input.glyph === 'function' ? ctx.input.glyph('uiBack') : null;
+      skipGlyph.hidden = !(g && g.label);
+      skipGlyph.textContent = g && g.label ? g.label : '';
+    }
     function reveal() {
       const done = !typing();
+      syncSkip();
       choices.hidden = !done || !cur || !cur.choices.length;
       more.hidden = !done || (cur && cur.choices.length > 0);
       if (done && cur && cur.choices.length && ui.top() === 'dialogue') ui.refocus();
@@ -408,9 +429,12 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
         line.textContent = '';
         dom.clear(choices);
         name.hidden = true;
+        skipBtn.hidden = true;
+        dom.root.classList.add('ui-talking');
       },
       onClose() {
         cur = null;
+        dom.root.classList.remove('ui-talking');
       },
       /** @param {any} p dialogue:line */
       line(p) {
@@ -449,7 +473,11 @@ export function registerOtherScreens(ctx, kit, ui, reg) {
           }
           return false;
         }
-        return a === 'uiBack' || a === 'pause';
+        if (a === 'uiBack') {
+          skipAll();
+          return true;
+        }
+        return a === 'pause';
       },
       initialFocus: () => /** @type {HTMLElement|null} */ (choices.querySelector('button')),
     };

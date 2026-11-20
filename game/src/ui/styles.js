@@ -552,6 +552,12 @@ export const UI_CSS = `
 .ui-dlgline{margin:0;min-block-size:4.4em;font-size:var(--fs-body);line-height:1.47}
 .ui-dlgmore{position:absolute;inset-block-end:10px;inset-inline-end:14px;inline-size:12px;block-size:12px;color:var(--accent);animation:ui-bob 900ms ease-in-out infinite}
 .ui-dlgmore[hidden]{display:none}
+/* Skip takes the corner of the HUD's map and pause buttons, which hide while a conversation is open. */
+.ui-talking .ui-hud .ui-endbar{visibility:hidden}
+.ui-btn.ui-dlgskip{position:absolute;inset-block-start:var(--safe-top);inset-inline-end:var(--safe-right);
+  min-block-size:48px;min-inline-size:48px;gap:6px;padding-inline:12px 14px;background:rgba(27,22,38,.55);opacity:.88}
+.ui-dlgskip .ui-glyph{min-inline-size:28px;block-size:24px;font-size:11px}
+.ui-dlgskip[hidden],.ui-dlgskip .ui-glyph[hidden]{display:none}
 .ui-choices{display:flex;flex-direction:column;gap:6px}
 .ui-choices .ui-btn{justify-content:flex-start;min-block-size:48px}
 

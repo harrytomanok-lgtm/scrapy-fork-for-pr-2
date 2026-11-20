@@ -350,7 +350,8 @@ export function registerBootScreens(ctx, kit, ui, reg) {
     }, 'ui-full ui-ghostbtn', 'restore');
     const canvasLayer = dom.layer('canvas');
     const render = () => {
-      retry.hidden = !bossId;
+      // Retry puts the player back into the fight they lost: a boss, or a trial fight (ctx.rpg.canRetry knows both).
+      retry.hidden = !(bossId || (ctx.rpg && ctx.rpg.canRetry));
       const d = ctx.rpg ? ctx.rpg.difficulty : 'warrior';
       const loss = BALANCE.difficulty[d] ? BALANCE.difficulty[d].shellLoss : 0;
       sub.textContent = loss > 0 ? kit.t('ui.death.shellLoss', { pct: formatPct(loss) }) : kit.t('ui.death.sub');

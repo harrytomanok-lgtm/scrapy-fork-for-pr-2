@@ -38,6 +38,7 @@ const ROWS = [
   ['ui.toast.questStep', '{title}: step complete', '{title}: שלב הושלם'],
   ['ui.skip.tap', 'Tap to skip', 'נגיעה לדילוג'],
   ['ui.skip.key', '{key} to skip', '{key} לדילוג'],
+  ['ui.dlg.skip', 'Skip', 'דילוג'],
   ['ui.banner.regionKicker', 'Entering', 'נכנסים אל'],
   ['ui.banner.break', 'Break!', 'שבירה!'],
   ['ui.banner.perfect', 'Perfect!', 'מושלם!'],
