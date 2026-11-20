@@ -12,6 +12,7 @@ import { PALETTE } from '../core/palette.js';
 import { IDS } from '../core/ids.js';
 import { createBuilder, SLOT, SLOT_HEX, mat, frame, prim } from './kit.js';
 import { FOOTPRINT, REQUIRED_SPOTS } from './data/settlements.js';
+import { dressVillage } from './village.js';
 
 const SOLID = 1;
 /** Settlements farther than this from the camera are hidden (fog has eaten them). */
@@ -39,6 +40,8 @@ export function createSettlements(ctx) {
   let kiteMaterial = null;
   /** Kite instances: pivot x,y,z, base yaw offset, phase, length scale. */
   const kites = [];
+  /** Chimney tops (world xyz) for the smoke of env/life. */
+  const chimneys = [];
   /** Spinning parts: { mesh, axis:'z'|'y', speed }. */
   const spinners = [];
   let built = false;
@@ -47,6 +50,7 @@ export function createSettlements(ctx) {
 
   const lantern = new Color(PALETTE.structure.lantern);
   const windowDay = new Color(PALETTE.structure.curtain).multiplyScalar(0.55);
+  const poolDay = new Color(PALETTE.path);
   const tmpM = new Matrix4();
   const tmpQ = new Quaternion();
   const tmpE = new Euler();
@@ -131,6 +135,15 @@ export function createSettlements(ctx) {
       B.add(prim.cone(r * 0.72, 1.3, 8), f.m(0, y0 + wallH + roofH * 0.45 + 1.5, 0), SLOT.COPPER);
     }
     const top = y0 + wallH - 0.1 + roofH + (kind === 'house_l' ? 1.4 : 0);
+    if (kind !== 'house_s' || style === 'mountain') {
+      // a clay chimney through the roof at the back (smoke rises from it: env/life)
+      const cxl = -r * 0.45;
+      const czl = -r * 0.35;
+      const ch = roofH * 0.95 + 0.9;
+      B.add(prim.drum(0.32, 0.38, ch, 6), f.m(cxl, y0 + wallH - 0.1 + roofH * 0.2, czl), SLOT.TERRA, undefined, 0.2);
+      B.add(prim.drum(0.42, 0.42, 0.2, 6), f.m(cxl, y0 + wallH - 0.1 + roofH * 0.2 + ch, czl), SLOT.STONE);
+      chimneys.push({ x: f.wx(cxl, czl), y: f.y + y0 + wallH + roofH * 0.2 + ch + 0.3, z: f.wz(cxl, czl) });
+    }
     B.add(prim.drum(0.05, 0.07, 0.7, 4, true), f.m(0, top - 0.25, 0), SLOT.IRON);
     B.add(prim.ring(0.36, 0.06, 3, 7), f.m(0, top + 0.7, 0), SLOT.COPPER);
     // round door with a teal curtain and a terracotta frame
@@ -144,7 +157,7 @@ export function createSettlements(ctx) {
       if (kind === 'house_s' && side === Math.PI) continue;
       const wy = y0 + wallH * 0.62;
       const rr = r * (1 - (1 - taper) * (wallH * 0.62 / wallH)) + 0.04;
-      B.add(prim.disc(0.34, 7), f.m(Math.sin(side) * rr, wy, Math.cos(side) * rr, side, -lean), SLOT.WINDOW);
+      B.add(prim.disc(0.42, 7), f.m(Math.sin(side) * rr, wy, Math.cos(side) * rr, side, -lean), SLOT.WINDOW);
     }
     return top;
   }
@@ -306,13 +319,13 @@ export function createSettlements(ctx) {
     for (const a of [Math.PI / 2, -Math.PI / 2]) B.add(prim.cbox(0.9, 14, 0.06), f.m(Math.sin(a) * 3.05, 38, Math.cos(a) * 3.05, a, 0.03), SLOT.CLOTH, banner[0]);
     addCollider({ shape: 'disc', x: f.x, y: f.y, z: f.z, r: 4.6, h: H + 4 });
     for (let i = 0; i < 4; i++) {
-      kites.push({ x: f.x, y: f.y + H + 8 - i * 0.5, z: f.z, yaw: -0.6 + i * 0.4, phase: i * 2.1, len: 2.2 + i * 0.35, color: KITE_COLORS[i % 3] });
+      kites.push({ x: f.x, y: f.y + H + 8 - i * 0.5, z: f.z, yaw: -0.6 + i * 0.4, phase: i * 2.1, len: 3.2 + i * 0.5, color: KITE_COLORS[i % 3] });
     }
   }
 
   /** Copper signal mast. @param {any} B @param {any} f @param {number[]} banner */
   function mast(B, f, banner) {
-    const H = 18;
+    const H = 26;
     B.add(prim.drum(0.8, 1.0, 0.8, 8), f.m(0, -0.3, 0), SLOT.STONE);
     B.add(prim.drum(0.16, 0.26, H, 6), f.m(0, 0.3, 0), SLOT.WOOD, undefined, 0.2);
     B.add(prim.cbox(3.2, 0.14, 0.14), f.m(0, H - 2.5, 0), SLOT.WOOD);
@@ -445,37 +458,6 @@ export function createSettlements(ctx) {
     return true;
   }
 
-  /** Paved plaza around the Ringstone, conformed to the ground. @param {any} B @param {number} x @param {number} z @param {number} r */
-  function plaza(B, x, z, r) {
-    const w = W();
-    const seg = 28;
-    const rings = [0, 4.2, 5.0, r - 1.2, r];
-    const slots = [SLOT.STONE, SLOT.TERRA, SLOT.PATH, SLOT.TERRA];
-    /** @param {number} rr @param {number} a */
-    const pt = (rr, a) => {
-      const px = x + Math.sin(a) * rr;
-      const pz = z + Math.cos(a) * rr;
-      return [px, w.heightAt(px, pz) + 0.09, pz];
-    };
-    for (let k = 0; k < rings.length - 1; k++) {
-      for (let i = 0; i < seg; i++) {
-        const a0 = (i / seg) * Math.PI * 2;
-        const a1 = ((i + 1) / seg) * Math.PI * 2;
-        const tint = k === 2 && i % 2 === 0 ? 0xf0e4d0 : undefined;
-        if (rings[k] === 0) {
-          B.tri(pt(0, 0), pt(rings[1], a0), pt(rings[1], a1), slots[k], tint);
-        } else {
-          const p00 = pt(rings[k], a0);
-          const p01 = pt(rings[k], a1);
-          const p10 = pt(rings[k + 1], a0);
-          const p11 = pt(rings[k + 1], a1);
-          B.tri(p00, p10, p11, slots[k], tint);
-          B.tri(p00, p11, p01, slots[k], tint);
-        }
-      }
-    }
-  }
-
   // ---------------------------------------------------------------- build
   /** @param {any} lm @param {any} def */
   function buildOne(lm, def) {
@@ -486,8 +468,10 @@ export function createSettlements(ctx) {
     const banner = def && def.banner ? def.banner : [PALETTE.biome.meadows.accent, PALETTE.structure.terracotta];
     const B = createBuilder();
     const extra = [];
-    if (style !== 'camp' && style !== 'ledge') plaza(B, lm.x, lm.z, style === 'town' ? 18 : 14);
     const list = def && Array.isArray(def.buildings) ? def.buildings : [];
+    const keep = (x, z, r, bare) => {
+      if (typeof w.keepClear === 'function') w.keepClear(x, z, r, bare);
+    };
     for (let i = 0; i < list.length; i++) {
       const bl = list[i];
       const x = lm.x + bl.dx;
@@ -526,6 +510,36 @@ export function createSettlements(ctx) {
         case 'beacon': extra.push(beacon(B, f)); break;
         default: break;
       }
+      // nothing grows through a building
+      if (r > 0.5 && bl.kind !== 'cloister') keep(x, z, r + 1.2, r > 1.5);
+    }
+    // the village plan: square, lanes, roads out, gardens, goods, benches, light pools (env/village)
+    const given0 = def && Array.isArray(def.spots) ? def.spots : [];
+    /** @type {any[]} */
+    const exits = [];
+    if (ctx.defs && typeof ctx.defs.all === 'function') {
+      const others = ctx.defs.all('landmark').filter((l) => l.id !== id && l.type !== 'spire' && l.id !== 'shattered_crown')
+        .map((l) => ({ x: l.x, z: l.z, d: Math.hypot(l.x - lm.x, l.z - lm.z) }))
+        .filter((l) => l.d > 150 && l.d < 2600).sort((a, b) => a.d - b.d);
+      for (const l of others) {
+        if (exits.length >= 2) break;
+        // a second road must leave in a clearly different direction
+        if (exits.length === 1) {
+          const a0 = Math.atan2(exits[0].x - lm.x, exits[0].z - lm.z);
+          const a1 = Math.atan2(l.x - lm.x, l.z - lm.z);
+          const da = Math.abs(Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)));
+          if (da < 1.2) continue;
+        }
+        exits.push(l);
+      }
+    }
+    {
+      dressVillage(B, {
+        x: lm.x, z: lm.z, plazaR: style === 'town' ? 18 : 14, style, banner, seed: id.length * 131 + id.charCodeAt(0),
+        buildings: list.filter((bl) => bl.kind !== 'jetty').map((bl) => ({ kind: bl.kind, x: lm.x + bl.dx, z: lm.z + bl.dz, yaw: bl.yaw || 0 })),
+        spots: given0.map((sp) => ({ x: lm.x + sp.dx, z: lm.z + sp.dz })),
+        exits, heightAt: (x, z) => w.heightAt(x, z), addCollider, keepClear: keep, lantern: lanternPost,
+      });
     }
     if (!B.empty) {
       const mesh = new Mesh(B.build(), material);
@@ -632,7 +646,8 @@ export function createSettlements(ctx) {
       const render = ctx.render;
       if (!w || !render || !render.layers || !render.materials) return;
       built = true;
-      material = render.materials.toon({ palette: true, vertexColors: true });
+      // reduced fog: kite towers, lighthouses, masts and roofs keep their silhouette from the air (world pass)
+      material = render.materials.toon({ palette: true, vertexColors: true, fogScale: 0.7 });
       material.name = 'env.structure';
       const pal = material.uniforms.uPalette.value;
       for (let i = 0; i < 16; i++) pal[i].setHex(SLOT_HEX[i]);
@@ -661,6 +676,9 @@ export function createSettlements(ctx) {
       em[SLOT.WINDOW] = lanternK * 1.1;
       em[SLOT.GLOW] = 0.35 + lanternK * 1.2;
       material.uniforms.uPalette.value[SLOT.WINDOW].copy(windowDay).lerp(lantern, lanternK);
+      // light pools: trodden ground by day, a warm glow on the ground after dusk
+      material.uniforms.uPalette.value[SLOT.POOL].copy(poolDay).lerp(lantern, lanternK * 0.75);
+      em[SLOT.POOL] = lanternK * 0.55;
       for (let i = 0; i < spinners.length; i++) {
         const s = spinners[i];
         if (s.axis === 'z') s.mesh.rotation.z += dt * s.speed * (0.6 + (wind ? wind.y * 3 : 0.45));
@@ -679,6 +697,11 @@ export function createSettlements(ctx) {
         }
       }
       updateKites(dt, wind);
+    },
+
+    /** Chimney tops of every built settlement (live list, do not mutate). */
+    chimneys() {
+      return chimneys;
     },
 
     /** @param {string} id */
@@ -717,6 +740,7 @@ export function createSettlements(ctx) {
       }
       meshes.length = 0;
       spinners.length = 0;
+      chimneys.length = 0;
       if (kiteMesh) {
         if (kiteMesh.parent) kiteMesh.parent.remove(kiteMesh);
         kiteMesh.geometry.dispose();

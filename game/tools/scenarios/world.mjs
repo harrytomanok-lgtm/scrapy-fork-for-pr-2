@@ -124,6 +124,55 @@ export const scenarios = [
     },
   },
   {
+    name: 'world-streaming',
+    async run({ game, assert }) {
+      // a flush (teleport) places every prop at full size; walking across a cell grows the new ones in
+      const r = await game((g) => {
+        const m = g.ctx.world.regions.find((q) => q.id === 'meadows');
+        g.teleport(m.cx, m.cz, {});
+        g.step(2);
+        const flushed = g.ctx.world.info().props.growing;
+        const e = g.ctx.player;
+        // move the player without a teleport (a teleport flushes): as if it had walked there
+        e.pos.x += 150;
+        e.pos.y = g.heightAt(e.pos.x, e.pos.z) + 0.5;
+        e.prev.x = e.pos.x;
+        e.prev.y = e.pos.y;
+        g.step(1);
+        g.step(1);
+        const started = g.ctx.world.info().props.growing;
+        for (let i = 0; i < 14; i++) g.step(10);
+        return { flushed, started, after: g.ctx.world.info().props.growing };
+      });
+      assert.equal(r.flushed, 0, 'a teleport flush shows props at full size');
+      assert.ok(r.started > 0, `crossing a cell grows new props in (${r.started})`);
+      assert.equal(r.after, 0, "growth finishes within two seconds");
+      // no tree, rock or cover collider sits on a point of interest or a settlement spot
+      const bad = await game((g) => {
+        const w = g.ctx.world;
+        const pts = [];
+        for (const p of w.pois()) if (p.type !== 'crownChest') pts.push([p.id, p.x, p.z]);
+        for (const d of g.ctx.defs.all('settlement')) {
+          const s = g.ctx.env.settlement(d.id);
+          if (s) for (const sp of s.spots) pts.push([d.id + ':' + sp.id, sp.x, sp.z]);
+        }
+        const out = [];
+        const list = [];
+        for (const [id, x, z] of pts) {
+          g.teleport(x, z, {});
+          w.queryColliders(x, z, 1.2, list);
+          for (const c of list) if (c.propKey > 0 && (c.flags & 1)) out.push(id + ' ' + c.shape);
+        }
+        return { n: pts.length, out };
+      });
+      console.log(`  checked ${bad.n} points`);
+      assert.deepEqual(bad.out, [], 'points of interest and spots are clear of vegetation and rocks');
+      // the authored places exist
+      const places = await game((g) => g.ctx.world.places().map((p) => p.id));
+      for (const id of ['saltglass_arches', 'elder_maple', 'lagoon_boardwalk', 'drowned_observatory']) assert.ok(places.includes(id), 'place ' + id);
+    },
+  },
+  {
     name: 'world-map',
     async run({ game, assert }) {
       const r = await game((g) => {

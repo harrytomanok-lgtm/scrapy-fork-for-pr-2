@@ -17,6 +17,8 @@ import { REGIONS, LANDMARKS } from './gen/layout.js';
 import { createTerrain } from './terrain.js';
 import { createWater } from './water.js';
 import { createVegetation } from './vegetation.js';
+import { createClearSet, addClear } from './gen/scatter.js';
+import { createPlaces } from './places.js';
 import { createTufts } from './tufts.js';
 import { createStructures } from './structures.js';
 import { drawMap } from './map.js';
@@ -148,6 +150,8 @@ export function createWorld(ctx) {
   let tufts = null;
   /** @type {any} */
   let structs = null;
+  /** @type {any} */
+  let places = null;
   let bakeMode = 'none';
   let bakeMs = 0;
   let focusX = 0;
@@ -155,6 +159,10 @@ export function createWorld(ctx) {
   let focusZ = 0;
   let pulseT = 0;
 
+  /** Discs kept free of vegetation and rocks: landmark stamps and points of interest. */
+  const clearSet = createClearSet(4096);
+  /** Discs where not even ground tufts grow: paving, floors, lanes (world.keepClear with bare). */
+  const bareSet = createClearSet(4096);
   const landmarks = LANDMARKS.map((l) => Object.assign({}, l, { y: 0 }));
   /** @type {Record<string, any>} */
   const landmarkById = Object.create(null);
@@ -247,8 +255,17 @@ export function createWorld(ctx) {
         terrain = createTerrain(ctx, grid);
         report(0.9);
         water = createWater(ctx, grid, EDGE_HARD);
-        veg = createVegetation(ctx, grid, col, seed);
-        tufts = createTufts(ctx, grid, seed);
+        clearSet.n = 0;
+        bareSet.n = 0;
+        for (const l of landmarks) {
+          if (l.type === 'settlement') addClear(bareSet, l.x, l.z, l.id === 'haven_aster' ? 21 : 17);
+          if (l.type === 'spire') continue;
+          const r = l.stamp && l.stamp.radius ? l.stamp.radius : 24;
+          addClear(clearSet, l.x, l.z, l.type === 'settlement' ? r + 10 : l.type === 'arena' ? r * 0.85 : r * 0.7);
+        }
+        places = createPlaces(ctx, grid, col, seed, clearSet, landmarks);
+        veg = createVegetation(ctx, grid, col, seed, clearSet);
+        tufts = createTufts(ctx, grid, seed, bareSet);
         terrain.flush(focusX, focusY, focusZ);
         water.follow(focusX, focusZ);
         veg.update(focusX, focusY, focusZ, focusX, focusZ, true);
@@ -260,6 +277,13 @@ export function createWorld(ctx) {
       for (const p of list) {
         poiAll.push(p);
         poiByType[p.type].push(p);
+        // keep the points of interest clear of trees and rocks (camps get room for their tents and fights)
+        const pr = p.type === 'camp' ? 22 : p.type === 'shrine' ? 8 : p.type === 'race' ? 14 : p.type === 'siphon' ? 18 : 5;
+        if (p.type !== 'crownChest') addClear(clearSet, p.x, p.z, pr);
+      }
+      if (veg) {
+        veg.invalidate();
+        veg.update(focusX, focusY, focusZ, focusX, focusZ, true);
       }
       report(1);
       bakeMs = now() - t0;
@@ -444,6 +468,27 @@ export function createWorld(ctx) {
       return q.findSpot(x, z, radius, out, opts);
     },
 
+    /**
+     * Keep a disc free of trees, rocks and ground cover (world pass, an addition): settlements call it for their
+     * buildings, and with `bare` for paving and lanes, where not even the ground tufts grow. Takes effect at the
+     * next refill. @param {number} x @param {number} z @param {number} r @param {boolean} [bare]
+     */
+    keepClear(x, z, r, bare) {
+      if (!(r > 0)) return;
+      addClear(clearSet, x, z, r);
+      if (bare) addClear(bareSet, x, z, r);
+      if (veg) veg.invalidate();
+      if (tufts) tufts.invalidate();
+    },
+
+    /**
+     * The authored places between the settlements (an addition): arches, elder trees, bridges, ruins, falls.
+     * @returns {{ id:string, x:number, y:number, z:number, lookUp:number }[]}
+     */
+    places() {
+      return places ? places.list() : [];
+    },
+
     /** Streaming and LOD centre (the camera position). */
     setFocus(x, y, z) {
       focusX = x;
@@ -489,7 +534,8 @@ export function createWorld(ctx) {
 
     /** Remove the meshes and GPU resources. */
     dispose() {
-      for (const part of [terrain, water, veg, tufts, structs]) if (part) part.dispose();
+      for (const part of [terrain, water, veg, tufts, structs, places]) if (part) part.dispose();
+      places = null;
       tufts = null;
       terrain = null;
       water = null;
@@ -500,6 +546,7 @@ export function createWorld(ctx) {
 
   // ------------------------------------------------------------- region tracking and streaming
   let lastRegion = /** @type {string|null} */ (null);
+  let lastSim = 0;
   const regionPayload = { regionId: '', prevRegionId: /** @type {string|null} */ (null), first: false };
 
   const streamSystem = {
@@ -530,10 +577,16 @@ export function createWorld(ctx) {
       terrain.update(focusX, focusY, focusZ);
       water.follow(focusX, focusZ);
       const p = c.player;
-      veg.update(focusX, focusY, focusZ, p && p.alive ? p.pos.x : focusX, p && p.alive ? p.pos.z : focusZ, false);
+      // growth clock: real frame time, or the simulated time when frames carry none (stepped tests, renderNow)
+      const simNow = c.time ? c.time.now : 0;
+      const sd = simNow - lastSim;
+      lastSim = simNow;
+      const gdt = dt > 0 ? dt : sd > 0 && sd < 2 ? sd : 0;
+      veg.update(focusX, focusY, focusZ, p && p.alive ? p.pos.x : focusX, p && p.alive ? p.pos.z : focusZ, false, gdt);
       if (p && p.alive) tufts.update(p.pos.x, p.pos.y, p.pos.z, focusY, false);
       pulseT += dt > 0 ? dt : 0;
       structs.update(pulseT);
+      if (places) places.update(pulseT);
     },
   };
 

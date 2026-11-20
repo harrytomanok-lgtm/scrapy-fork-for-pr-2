@@ -70,10 +70,14 @@ export function* bakeSteps(seed, cell, rowsPerYield = 32) {
       region[k] = f.regionWeights(x, z);
       const path = f.pathDist(x, z);
       const settle = f.settlementAt(x, z);
-      f.groundColour(x, z, h, slope, path, settle, tint, k * 3);
-      canopy[k] = Math.round(f.forest(x, z, h, slope, path, settle) * 255);
+      const field = f.fieldAt(x, z, h, slope, path, settle);
+      f.groundColour(x, z, h, slope, path, settle, tint, k * 3, field);
+      const fo = f.forest(x, z, h, slope, path, settle);
+      canopy[k] = Math.round(fo * 255);
       let fl = 0;
       if (path < 6 && h > 0.4) fl |= FLAG.PATH;
+      else if (path < 15 && h > 1.2 && settle < 0.5 && slope < 0.4) fl |= FLAG.VERGE;
+      if (field * (1 - fo) > 0.3) fl |= FLAG.FIELD;
       if (settle > 0.5) fl |= FLAG.SETTLEMENT | FLAG.NO_SPAWN;
       if (h < 0) fl |= FLAG.WATER;
       flags[k] = fl;
