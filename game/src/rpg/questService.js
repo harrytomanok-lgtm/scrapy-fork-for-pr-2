@@ -8,6 +8,7 @@
 
 import { createQuestEngine, needOf } from './logic/questEngine.js';
 import { createDialogueRunner } from './logic/dialogue.js';
+import { createBarkQueue } from './logic/barks.js';
 import { createActivities } from './activities.js';
 import { BALANCE } from '../core/balance.js';
 
@@ -45,8 +46,8 @@ export function createQuests(ctx, rpgInternals) {
   let lastTechId = '';
   let tickN = 0;
   let loaded = false;
-  /** Bumped whenever the world is cleared, so pending bark lines of an earlier journey are dropped. */
-  let worldGen = 0;
+  /** Lines said while play goes on, one at a time (dropped when the world is cleared). */
+  const barks = createBarkQueue(BARK_GAP);
   const spot = { x: 0, y: 0, z: 0, yaw: 0 };
   const tgt = { x: 0, z: 0 };
   const pFocus = { id: null, kind: null, promptKey: null };
@@ -193,22 +194,12 @@ export function createQuests(ctx, rpgInternals) {
       },
       /**
        * Speak a linear dialogue without stopping play: each line is a toast "Speaker: line", BARK_GAP seconds of sim
-       * time apart (lines still pending when the step ends are dropped). For lines said in the middle of the action.
+       * time apart. The lines join the bark queue: they are said even after the step that barked them has ended, and
+       * a second bark waits for the first to finish (only a world change drops them). For lines said in the action.
        * @param {string} id
        */
       bark(id) {
-        const d = ctx.defs.find('dialogue', id);
-        if (!d || !d.nodes) return;
-        const g = worldGen;
-        let nid = d.start;
-        for (let k = 0; nid && d.nodes[nid] && k < 6; k++) {
-          const n = d.nodes[nid];
-          if (k === 0) barkLine(n);
-          else api.wait(k * BARK_GAP).then(() => {
-            if (g === worldGen && (!rt.finished || rt.free)) barkLine(n);
-          });
-          nid = n.next;
-        }
+        quests.bark(id);
       },
     };
     return api;
@@ -507,6 +498,16 @@ export function createQuests(ctx, rpgInternals) {
     advance(choiceIndex) {
       runner.advance(choiceIndex);
     },
+    /** Queue a linear dialogue as barks (see the script api's bark). @param {string} id */
+    bark(id) {
+      const d = ctx.defs.find('dialogue', id);
+      if (!d || !d.nodes) return;
+      let nid = d.start;
+      for (let k = 0; nid && d.nodes[nid] && k < 6; k++) {
+        barks.push(d.nodes[nid]);
+        nid = d.nodes[nid].next;
+      }
+    },
     /**
      * Skip the rest of the open dialogue (its actions still run); stops at a choice, which stays the player's.
      * For a Skip button on the dialogue screen. Returns false when no dialogue is open.
@@ -755,7 +756,7 @@ export function createQuests(ctx, rpgInternals) {
   }
 
   function clearWorld() {
-    worldGen++;
+    barks.clear();
     for (const k of Array.from(runtime.keys())) teardown(k);
     for (const w of waits) w.resolve();
     waits.length = 0;
@@ -792,6 +793,7 @@ export function createQuests(ctx, rpgInternals) {
           w.resolve();
         }
       }
+      barks.tick(dt, barkLine);
       for (let r = 0; r < runtimeList.length; r++) {
         const rt = runtimeList[r];
         for (let i = 0; i < rt.ticks.length && !rt.finished; i++) rt.ticks[i](dt);

@@ -818,10 +818,8 @@ export function createRpg(ctx) {
     for (const d of ctx.defs.all('technique')) {
       const lv = d.unlock && typeof d.unlock.level === 'number' ? d.unlock.level : 0;
       if (!lv || p.level < lv || p.techs.indexOf(d.id) >= 0 || ctx.defs.find('techNode', d.id + '_r1')) continue;
-      if (announce) {
-        rpg.unlockTech(d.id);
-        ctx.bus.emit('ui:banner', { kind: 'quest', key: 'rpg.banner.newTech', args: { name: ctx.i18n.t('tech.' + d.id + '.name') } });
-      }
+      // rpg:techLearned (unlockTech) is the announcement: the HUD turns it into its new-technique card.
+      if (announce) rpg.unlockTech(d.id);
       else p.techs.push(d.id);
     }
   }

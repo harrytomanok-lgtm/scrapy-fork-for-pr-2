@@ -60,7 +60,6 @@ const ROWS = [
   ['rpg.banner.title', 'Title earned: {title}', 'תואר חדש: {title}'],
   ['rpg.banner.viewpoint', '{region} from above: {n} places on the map', '{region} ממעוף הציפור: {n} מקומות על המפה'],
   ['rpg.title.skyreader', 'Skyreader', '{g:קורא/קוראת} השמיים'],
-  ['rpg.banner.newTech', 'New technique: {name}', 'טכניקה חדשה: {name}'],
   ['rpg.banner.awakening', 'Resonance rising', 'התהודה עולה'],
   ['rpg.banner.mq7', 'The way to the Court is open', 'הדרך אל החצר פתוחה'],
   ['rpg.banner.freeRoam', 'The island is yours', 'האי פתוח לפניך'],

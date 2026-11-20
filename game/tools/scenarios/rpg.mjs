@@ -420,6 +420,10 @@ export const scenarios = [
         log.push(at());
         const awake = g.state().player.awakened;
         const res1 = g.ctx.rpg.resonance();
+        // Both lines of the Awakening bark are said (queued behind the earlier barks), though the step ended with the first.
+        g.step(60 * 12);
+        const said = (k) => g.events(['ui:toast']).some((e) => e.payload.key === 'rpg.bark' && e.payload.args && e.payload.args.line === g.ctx.i18n.t(k));
+        const awakeLines = [said('mq1.l11'), said('mq1.l12')];
         const xp0 = g.ctx.rpg.level * 100000 + g.ctx.rpg.xp;
         for (const e of g.ctx.ents.list('enemy').filter((x) => x.alive && x.defId === 'tusk_boar')) g.kill(e.id);
         d(g);
@@ -433,7 +437,7 @@ export const scenarios = [
         g.step(12);
         d(g);
         g.step(2);
-        return { log, canFly, awake, res0, res1, lvl, done: Q.state('mq1'), mq2: Q.state('mq2'), techs: g.state().player.techs };
+        return { log, canFly, awake, res0, res1, lvl, done: Q.state('mq1'), mq2: Q.state('mq2'), techs: g.state().player.techs, awakeLines };
       }, drainSrc.toString());
       assert.equal(r.log[0], 's1');
       assert.equal(r.log[1], 's2', 'reaching the post completes the move beat');
@@ -443,6 +447,7 @@ export const scenarios = [
       assert.ok(r.awake, 'the Ora Awakening');
       assert.ok(r.res1 >= r.res0 * 4, 'Resonance rolls up (' + r.res0 + ' -> ' + r.res1 + ')');
       assert.equal(r.log[6], 's7');
+      assert.deepEqual(r.awakeLines, [true, true], 'both Awakening lines are said');
       assert.equal(r.log[7], 's8', 'the boars are calmed');
       assert.ok(r.lvl >= 2, 'step 7 XP lands level 2');
       assert.equal(r.done, 'done', 'touching the Ringstone completes MQ1');
