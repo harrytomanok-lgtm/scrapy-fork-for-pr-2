@@ -23,7 +23,7 @@ const MAX_HEALS = { story: 1, warrior: 3, master: BALANCE.economy.carryCap };
 
 test('fight pacing: a roster grunt on the main path takes 2-3 Strike Strings from the route\'s player', () => {
   // tusk_boar keeps the GDD 7.2 multipliers (tests/core/formulas.test.mjs pins them). Ember Wisps are the MQ1
-  // tutorial's Bolt targets (four of them on a small Ora pool), so they stay fragile (hp 1.5, three times the GDD).
+  // tutorial's Bolt targets (four of them on a small Ora pool), so they stay fragile (hp 2.0, four times the GDD).
   const rows = stageGruntStrings('warrior').filter((r) => r.id !== 'tusk_boar' && r.id !== 'ember_wisp');
   for (const r of rows) inBand(r.strings, [1.4, 3.0], `${r.stage} ${r.id} L${r.level} strings to kill`);
   const mean = rows.reduce((s, r) => s + r.strings, 0) / rows.length;
