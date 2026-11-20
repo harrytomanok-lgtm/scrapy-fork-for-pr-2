@@ -207,7 +207,128 @@ function hudScenario(tag, width, height) {
   };
 }
 
+/** In the page: a journey well into the content round (a revealed region, shards, two awake stones, records). */
+function contentState(g) {
+  const st = g.ctx.store.state;
+  const f = st.quests.flags;
+  f['revealed.meadows'] = true;
+  f['revealed.coast'] = true;
+  const sh = g.ctx.quests.shards();
+  f['ora.shards'] = sh.list.filter((s) => s.regionId === 'meadows' || s.regionId === 'coast').slice(0, 9).map((s) => s.id);
+  for (const r of ['meadows', 'coast', 'thornwood']) if (st.world.regionsSeen.indexOf(r) < 0) st.world.regionsSeen.push(r);
+  for (const id of ['ringstone_haven_aster', 'ringstone_tide_beacon']) {
+    if (st.world.ringstones.indexOf(id) < 0) st.world.ringstones.push(id);
+    if (st.world.discovered.indexOf(id) < 0) st.world.discovered.push(id);
+    f['attuned.' + id] = true;
+  }
+  f['rematch.durn'] = { best: 84.2, medals: ['bronze', 'silver'] };
+  f['trial.trial_gauntlet'] = { best: 38.5, medals: ['bronze', 'silver', 'gold'] };
+  f['trial.trial_waves'] = { best: 171.3, medals: [] };
+}
+
+/** @param {string} tag @param {number} width @param {number} height */
+function contentScenario(tag, width, height) {
+  return {
+    name: 'screens-content-' + tag,
+    width,
+    height,
+    query: 'res=1&lang=he',
+    async run({ page, game, assert }) {
+      const shot = (n) => snap(page, n);
+      await game(opening);
+      await game(contentState);
+      // Map: shards counter, revealed places, awake Ringstones as travel targets.
+      const m = await game((g) => {
+        g.closeAll();
+        g.open('map', {});
+        g.render();
+        const scr = document.querySelector('[data-screen=map]');
+        return {
+          travel: scr.querySelectorAll('[data-travel]').length,
+          unseen: scr.querySelectorAll('.ui-mapico.ui-unseen').length,
+          shards: scr.querySelectorAll('.ui-mapico.ui-shard').length,
+          counter: scr.querySelector('.ui-shardtag').textContent,
+        };
+      });
+      assert.ok(m.travel >= 3, 'awake Ringstones are travel targets: ' + m.travel);
+      assert.ok(m.unseen > 0, 'places of a revealed region not visited yet are drawn');
+      assert.equal(m.shards, 9, 'found shards drawn');
+      assert.ok(/9/.test(m.counter) && /43|4\d/.test(m.counter), 'shard counter: ' + m.counter);
+      assert.deepEqual(await game(screenProblems), [], 'map ' + tag);
+      await shot(`screens-${tag}-content-map`);
+      // A race running: the tap explains why the stone does not answer.
+      const pt = async () => page.evaluate(() => {
+        const b = document.querySelector('[data-screen=map] [data-travel="ringstone_tide_beacon"]').getBoundingClientRect();
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+      });
+      await game((g) => g.ctx.bus.emit('race:start', { courseId: 'test' }));
+      let c = await pt();
+      await page.mouse.click(c.x, c.y);
+      const n1 = await game((g) => {
+        g.render();
+        const n = document.querySelector('[data-screen=map] .ui-mapnote');
+        return { top: g.top(), note: n.hidden ? '' : n.textContent };
+      });
+      assert.equal(n1.top, 'map', 'no confirm during a race');
+      assert.equal(n1.note, await game((g) => g.ctx.i18n.t('ui.map.noTravelRace')), 'the refusal is explained');
+      await game((g) => g.ctx.bus.emit('race:end', { courseId: 'test', seconds: 0, medal: 'none', finished: false }));
+      // Tap, confirm, travel.
+      c = await pt();
+      await page.mouse.click(c.x, c.y);
+      const q = await game((g) => {
+        g.render();
+        return { top: g.top(), text: document.querySelector('[data-screen=confirm] .ui-p').textContent };
+      });
+      assert.equal(q.top, 'confirm', 'a tap asks first');
+      await shot(`screens-${tag}-content-travel`);
+      await game(() => document.querySelector('[data-screen=confirm] .ui-accent').click());
+      const t = await game((g) => {
+        g.render();
+        const p = g.player();
+        const r = g.ctx.world.pois('ringstone').find((x) => x.id === 'ringstone_tide_beacon');
+        return { top: g.top(), d: Math.hypot(p.x - r.x, p.z - r.z) };
+      });
+      assert.equal(t.top, 'hud', 'the map closes on arrival');
+      assert.ok(t.d < 30, 'travelled to the stone: ' + t.d);
+      // Records on the quests screen.
+      const r = await game((g) => {
+        g.open('quests', {});
+        g.render();
+        document.querySelector('[data-screen=quests] [data-tab=records]').click();
+        g.render();
+        return document.querySelectorAll('[data-screen=quests] [data-record]').length;
+      });
+      assert.equal(r, 3, 'three records');
+      assert.deepEqual(await game(screenProblems), [], 'records ' + tag);
+      await shot(`screens-${tag}-content-records`);
+      // A camp leader locked, then the fifth shard (its toast and reward banner).
+      await game((g) => {
+        g.closeAll();
+        g.step(200);
+        const p = g.player();
+        const e = g.ctx.ai.spawn('tusk_boar', p.x + Math.sin(p.yaw) * 8, g.ctx.world.heightAt(p.x + Math.sin(p.yaw) * 8, p.z + Math.cos(p.yaw) * 8), p.z + Math.cos(p.yaw) * 8, { passive: true, elite: true });
+        g.lock(e.id);
+        g.damage(e.id, 0.2);
+        const f = g.ctx.store.state.quests.flags;
+        f['ora.shards'] = f['ora.shards'].slice(0, 4);
+        const next = g.ctx.quests.shards().list.find((s) => !s.found);
+        g.ctx.bus.emit('pickup:collected', { kind: 'xp', itemId: next.id, amount: 25 });
+        g.step(12);
+        g.render();
+      });
+      const el = await game((g) => ({ elite: document.querySelector('.ui-target.ui-elite') !== null, rank: !document.querySelector('.ui-trank').hidden }));
+      assert.ok(el.elite && el.rank, 'the camp leader has its plate');
+      assert.deepEqual(await game(guardProblems), [], 'elite ' + tag);
+      await shot(`screens-${tag}-content-elite`);
+      const errs = await game((g) => g.errors.filter((e) => e.indexOf('[error]') === 0 || e.indexOf('[fatal]') === 0));
+      assert.equal(errs.length, 0, 'no errors: ' + errs.join(' | '));
+    },
+  };
+}
+
 export const scenarios = [
+  contentScenario('p', 412, 915),
+  contentScenario('l', 915, 412),
   hudScenario('p', 412, 915),
   hudScenario('l', 915, 412),
   menuScenario('p', 412, 915),

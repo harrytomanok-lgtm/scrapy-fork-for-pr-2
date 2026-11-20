@@ -40,11 +40,17 @@ export function createUi(ctx) {
   /** @type {string|null} */
   let deathBoss = null;
   let loadingT = 0;
+  /** A ring race is running (race:start .. race:end): the map's Ringstone travel says why it waits. */
+  let racing = false;
 
   // Presented frame intervals during play, for the device report in Settings.
   const perfLog = createPerfLog();
   const ui = {
     perfLog,
+    /** True while a ring race runs (the map explains a refused Ringstone travel with it). */
+    get racing() {
+      return racing;
+    },
     /** @param {string} screenId @param {any} [params] */
     open(screenId, params) {
       if (screenId === 'hud') {
@@ -202,6 +208,12 @@ export function createUi(ctx) {
     dlgStart() {
       ui.open('dialogue', {});
     },
+    raceStart() {
+      racing = true;
+    },
+    raceEnd() {
+      racing = false;
+    },
     /** @param {any} p dialogue:line */
     dlgLine(p) {
       if (!mgr.isOpen('dialogue')) ui.open('dialogue', {});
@@ -233,6 +245,7 @@ export function createUi(ctx) {
     },
     ended() {
       deathAt = -1;
+      racing = false;
       hud.on.ended();
       for (const id of ['dialogue', 'death', 'pause', 'shop', ...Object.values(HUD_MENUS)]) if (mgr.isOpen(id)) mgr.close(id);
     },
@@ -283,6 +296,8 @@ export function createUi(ctx) {
     b.on('cine:end', hud.on.cineEnd, OWNER);
     b.on('player:died', on.died, OWNER);
     b.on('player:respawned', on.respawned, OWNER);
+    b.on('race:start', on.raceStart, OWNER);
+    b.on('race:end', on.raceEnd, OWNER);
     b.on('dialogue:start', on.dlgStart, OWNER);
     b.on('dialogue:line', on.dlgLine, OWNER);
     b.on('dialogue:end', on.dlgEnd, OWNER);

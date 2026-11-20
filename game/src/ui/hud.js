@@ -11,6 +11,7 @@
  */
 
 import { BALANCE } from '../core/balance.js';
+import { TAG } from '../core/ents.js';
 import { icon, itemIcon } from './icons.js';
 import { quantize, formatInt, formatCompact } from './logic/format.js';
 import { createRoll, setTarget as rollTo, advance as rollAdvance } from './logic/digitRoll.js';
@@ -18,6 +19,9 @@ import { placePip, tickPositions, compassYaw, PIP_RANGE } from './logic/compass.
 import { createSlotPool, acquire, release } from './logic/slotPool.js';
 import { hudMode } from './logic/layout.js';
 import { bodyBox, placeAround } from './logic/placement.js';
+
+/** Entity tag of an elite (a camp leader carries it; bosses too, but they have the boss bar). */
+const ELITE_TAG = TAG.ELITE;
 
 const TEXT_PERIOD = 1 / 15;
 const TOAST_SECONDS = 3;
@@ -164,6 +168,11 @@ export function createHud(ctx, kit, ui) {
   const target = piece(kit.el('div', 'ui-target', root), 'target');
   target.hidden = true;
   const tName = kit.el('div', 'ui-tname', target);
+  // A camp leader's rank mark (TAG.ELITE on a non-boss enemy): a small rare-coloured crest before its own name.
+  const tRank = kit.el('i', 'ui-trank', tName);
+  tRank.appendChild(icon(doc, 'diamond'));
+  tRank.hidden = true;
+  kit.attr(tRank, 'title', 'ui.hud.elite');
   const tNameText = kit.el('span', '', tName);
   const tLv = kit.el('bdi', 'ui-tlv', tName);
   const tBar = kit.el('div', 'ui-bar', target);
@@ -855,6 +864,9 @@ export function createHud(ctx, kit, ui) {
     if (tId !== e.id) {
       tId = e.id;
       target.classList.toggle('ui-boss', isBoss);
+      const elite = !isBoss && (e.tags & ELITE_TAG) !== 0;
+      target.classList.toggle('ui-elite', elite);
+      tRank.hidden = !elite;
       target.dataset.hud = isBoss ? 'boss' : 'target';
       tChipVal = e.stats.hp / Math.max(1, e.stats.hpMax);
       renderTargetName(e, isBoss);
