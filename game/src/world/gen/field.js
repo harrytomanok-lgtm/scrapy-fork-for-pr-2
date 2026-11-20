@@ -386,6 +386,9 @@ export function createField(seed) {
   const SEABED = B[R_COAST].shade;
   const RED_LEAF = rgb(PALETTE.flora.redLeaf);
   const FOAM = rgb(PALETTE.ocean.foam);
+  const FLOWER_Y = rgb(PALETTE.biome.meadows.accent);
+  const FLOWER_V = rgb(PALETTE.flora.brambleFlower);
+  const FLOWER_W = rgb(PALETTE.paper);
   const col = new Float64Array(3);
   const acc = new Float64Array(3);
 
@@ -393,9 +396,9 @@ export function createField(seed) {
    * Ground colour (sRGB 0..255 into `out[0..2]`) at a point whose blend is in `weights`.
    * @param {number} x @param {number} z @param {number} h height @param {number} slope 0 flat .. 1 vertical
    * @param {number} path distance to the path line @param {number} settle settlement factor 0..1
-   * @param {Uint8Array} out @param {number} o offset
+   * @param {Uint8Array} out @param {number} o offset @param {number} [field] flower field mask 0..1 (fieldAt)
    */
-  function groundColour(x, z, h, slope, path, settle, out, o) {
+  function groundColour(x, z, h, slope, path, settle, out, o, field) {
     const patch = fbm(x / 75, z / 75, 2, 110);
     const dither = (hash2(Math.floor(x / 8), Math.floor(z / 8), seed ^ 0xd17) / 4294967296) * 0.3 - 0.15;
     const leaf = vn(x / 170, z / 170, 111);
@@ -441,6 +444,15 @@ export function createField(seed) {
       }
     }
     col[0] = acc[0]; col[1] = acc[1]; col[2] = acc[2];
+    // flower fields: a dappled wash of the region's flower colours, so a field reads from the air
+    if (field > 0) {
+      const sp = sstep(-0.1, 0.5, vn(x / 7, z / 7, 132));
+      const pick = vn(x / 23, z / 23, 133);
+      const wm = weights[R_MEADOWS] + weights[R_FROSTSPINE];
+      const fa = wm >= weights[R_THORNWOOD] + weights[R_COAST] ? (pick > 0.15 ? FLOWER_Y : pick > -0.35 ? RED_LEAF : FLOWER_W) : (pick > 0.2 ? FLOWER_W : FLOWER_V);
+      const k = field * (0.12 + 0.3 * sp);
+      for (let c = 0; c < 3; c++) col[c] += (fa[c] - col[c]) * k;
+    }
     // Snow line (Frostspine above 520 m, dithered, not on sheer cliffs).
     const fs = weights[R_FROSTSPINE];
     if (fs > 0.05) {
@@ -471,8 +483,14 @@ export function createField(seed) {
   }
 
   // ------------------------------------------------------------- forest density
-  /** Base forest cover per region (0..1). */
-  const FOREST = new Float64Array([0.42, 0.2, 0.92, 0.1, 0.5, 0.3, 0.12]);
+  /**
+   * Composition per region (world pass): the share of the land that is grove, the stocking inside a grove and the
+   * density of lone trees in the open. Groves are clumps of a 240 m noise with a soft 40 m edge, so the land reads
+   * as woods, clearings and fields rather than an even scatter.
+   */
+  const COVER = new Float64Array([0.34, 0.18, 0.86, 0.1, 0.46, 0.3, 0.14]);
+  const STOCK = new Float64Array([0.8, 0.62, 0.96, 0.32, 0.72, 0.5, 0.5]);
+  const LONE = new Float64Array([0.035, 0.03, 0.12, 0.05, 0.04, 0.05, 0.03]);
 
   /**
    * Forest density 0..1 at a point whose blend is in `weights`.
@@ -480,16 +498,43 @@ export function createField(seed) {
    */
   function forest(x, z, h, slope, path, settle) {
     if (h < 1.6) return 0;
-    let base = 0;
-    for (let i = 0; i < NR; i++) if (weights[i] > 0) base += weights[i] * FOREST[i];
+    let cover = 0;
+    let stock = 0;
+    let lone = 0;
+    for (let i = 0; i < NR; i++) {
+      const w = weights[i];
+      if (w <= 0) continue;
+      cover += w * COVER[i];
+      stock += w * STOCK[i];
+      lone += w * LONE[i];
+    }
     const fs = weights[R_FROSTSPINE];
-    if (fs > 0) base *= 1 - fs * sstep(430, 540, h);
-    const clump = fbm(x / 240, z / 240, 3, 120) + (base - 0.5) * 0.55;
-    let d = base * sstep(-0.18, 0.3, clump);
+    if (fs > 0) {
+      const tl = 1 - fs * sstep(430, 540, h);
+      cover *= tl;
+      lone *= tl;
+    }
+    // the clump noise is about normal around 0 with sd 0.3: the threshold keeps `cover` of the land in groves
+    const clump = fbm(x / 240, z / 240, 3, 120) + 0.25 * vn(x / 60, z / 60, 121);
+    const t = (0.5 - cover) * 0.62;
+    let d = stock * sstep(t - 0.05, t + 0.07, clump) + lone;
     d *= 1 - sstep(0.42, 0.58, slope);
     d *= sstep(4, 14, path);
     d *= 1 - settle;
     return d < 0 ? 0 : d > 1 ? 1 : d;
+  }
+
+  /**
+   * Flower field mask 0..1 (open, gentle, dry land; strongest in the Meadows): baked into the flags layer and the
+   * ground tint so the fields read from the air, and used by the scatter for the flower patches.
+   */
+  function fieldAt(x, z, h, slope, path, settle) {
+    if (h < 2 || slope > 0.3 || settle > 0.3) return 0;
+    let k = 0;
+    k += weights[R_MEADOWS] * 1.0 + weights[R_COAST] * 0.45 + weights[R_THORNWOOD] * 0.6 + weights[R_FROSTSPINE] * 0.35 * (1 - sstep(300, 420, h));
+    if (k <= 0) return 0;
+    const n = vn(x / 140, z / 140, 130) + 0.3 * vn(x / 38, z / 38, 131);
+    return sstep(0.3, 0.55, n) * k * sstep(5, 12, path);
   }
 
   return {
@@ -505,6 +550,7 @@ export function createField(seed) {
     settlementAt,
     groundColour,
     forest,
+    fieldAt,
     /** Land factor and owner region of the last `rawHeight`/`height` call. */
     get lastLand() { return lastLand; },
     get lastRegion() { return lastRegion; },

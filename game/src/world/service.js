@@ -17,6 +17,7 @@ import { REGIONS, LANDMARKS } from './gen/layout.js';
 import { createTerrain } from './terrain.js';
 import { createWater } from './water.js';
 import { createVegetation } from './vegetation.js';
+import { createClearSet, addClear } from './gen/scatter.js';
 import { createTufts } from './tufts.js';
 import { createStructures } from './structures.js';
 import { drawMap } from './map.js';
@@ -155,6 +156,10 @@ export function createWorld(ctx) {
   let focusZ = 0;
   let pulseT = 0;
 
+  /** Discs kept free of vegetation and rocks: landmark stamps and points of interest. */
+  const clearSet = createClearSet(512);
+  /** Discs where not even ground tufts grow: paving, floors, lanes (world.keepClear with bare). */
+  const bareSet = createClearSet(384);
   const landmarks = LANDMARKS.map((l) => Object.assign({}, l, { y: 0 }));
   /** @type {Record<string, any>} */
   const landmarkById = Object.create(null);
@@ -247,8 +252,16 @@ export function createWorld(ctx) {
         terrain = createTerrain(ctx, grid);
         report(0.9);
         water = createWater(ctx, grid, EDGE_HARD);
-        veg = createVegetation(ctx, grid, col, seed);
-        tufts = createTufts(ctx, grid, seed);
+        clearSet.n = 0;
+        bareSet.n = 0;
+        for (const l of landmarks) {
+          if (l.type === 'settlement') addClear(bareSet, l.x, l.z, l.id === 'haven_aster' ? 21 : 17);
+          if (l.type === 'spire') continue;
+          const r = l.stamp && l.stamp.radius ? l.stamp.radius : 24;
+          addClear(clearSet, l.x, l.z, l.type === 'settlement' ? r + 10 : l.type === 'arena' ? r * 0.85 : r * 0.7);
+        }
+        veg = createVegetation(ctx, grid, col, seed, clearSet);
+        tufts = createTufts(ctx, grid, seed, bareSet);
         terrain.flush(focusX, focusY, focusZ);
         water.follow(focusX, focusZ);
         veg.update(focusX, focusY, focusZ, focusX, focusZ, true);
@@ -260,6 +273,13 @@ export function createWorld(ctx) {
       for (const p of list) {
         poiAll.push(p);
         poiByType[p.type].push(p);
+        // keep the points of interest clear of trees and rocks (camps get room for their tents and fights)
+        const pr = p.type === 'camp' ? 22 : p.type === 'shrine' ? 8 : p.type === 'race' ? 14 : p.type === 'siphon' ? 18 : 5;
+        if (p.type !== 'crownChest') addClear(clearSet, p.x, p.z, pr);
+      }
+      if (veg) {
+        veg.invalidate();
+        veg.update(focusX, focusY, focusZ, focusX, focusZ, true);
       }
       report(1);
       bakeMs = now() - t0;
@@ -444,6 +464,19 @@ export function createWorld(ctx) {
       return q.findSpot(x, z, radius, out, opts);
     },
 
+    /**
+     * Keep a disc free of trees, rocks and ground cover (world pass, an addition): settlements call it for their
+     * buildings, and with `bare` for paving and lanes, where not even the ground tufts grow. Takes effect at the
+     * next refill. @param {number} x @param {number} z @param {number} r @param {boolean} [bare]
+     */
+    keepClear(x, z, r, bare) {
+      if (!(r > 0)) return;
+      addClear(clearSet, x, z, r);
+      if (bare) addClear(bareSet, x, z, r);
+      if (veg) veg.invalidate();
+      if (tufts) tufts.invalidate();
+    },
+
     /** Streaming and LOD centre (the camera position). */
     setFocus(x, y, z) {
       focusX = x;
@@ -530,7 +563,7 @@ export function createWorld(ctx) {
       terrain.update(focusX, focusY, focusZ);
       water.follow(focusX, focusZ);
       const p = c.player;
-      veg.update(focusX, focusY, focusZ, p && p.alive ? p.pos.x : focusX, p && p.alive ? p.pos.z : focusZ, false);
+      veg.update(focusX, focusY, focusZ, p && p.alive ? p.pos.x : focusX, p && p.alive ? p.pos.z : focusZ, false, dt);
       if (p && p.alive) tufts.update(p.pos.x, p.pos.y, p.pos.z, focusY, false);
       pulseT += dt > 0 ? dt : 0;
       structs.update(pulseT);

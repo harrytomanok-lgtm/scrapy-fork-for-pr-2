@@ -5,8 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TIERS } from '../../src/render/logic/tiers.js';
 import { tuftSettings } from '../../src/world/tufts.js';
-import { capacityFor } from '../../src/world/vegetation.js';
-import { KIND, KIND_COUNT, IS_TREE } from '../../src/world/gen/scatter.js';
+import { capacityFor, coverRadius } from '../../src/world/vegetation.js';
+import { KIND, KIND_COUNT, IS_TREE, CLASS } from '../../src/world/gen/scatter.js';
 
 test('tier table: explicit tuft rows, low smaller and sparser than high', () => {
   for (const t of ['low', 'high']) {
@@ -34,10 +34,14 @@ test('vegetation instance buffers are sized for the active tier', () => {
   for (let k = 0; k < KIND_COUNT; k++) {
     const tree = IS_TREE[k] === 1;
     if (tree) trees++;
-    assert.equal(capacityFor(k, TIERS.low), tree ? 1200 : 600, 'low kind ' + k);
-    assert.equal(capacityFor(k, TIERS.high), tree ? 4000 : 2000, 'high kind ' + k);
-    assert.equal(capacityFor(k, null), tree ? 4000 : 2000, 'no caps: the high maximum');
+    // ground cover (class 2) takes 1.5x the rock cap, at most 3000
+    const cover = CLASS[k] === 2;
+    assert.equal(capacityFor(k, TIERS.low), tree ? 1200 : cover ? 900 : 600, 'low kind ' + k);
+    assert.equal(capacityFor(k, TIERS.high), tree ? 4000 : cover ? 3000 : 2000, 'high kind ' + k);
+    assert.equal(capacityFor(k, null), tree ? 4000 : cover ? 3000 : 2000, 'no caps: the high maximum');
   }
+  assert.equal(CLASS.length, KIND_COUNT);
+  assert.ok(coverRadius(TIERS.low) <= 160 && coverRadius(TIERS.low) > 100, 'ground cover radius on low');
   assert.ok(trees > 0 && trees < KIND_COUNT);
   assert.equal(capacityFor(KIND.ROCK, TIERS.low), 600);
 });

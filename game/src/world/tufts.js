@@ -77,7 +77,9 @@ function clumpGeometry() {
  * @param {ReturnType<import('./gen/grid.js').createGrid>} grid
  * @param {number} seed
  */
-export function createTufts(ctx, grid, seed) {
+export function createTufts(ctx, grid, seed, clear) {
+  const near = new Int32Array(96);
+  const flowerD = new Color(PALETTE.paper);
   const foliage = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].foliage));
   const ground = REGIONS.map((r) => new Color(PALETTE.biome[r.biome].ground));
   const flowerA = new Color(PALETTE.biome.meadows.accent);
@@ -120,6 +122,15 @@ export function createTufts(ctx, grid, seed) {
     const r2 = rc * rc;
     const span = Math.ceil(rc);
     let n = 0;
+    let nn = 0;
+    if (clear) {
+      for (let k = 0; k < clear.n && nn < near.length; k++) {
+        const ex = px - clear.x[k];
+        const ez = pz - clear.z[k];
+        const rr = set.radius + clear.r[k] + 2;
+        if (ex * ex + ez * ez < rr * rr) near[nn++] = k;
+      }
+    }
     for (let dj = -span; dj <= span && n < max; dj++) {
       for (let di = -span; di <= span && n < max; di++) {
         if (di * di + dj * dj > r2) continue;
@@ -136,6 +147,22 @@ export function createTufts(ctx, grid, seed) {
         const fl = grid.flagsAt(x, z);
         if ((fl & (FLAG.PATH | FLAG.SCORCH | FLAG.WATER)) !== 0) continue;
         if ((fl & FLAG.SETTLEMENT) !== 0) dens *= 0.45;
+        const field = (fl & FLAG.FIELD) !== 0;
+        if (field) dens = dens * 1.25 + 0.1;
+        // paving, floors and lanes stay bare (settlement plazas, building footprints, POI pads)
+        if (nn > 0) {
+          let bare = false;
+          for (let q = 0; q < nn; q++) {
+            const k = near[q];
+            const ex = x - clear.x[k];
+            const ez = z - clear.z[k];
+            if (ex * ex + ez * ez < clear.r[k] * clear.r[k]) {
+              bare = true;
+              break;
+            }
+          }
+          if (bare) continue;
+        }
         if (ri === R_FROSTSPINE && y > 470) continue;
         if (u0 > dens) continue;
         if (grid.slopeAt(x, z) > 0.42) continue;
@@ -143,7 +170,8 @@ export function createTufts(ctx, grid, seed) {
         const v = ((h >>> 26) & 63) / 63;
         tmp.copy(foliage[ri]).lerp(ground[ri], 0.18 + 0.25 * v).multiplyScalar(0.92 + 0.22 * v);
         const fsel = (h >>> 4) & 63;
-        if (ri === 0 && fsel < 7) tmp.copy(fsel < 4 ? flowerA : flowerC);
+        if (field && fsel < 30) tmp.copy(ri === 2 || ri === 1 ? (fsel < 18 ? flowerB : flowerD) : fsel < 14 ? flowerA : fsel < 22 ? flowerC : flowerD);
+        else if (ri === 0 && fsel < 7) tmp.copy(fsel < 4 ? flowerA : flowerC);
         else if (ri === 2 && fsel < 4) tmp.copy(flowerB);
         const s = 0.6 + 0.55 * (((h >>> 12) & 63) / 63);
         const yaw = ((h >>> 6) & 255) * 0.0245;

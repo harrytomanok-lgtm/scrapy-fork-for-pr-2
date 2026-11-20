@@ -92,5 +92,5 @@ export const GEN = Object.freeze({
   layerCell: 8,
 });
 
-/** Bits of the flags layer (ARCHITECTURE 4.1). */
-export const FLAG = Object.freeze({ PATH: 1, SETTLEMENT: 2, NO_SPAWN: 4, WATER: 8, SCORCH: 16 });
+/** Bits of the flags layer (ARCHITECTURE 4.1); VERGE (7-15 m beside a path: tree lines) and FIELD (flower fields) are world-pass additions. */
+export const FLAG = Object.freeze({ PATH: 1, SETTLEMENT: 2, NO_SPAWN: 4, WATER: 8, SCORCH: 16, VERGE: 32, FIELD: 64 });
