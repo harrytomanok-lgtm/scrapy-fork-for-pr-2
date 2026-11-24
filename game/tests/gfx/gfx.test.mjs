@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TIERS, TIER_KEYS, chooseTier } from '../../src/render/logic/tiers.js';
 import { createDynRes, DROP_AFTER } from '../../src/render/logic/dynres.js';
-import { createCalib, LADDER, MAX_TIME } from '../../src/render/logic/calib.js';
+import { createCalib, LADDER, MAX_TIME, RETRY_FIRST, RETRY_MAX } from '../../src/render/logic/calib.js';
 import { createParticlePool, cullCoverage } from '../../src/vfx/logic/pool.js';
 import { RECIPES, CELL, MAT } from '../../src/vfx/logic/recipes.js';
 import { IDS } from '../../src/core/ids.js';
@@ -223,6 +223,134 @@ test('calibration: capped menus and holds are not measured; a slow CPU blocks th
   assert.equal(c.phase, 'done');
   assert.equal(c.scale, 1);
   assert.equal(c.shadows, true);
+});
+
+/** Feed `seconds` of frames at a rate given by `fpsAt(t, calib)`; returns the changes as 'time>ratio' strings. */
+function play(calib, seconds, fpsAt, opts = {}) {
+  const log = [];
+  let t = 0;
+  while (t < seconds) {
+    const v = fpsAt(t, calib);
+    const dt = typeof v === 'number' ? 1 / v : v.dt;
+    if (calib.update(dt, false, opts.cpuMs || 6, opts.cap === undefined ? 60 : opts.cap, opts.atCeiling === undefined ? true : opts.atCeiling)) {
+      log.push(t.toFixed(1) + '>' + calib.scale);
+    }
+    t += dt;
+  }
+  return log;
+}
+
+test('calibration: a busy start does not decide the session (found on a real phone)', () => {
+  // A Galaxy A56 stayed at ratio 1 (384x708 on a 1080 px screen) with 5.6 ms frames: the first second of the title
+  // was uneven while the world streamed in, and the first version ended there for good.
+  // 1. hitches in the first four seconds, then a steady 60: the hitch windows are not verdicts
+  const a = createCalib({ maxRatio: 2.81, target: 30, shadows: true });
+  let lastHitch = -1;
+  play(a, 30, (t) => {
+    if (t < 4 && Math.floor(t * 3) !== lastHitch) {
+      lastHitch = Math.floor(t * 3);
+      return { dt: 0.14 };
+    }
+    return t < 4 ? 42 : 60;
+  });
+  assert.equal(a.scale, 2, 'reaches the top ratio');
+  assert.equal(a.shadows, true, 'and keeps its shadows');
+  // 2. an even but slower start (45 shown for six seconds: no head-room by the cautious prediction), then 60:
+  //    it rests at 1, and the first re-probe climbs
+  const b = createCalib({ maxRatio: 2.81, target: 30, shadows: true });
+  play(b, 8, (t) => (t < 6 ? 45 : 60));
+  assert.equal(b.phase, 'done');
+  assert.equal(b.scale, 1, 'rests at 1 for now');
+  assert.equal(b.retry, RETRY_FIRST);
+  play(b, 40, () => 60);
+  assert.equal(b.scale, 2, 'the re-probe climbs to the top');
+  assert.ok(b.reprobes >= 1);
+  assert.equal(b.shadows, true);
+});
+
+test('calibration: a re-probe is careful, takes a failed raise back and waits longer each time', () => {
+  // 60 shown at 1.0, 25 at anything above: head-room by the prediction, but the raise does not hold
+  const c = createCalib({ maxRatio: 2, target: 30, shadows: false });
+  const fps = (t, k) => (k.scale > 1 ? 25 : 60);
+  // the first probe steps up at once, finds it slow, comes back and rests
+  play(c, 12, fps);
+  assert.equal(c.phase, 'done');
+  assert.equal(c.scale, 1);
+  const first = c.retry;
+  assert.ok(first >= RETRY_FIRST * 2, 'a failed start waits longer than the first retry');
+  // re-probes: each failed raise doubles the wait, up to the maximum, and the level always comes back to 1
+  let waits = [first];
+  for (let i = 0; i < 6; i++) {
+    const before = c.reprobes;
+    play(c, c.retry + 8, fps);
+    assert.equal(c.reprobes, before + 1, 'one re-probe per wait');
+    assert.equal(c.scale, 1, 'the failed raise was taken back');
+    assert.equal(c.phase, 'done');
+    waits.push(c.retry);
+  }
+  for (let i = 1; i < waits.length; i++) assert.ok(waits[i] >= waits[i - 1], 'the wait never shrinks after a failure: ' + waits.join(','));
+  assert.equal(waits[waits.length - 1], RETRY_MAX, 'and stops growing at the maximum: ' + waits.join(','));
+  // the shadows are never the price of a re-probe
+  const d = createCalib({ maxRatio: 2, target: 30, shadows: true });
+  play(d, 8, () => 45);
+  assert.equal(d.phase, 'done');
+  assert.equal(d.shadows, true);
+  play(d, 60, (t, k) => (k.scale > 1 ? 25 : 60));
+  assert.equal(d.shadows, true, 'a re-probe does not shed the shadows');
+  assert.equal(d.scale, 1);
+});
+
+test('calibration: resting counts only steady, uncapped play at the ceiling', () => {
+  const c = createCalib({ maxRatio: 2, target: 30, shadows: false });
+  play(c, 8, () => 45);
+  assert.equal(c.phase, 'done');
+  // a 30 fps menu, dynamic resolution below the ceiling, and hitches do not count toward the re-probe
+  play(c, 60, () => 30, { cap: 30 });
+  assert.equal(c.reprobes, 0, 'a capped menu');
+  play(c, 60, () => 60, { atCeiling: false });
+  assert.equal(c.reprobes, 0, 'the scale was lowered: the device is struggling');
+  play(c, 20, () => ({ dt: 0.2 }));
+  assert.equal(c.reprobes, 0, 'hitches');
+  play(c, RETRY_FIRST + 1, () => 60);
+  assert.equal(c.reprobes, 1);
+  // at the top level there is nothing left to probe
+  const d = createCalib({ maxRatio: 2, target: 30, shadows: true });
+  play(d, 20, () => 60);
+  assert.equal(d.scale, 2);
+  play(d, 600, () => 60);
+  assert.equal(d.reprobes, 0);
+});
+
+test('calibration: a later session starts from the ratio the device reached', () => {
+  // it holds: sharp from the first frame, rests after two windows, shadows kept
+  const a = createCalib({ maxRatio: 2.81, target: 30, shadows: true, startRatio: 2 });
+  assert.equal(a.scale, 2, 'starts at the remembered ratio');
+  play(a, 8, () => 60);
+  assert.equal(a.phase, 'done');
+  assert.equal(a.scale, 2);
+  assert.equal(a.shadows, true);
+  // a remembered ratio between two levels starts at the level below it; one above the ladder at its top
+  assert.equal(createCalib({ maxRatio: 2.81, target: 30, shadows: true, startRatio: 1.6 }).scale, 1.5);
+  assert.equal(createCalib({ maxRatio: 1.5, target: 30, shadows: true, startRatio: 2 }).scale, 1.5);
+  assert.equal(createCalib({ maxRatio: 2, target: 30, shadows: true, startRatio: 0 }).scale, 1);
+  // it does not hold today (a hot phone: 60 only at 1.25 and below): it comes down level by level, keeps the shadows
+  const b = createCalib({ maxRatio: 2.81, target: 30, shadows: true, startRatio: 2 });
+  play(b, 30, (t, k) => (k.scale > 1.25 ? 22 : 60));
+  assert.equal(b.phase, 'done');
+  assert.equal(b.scale, 1.25, 'rests at the first level that holds');
+  assert.equal(b.shadows, true, 'the resolution came down before the shadows');
+  // too slow even at 1: only then the shadows go
+  const d = createCalib({ maxRatio: 2.81, target: 30, shadows: true, startRatio: 1.5 });
+  play(d, 40, () => 20);
+  assert.equal(d.phase, 'done');
+  assert.equal(d.scale, 1);
+  assert.equal(d.shadows, false);
+  // a device where every frame is long (7 shown) is slow, not "hitching": it comes down just the same
+  const e = createCalib({ maxRatio: 2.81, target: 30, shadows: true, startRatio: 2 });
+  play(e, 40, () => 7);
+  assert.equal(e.phase, 'done');
+  assert.equal(e.scale, 1, 'long frames all the time are a slow verdict');
+  assert.equal(e.shadows, false);
 });
 
 test('dynamic resolution: the shadow map is shed before the scale drops; limit() sets the ceiling', () => {

@@ -715,6 +715,20 @@ function deviceFacts(ctx) {
     d.triangles = st.triangles || 0;
     d.costMs = ctx.loop.stats.costMs;
     d.cap = ctx.loop.stats.cap;
+    d.hz = ctx.loop.stats.hz || 0;
+  } catch (e) { /* keep defaults */ }
+  try {
+    // how sharp the picture is and why (render.quality: the pixel-ratio calibration and the shadow map)
+    const q = ctx.render.quality ? ctx.render.quality() : null;
+    if (q) {
+      d.ratio = q.scale;
+      d.ratioTop = q.calibrates ? q.top : q.maxRatio;
+      d.ratioState = !q.calibrates ? 'fixed' : q.calibrating ? 'measuring' : 'settled';
+      d.ratioSteps = q.steps || 0;
+      d.ratioProbes = q.reprobes || 0;
+      d.ratioSaved = q.saved || 0;
+      d.shadows = q.shadows ? 'on' : q.shadowShed ? 'shed (too slow)' : q.shadowAllowed ? 'off' : 'off (setting or weak device)';
+    }
   } catch (e) { /* keep defaults */ }
   try {
     d.audio = ctx.audio && ctx.audio.debug ? ctx.audio.debug().state : '-';

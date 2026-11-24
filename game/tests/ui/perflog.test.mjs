@@ -31,4 +31,10 @@ test('device report: says so when there is not enough play, and prints the numbe
   assert.match(full, /avg 59, 1% low 41, worst frame 48 ms, slow frames 1\.3%/);
   assert.match(full, /412x915 css, dpr 2\.63, canvas 412x915, scale 1\.00, tier low/);
   assert.match(full, /audio running, storage saved on device, world bake worker, input touch/);
+  assert.doesNotMatch(full, /sharpness:/, 'no sharpness line without the facts');
+  // the sharpness line: what the calibration reached and why, the shadows, the display rate
+  const q = { ...d, canvasW: 824, canvasH: 1830, scale: 2, ratio: 2, ratioTop: 2, ratioState: 'settled', ratioSteps: 4, ratioProbes: 1, ratioSaved: 2, shadows: 'on', hz: 119.6 };
+  const sharp = formatDeviceReport({ frames: 3600, seconds: 61.2, avgFps: 58.8, lowFps: 41.3, worstMs: 48, slowPct: 1.25 }, q);
+  assert.match(sharp, /sharpness: ratio 2\.00 of 2\.00, settled, 4 steps, 1 re-probes, remembered 2\.00; shadows on/);
+  assert.match(sharp, /cap 60, display 120 Hz/);
 });

@@ -24,6 +24,8 @@ import { createBlobs } from './blob.js';
 import { createPost, createScreenFx } from './post.js';
 
 const LAYER_KEYS = ['sky', 'world', 'props', 'actors', 'vfx'];
+/** Storage key of the pixel ratio the calibration reached on this device (a per-device fact, not a save setting). */
+const RATIO_KEY = 'kethra.gfx.ratio';
 
 /**
  * @param {any} ctx
@@ -112,6 +114,8 @@ export function createRender(ctx) {
   /** The shadow map was shed (calibration or dynamic resolution: the first sacrifice). */
   let shadowShed = false;
   let calibrating = false;
+  /** The tier calibrates its pixel ratio (the phone tier, with dynamic resolution on). */
+  let canCalibrate = false;
 
   // ------------------------------------------------------------------ point lights
   const LIGHTS = 2;
@@ -211,6 +215,33 @@ export function createRender(ctx) {
     return Math.min(dpr, render.caps.maxDpr);
   }
 
+  /** The pixel ratio an earlier session reached on this device (0: none). */
+  function savedRatio() {
+    const st = ctx.dom && ctx.dom.safeStorage;
+    const v = st ? Number(st.get(RATIO_KEY)) : 0;
+    return v >= 0.6 && v <= 2 ? v : 0;
+  }
+
+  /**
+   * Where the calibration starts: the ratio an earlier session reached; on a first run 1.5 for a phone that looks
+   * capable (6 GB or more and a 2x screen), so the title is not blurry while the ladder is climbed, else 1.0. A
+   * start that turns out too high comes down level by level (render/logic/calib).
+   * @returns {number}
+   */
+  function startRatio() {
+    const saved = savedRatio();
+    if (saved > 0) return saved;
+    if (typeof navigator === 'undefined') return 0;
+    const mem = /** @type {any} */ (navigator).deviceMemory;
+    return typeof mem === 'number' && mem >= 6 && maxRatio() >= 2 ? 1.5 : 0;
+  }
+
+  /** Remember the ratio the calibration rests at. @param {number} r */
+  function saveRatio(r) {
+    const st = ctx.dom && ctx.dom.safeStorage;
+    if (st && r >= 0.6 && r <= 2) st.set(RATIO_KEY, String(Math.round(r * 100) / 100));
+  }
+
   /** Static check for the weakest phones (2 GB or less): they never get a shadow map. */
   function weakDevice() {
     if (typeof navigator === 'undefined') return false;
@@ -229,9 +260,15 @@ export function createRender(ctx) {
     render.caps = TIERS[tier];
     dyn.configure(render.caps, tier === 'high' && !dropped);
     // the phone tier calibrates its pixel ratio from 1.0 (render/logic/calib); dynamic resolution then keeps it
-    calibrating = dynamic && !!render.caps.calibrate;
+    canCalibrate = dynamic && !!render.caps.calibrate;
+    calibrating = canCalibrate;
     if (calibrating) {
-      calib.configure({ maxRatio: maxRatio(), target: render.caps.targetFps, shadows: shadowAllowed && !shadowShed && render.caps.shadowSize > 0 });
+      // start from the ratio an earlier session reached on this device, so the picture is sharp from the title on
+      calib.configure({
+        maxRatio: maxRatio(), target: render.caps.targetFps, shadows: shadowAllowed && !shadowShed && render.caps.shadowSize > 0,
+        startRatio: startRatio(),
+      });
+      calibrating = calib.phase !== 'done';
       dyn.limit(calib.scale);
       dyn.scale = calib.scale;
     }
@@ -477,6 +514,8 @@ export function createRender(ctx) {
 
     /**
      * Picture quality state (render polish): calibration, ceiling, shadow map and drawing buffer (diagnostics, tests).
+     * `calibrates`: the tier calibrates; `top`: the highest ratio of the ladder here; `reprobes` and `retry`: re-probes
+     * started and the seconds of steady play before the next; `saved`: the ratio remembered from an earlier session.
      * @returns {{ calibrating:boolean, ceiling:number, maxRatio:number, scale:number, shadows:boolean, shadowShed:boolean,
      *   shadowAllowed:boolean, canvas:number[], shadow:any, steps:number }}
      */
@@ -485,6 +524,7 @@ export function createRender(ctx) {
       return {
         calibrating, ceiling: calibrating ? calib.ceiling : dyn.max(), maxRatio: maxRatio(), scale: render.scale,
         shadows: shadowsOn(), shadowShed, shadowAllowed, canvas: [vp.x, vp.y], shadow: shadows.stats(), steps: calib.steps,
+        calibrates: canCalibrate, top: calib.top, reprobes: calib.reprobes, retry: calib.retry, saved: savedRatio(),
       };
     },
 
@@ -701,7 +741,7 @@ export function createRender(ctx) {
         const cost = ls ? ls.costMs : 0;
         const cap = ls ? ls.cap : 0;
         if (calibrating) {
-          // the calibration runs through the title flyover (a cinematic, uncapped)
+          // the calibration runs through the title flyover (a cinematic, uncapped) and, as re-probes, during play
           if (calib.update(dt, false, cost, cap)) {
             if (!calib.shadows && render.caps.shadowSize > 0 && shadowAllowed) shadowShed = true;
             if (calib.scale !== render.scale) {
@@ -716,10 +756,18 @@ export function createRender(ctx) {
             dyn.limit(calib.ceiling);
             dyn.scale = calib.scale;
             dyn.canShed = shadowsOn();
+            saveRatio(calib.ceiling);
           }
-        } else if (dyn.update(dt, cinematic, cost, cap)) {
-          render.scale = dyn.scale;
-          resize();
+        } else {
+          if (dyn.update(dt, cinematic, cost, cap)) {
+            render.scale = dyn.scale;
+            resize();
+          }
+          // resting below the top ratio: steady play at the ceiling counts toward a re-probe
+          if (canCalibrate) {
+            calib.update(dt, false, cost, cap, dyn.scale >= dyn.max() - 1e-3);
+            if (calib.phase === 'probe') calibrating = true;
+          }
         }
         if (dyn.shedRequested) {
           // the order of sacrifices: the shadow map goes first, the resolution only after

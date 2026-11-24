@@ -456,7 +456,11 @@ async function runDevice(pw, browser, name, doc) {
     });
     await sleep(200);
     await shot('7-device-report');
-    add(name, 'device report in Settings', /gpu: \S/.test(rep.text) && /fps \(last/.test(rep.text) && rep.fits, (rep.text.split('\n')[3] || 'no report').slice(0, 110));
+    const repLines = rep.text.split('\n');
+    const fpsLine = repLines.find((l) => l.indexOf('fps') === 0) || 'no fps line';
+    const sharpLine = repLines.find((l) => l.indexOf('sharpness:') === 0) || 'no sharpness line';
+    add(name, 'device report in Settings', /gpu: \S/.test(rep.text) && /fps \(last/.test(rep.text) && /sharpness: ratio \d/.test(rep.text) && rep.fits,
+      (fpsLine + ' | ' + sharpLine).slice(0, 200));
     await frame.evaluate(() => /** @type {any} */ (window).__GAME__.closeAll());
   } catch (e) {
     add(name, 'run completed', false, String(e && e.message ? e.message : e).slice(0, 200) + (errs.length ? ' | ' + errs[0].slice(0, 160) : ''));

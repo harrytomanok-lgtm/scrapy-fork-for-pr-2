@@ -32,6 +32,7 @@ const STATS_SMOOTH = 0.1;
  * @property {number} simMs    Smoothed duration of the sim steps of a frame (ms).
  * @property {number} costMs   Smoothed real cost of a presented frame: sim steps plus frame pass (ms).
  * @property {number} cap      Frame cap of the last rAF callback (frames per second; 0: uncapped).
+ * @property {number} hz       Estimated refresh rate of the display, from the rAF intervals (0 until known).
  */
 
 /**
@@ -119,6 +120,7 @@ export function createLoop(ctx, opts = {}) {
     const cap = loop.capFps();
     loop.stats.cap = cap;
     const elapsed = paceFrame(pacer, dt, cap);
+    loop.stats.hz = pacer.vsync > 0 ? 1 / pacer.vsync : 0;
     if (elapsed < 0) return;
     if (elapsed > 0) loop.stats.fps += (1 / elapsed - loop.stats.fps) * STATS_SMOOTH;
     const t0 = clock();
@@ -130,7 +132,7 @@ export function createLoop(ctx, opts = {}) {
   const loop = {
     running: false,
     alpha: 1,
-    stats: { fps: 0, frameMs: 0, simMs: 0, costMs: 0, cap: 0 },
+    stats: { fps: 0, frameMs: 0, simMs: 0, costMs: 0, cap: 0, hz: 0 },
 
     start() {
       if (loop.running || !raf) return;

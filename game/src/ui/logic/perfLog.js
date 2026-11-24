@@ -71,10 +71,14 @@ export function formatDeviceReport(p, d) {
   lines.push('KETHRA device report');
   lines.push('gpu: ' + (d.gpu || 'unknown'));
   lines.push(`screen: ${d.cssW}x${d.cssH} css, dpr ${f(d.dpr, 2)}, canvas ${d.canvasW}x${d.canvasH}, scale ${f(d.scale, 2)}, tier ${d.tier}`);
+  if (d.ratioState) {
+    lines.push(`sharpness: ratio ${f(d.ratio, 2)} of ${f(d.ratioTop, 2)}, ${d.ratioState}, ${d.ratioSteps} steps, ${d.ratioProbes} re-probes`
+      + (d.ratioSaved > 0 ? `, remembered ${f(d.ratioSaved, 2)}` : '') + `; shadows ${d.shadows || '-'}`);
+  }
   lines.push(p.frames < 120
-    ? 'fps: not enough play yet (play for a minute, then open this page again)'
+    ? 'fps: not enough play yet (play for a minute, then open this page from the pause menu)'
     : `fps (last ${f(p.seconds)} s of play): avg ${f(p.avgFps)}, 1% low ${f(p.lowFps)}, worst frame ${f(p.worstMs)} ms, slow frames ${f(p.slowPct, 1)}%`);
-  lines.push(`frame cost: ${f(d.costMs, 1)} ms (sim + draw, JS), cap ${d.cap || '-'}`);
+  lines.push(`frame cost: ${f(d.costMs, 1)} ms (sim + draw, JS), cap ${d.cap || '-'}` + (d.hz > 0 ? `, display ${f(d.hz)} Hz` : ''));
   lines.push(`draw calls ${d.drawCalls}, triangles ${f(d.triangles / 1000)}k, shaders ${d.programs - d.linkFailures}/${d.programs} ok, heap ${d.heapMb ? f(d.heapMb) + ' MB' : '-'}`);
   lines.push(`audio ${d.audio}, storage ${d.storage}, world bake ${d.bake}, input ${d.device}`);
   lines.push('ua: ' + String(d.ua || '').slice(0, 110));
