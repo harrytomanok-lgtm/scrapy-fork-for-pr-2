@@ -37,4 +37,18 @@ test('device report: says so when there is not enough play, and prints the numbe
   const sharp = formatDeviceReport({ frames: 3600, seconds: 61.2, avgFps: 58.8, lowFps: 41.3, worstMs: 48, slowPct: 1.25 }, q);
   assert.match(sharp, /sharpness: ratio 2\.00 of 2\.00, settled, 4 steps, 1 re-probes, remembered 2\.00; shadows on/);
   assert.match(sharp, /cap 60, display 120 Hz/);
+  // the rates measured per ratio, and how the frames were paced
+  const r = formatDeviceReport({ frames: 3600, seconds: 61.2, avgFps: 50, lowFps: 24, worstMs: 100, slowPct: 1.4, at60: 52.3, at40: 44.1, at30: 2.2 }, { ...q, ratioRates: '1.75:60 2:50' });
+  assert.match(r, /measured \(ratio:fps\): 1\.75:60 2:50/);
+  assert.match(r, /pacing: 52% of frames at 60, 44% at 40-50, 2% at 30, 1\.4% slower/);
+});
+
+test('perf log: frames are sorted into pacing classes', () => {
+  const log = createPerfLog(1000);
+  for (let i = 0; i < 50; i++) log.push(1 / 60);
+  for (let i = 0; i < 30; i++) log.push(0.0248); // three refreshes of a 121 Hz screen
+  for (let i = 0; i < 15; i++) log.push(1 / 30);
+  for (let i = 0; i < 5; i++) log.push(0.05);
+  const s = log.summary();
+  assert.ok(Math.abs(s.at60 - 50) < 0.01 && Math.abs(s.at40 - 30) < 0.01 && Math.abs(s.at30 - 15) < 0.01 && Math.abs(s.slowPct - 5) < 0.01, JSON.stringify(s));
 });

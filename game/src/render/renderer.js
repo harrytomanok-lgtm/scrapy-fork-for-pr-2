@@ -515,7 +515,8 @@ export function createRender(ctx) {
     /**
      * Picture quality state (render polish): calibration, ceiling, shadow map and drawing buffer (diagnostics, tests).
      * `calibrates`: the tier calibrates; `top`: the highest ratio of the ladder here; `reprobes` and `retry`: re-probes
-     * started and the seconds of steady play before the next; `saved`: the ratio remembered from an earlier session.
+     * started and the seconds of steady play before the next; `saved`: the ratio remembered from an earlier session;
+     * `rates`: the frame rate last measured at each ratio visited ("1.75:60 2:50").
      * @returns {{ calibrating:boolean, ceiling:number, maxRatio:number, scale:number, shadows:boolean, shadowShed:boolean,
      *   shadowAllowed:boolean, canvas:number[], shadow:any, steps:number }}
      */
@@ -525,6 +526,7 @@ export function createRender(ctx) {
         calibrating, ceiling: calibrating ? calib.ceiling : dyn.max(), maxRatio: maxRatio(), scale: render.scale,
         shadows: shadowsOn(), shadowShed, shadowAllowed, canvas: [vp.x, vp.y], shadow: shadows.stats(), steps: calib.steps,
         calibrates: canCalibrate, top: calib.top, reprobes: calib.reprobes, retry: calib.retry, saved: savedRatio(),
+        rates: calib.describe(),
       };
     },
 

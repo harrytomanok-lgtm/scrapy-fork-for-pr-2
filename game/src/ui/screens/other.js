@@ -727,6 +727,7 @@ function deviceFacts(ctx) {
       d.ratioSteps = q.steps || 0;
       d.ratioProbes = q.reprobes || 0;
       d.ratioSaved = q.saved || 0;
+      d.ratioRates = q.rates || '';
       d.shadows = q.shadows ? 'on' : q.shadowShed ? 'shed (too slow)' : q.shadowAllowed ? 'off' : 'off (setting or weak device)';
     }
   } catch (e) { /* keep defaults */ }
